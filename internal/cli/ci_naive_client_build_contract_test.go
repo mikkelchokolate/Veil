@@ -34,9 +34,24 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 	if _, ok := parsed.On["workflow_dispatch"]; !ok {
 		t.Fatalf("workflow must be triggered only by workflow_dispatch, got %v", parsed.On)
 	}
-	job, ok := parsed.Jobs["build-linux-x64"]
-	if !ok || job.If != "github.ref == 'refs/heads/main'" {
-		t.Fatalf("build job must be guarded to main, got %q", job.If)
+	for _, name := range []string{"build-linux-x64", "publish"} {
+		job, ok := parsed.Jobs[name]
+		if !ok || job.If != "github.ref == 'refs/heads/main'" {
+			t.Fatalf("%s job must be guarded to main, got %q", name, job.If)
+		}
+	}
+	// The build must be preserved as an artifact before (and independently
+	// of) publishing, and the workflow must never create the release/tag.
+	upload := strings.Index(wf, "Upload build as artifact (before any publish)")
+	publish := strings.Index(wf, "Publish to existing ci-deps prerelease")
+	if upload < 0 || publish < 0 || upload > publish {
+		t.Fatal("artifact upload must precede the publish step")
+	}
+	for _, line := range strings.Split(wf, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "gh release create") || strings.HasPrefix(trimmed, "gh api") || strings.Contains(trimmed, "git push") {
+			t.Fatalf("workflow must not create the ci-deps release/tag itself: %q", trimmed)
+		}
 	}
 
 	for _, required := range []string{
@@ -50,7 +65,9 @@ func TestNaiveClientBuildWorkflowContract(t *testing.T) {
 		"./get-clang.sh",
 		"./build.sh",
 		"../tests/basic.sh out/Release/naive",
-		"gh release create ci-deps --prerelease --latest=false",
+		"needs: build-linux-x64",
+		`sha256sum --check "${BUNDLE}.tar.xz.sha256"`,
+		"if-no-files-found: error",
 		`test "$(gh release view ci-deps --json isPrerelease -q .isPrerelease)" = true`,
 		"refusing to overwrite",
 		"actions/attest-build-provenance@",

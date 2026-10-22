@@ -32,12 +32,12 @@ concurrency:
 
 jobs:
   build-linux-x64:
-    # Only reviewed workflow code on main may publish/attest (and tag ci-deps).
+    # Only reviewed workflow code on main may attest/publish.
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-22.04
     timeout-minutes: 360
     permissions:
-      contents: write      # upload to the ci-deps prerelease
+      contents: read
       id-token: write      # build provenance attestation
       attestations: write
     env:
@@ -116,16 +116,50 @@ jobs:
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: ${{ steps.pack.outputs.tarball }}
-      - name: Publish to ci-deps prerelease (never overwrite)
-        working-directory: naiveproxy/src
+      # Keep the build even if publishing fails: the artifact is the durable
+      # output, the release upload below is a separate, retryable job.
+      - name: Upload build as artifact (before any publish)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ env.BUNDLE }}
+          path: |
+            naiveproxy/src/${{ env.BUNDLE }}.tar.xz
+            naiveproxy/src/${{ env.BUNDLE }}.tar.xz.sha256
+            naiveproxy/src/${{ env.BUNDLE }}.provenance.txt
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    needs: build-linux-x64
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write      # upload assets to the existing ci-deps prerelease
+    env:
+      BUNDLE: naiveproxy-${{ inputs.tag }}-linux-x64
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ env.BUNDLE }}
+          path: dist
+      - name: Verify artifact checksum
+        working-directory: dist
+        run: sha256sum --check "${BUNDLE}.tar.xz.sha256"
+      # The workflow never creates the ci-deps release/tag itself: creating a
+      # tag with GITHUB_TOKEN at a commit whose workflow files differ from the
+      # default branch is refused (HTTP 403 "Resource not accessible by
+      # integration", run 39822544380) because GITHUB_TOKEN can never hold the
+      # `workflows` permission. The owner creates ci-deps once, by hand.
+      - name: Publish to existing ci-deps prerelease (never overwrite)
+        working-directory: dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           if ! gh release view ci-deps >/dev/null 2>&1; then
-            gh release create ci-deps --prerelease --latest=false --target "${GITHUB_SHA}" \
-              --title "CI dependencies (not a Veil release)" \
-              --notes "Checksum-pinned third-party CI dependencies mirrored for scripts/ci. Not a Veil release. See #1373."
+            echo "::error::ci-deps prerelease does not exist; the owner must create it (gh release create ci-deps --prerelease --latest=false). The build artifact ${BUNDLE} is kept on this run."
+            exit 1
           fi
           test "$(gh release view ci-deps --json isPrerelease -q .isPrerelease)" = true
           if gh release view ci-deps --json assets -q '.assets[].name' | grep -Fx "${BUNDLE}.tar.xz" >/dev/null; then
