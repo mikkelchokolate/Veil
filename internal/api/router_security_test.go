@@ -256,7 +256,7 @@ func TestAuthSessionsEndpointListsAndRevokesSessions(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: admin.Token})
 	w := httptest.NewRecorder()
-	state.handleAuthSessions(w, req)
+	state.handlePersistentAuthSessions(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected admin session list 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -272,7 +272,7 @@ func TestAuthSessionsEndpointListsAndRevokesSessions(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: admin.Token})
 	w = httptest.NewRecorder()
-	state.handleAuthSessions(w, req)
+	state.handlePersistentAuthSessions(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected revoke 200, got %d: %s", w.Code, w.Body.String())
 	}
@@ -289,7 +289,7 @@ func TestAuthSessionsEndpointRejectsViewer(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/auth/sessions", nil)
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: viewer.Token})
 	w := httptest.NewRecorder()
-	state.handleAuthSessions(w, req)
+	state.handlePersistentAuthSessions(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("expected viewer sessions endpoint 403, got %d: %s", w.Code, w.Body.String())
@@ -379,7 +379,7 @@ func TestAuthLoginLogoutStatusEndpoints(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
 	req.AddCookie(sessionCookie)
 	w = httptest.NewRecorder()
-	state.handleLogout(w, req)
+	state.handleLogoutWithSettingsSnapshot(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("logout expected 200, got %d", w.Code)
 	}

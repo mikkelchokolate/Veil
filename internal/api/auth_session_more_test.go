@@ -498,7 +498,7 @@ func TestHandleLogout(t *testing.T) {
 
 	get := httptest.NewRequest(http.MethodGet, "/api/auth/logout", nil)
 	rec := httptest.NewRecorder()
-	state.handleLogout(rec, get)
+	state.handleLogoutWithSettingsSnapshot(rec, get)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("GET status=%d", rec.Code)
 	}
@@ -506,7 +506,7 @@ func TestHandleLogout(t *testing.T) {
 	post := httptest.NewRequest(http.MethodPost, "/api/auth/logout", nil)
 	post.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
 	rec = httptest.NewRecorder()
-	state.handleLogout(rec, post)
+	state.handleLogoutWithSettingsSnapshot(rec, post)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("POST status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -527,7 +527,7 @@ func TestHandleAuthSessionsMethodNotAllowed(t *testing.T) {
 	put := httptest.NewRequest(http.MethodPut, "/api/auth/sessions", nil)
 	put = put.WithContext(context.WithValue(put.Context(), contextKeyRole, "admin"))
 	rec := httptest.NewRecorder()
-	state.handleAuthSessions(rec, put)
+	state.handlePersistentAuthSessions(rec, put)
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status=%d", rec.Code)
 	}
