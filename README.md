@@ -112,7 +112,7 @@ Passwords are auto-generated when omitted. You can replace them in the Panel.
 | `veil install` | Install and configure Panel access, credentials, and runtimes. |
 | `veil serve` | Run the HTTP API and Web Panel. |
 | `veil status` | Show managed service status (`--json` for machine output). |
-| `veil doctor` | Run host readiness checks (required/optional commands). |
+| `veil doctor` | Run host readiness checks (required/optional commands, protocol DNS reachability). |
 | `veil admin reset` | Reset the administrator with new random credentials. |
 | `veil admin set` | Set or update a user (`--username`, `--role admin\|viewer`; password via interactive prompt, `--password-stdin` or `--password-file`; legacy `--password` is visible in the process list). |
 | `veil admin show` | List registered users and roles. |

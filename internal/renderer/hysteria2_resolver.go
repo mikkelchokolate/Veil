@@ -93,14 +93,20 @@ func filteredHostDoHAddr() (string, bool) {
 	if hostResolverAllowedByEgressFilter(conf) {
 		return "", false
 	}
+	return pickFilteredHostDoHAddr(), true
+}
+
+// pickFilteredHostDoHAddr returns the DoH address to pin on a host whose
+// nameservers are all denied: IPv6 only when the host routes the IPv6
+// address and not the IPv4 one.
+func pickFilteredHostDoHAddr() string {
 	v4, _ := egressHostReadIPv4Routes()
 	v6, _ := egressHostReadIPv6Routes()
-	addr := filteredHostDoHAddrV4
 	if !hasIPv4RouteTo(v4, addrPortHost(filteredHostDoHAddrV4)) &&
 		hasIPv6RouteTo(v6, addrPortHost(filteredHostDoHAddrV6)) {
-		addr = filteredHostDoHAddrV6
+		return filteredHostDoHAddrV6
 	}
-	return addr, true
+	return filteredHostDoHAddrV4
 }
 
 // hostResolverAllowedByEgressFilter reports whether at least one resolv.conf
@@ -108,18 +114,23 @@ func filteredHostDoHAddr() (string, bool) {
 // a pierced resolved stub, or it is outside every denied range. An empty or
 // missing config has no usable nameserver.
 func hostResolverAllowedByEgressFilter(conf []byte) bool {
-	stubs := map[netip.Addr]bool{}
-	for _, cidr := range strings.Fields(egressAllowResolvedStub) {
-		if p, err := netip.ParsePrefix(cidr); err == nil {
-			stubs[p.Addr()] = true
+	for _, addr := range resolvConfNameservers(conf) {
+		if nameserverAllowedByEgressFilter(addr) {
+			return true
 		}
 	}
-	// Go's resolver (dnsconfig_unix.go) and glibc (MAXNS) use only the first
-	// three parseable nameserver lines; a reachable fourth is never queried.
+	return false
+}
+
+// resolvConfNameservers returns the nameservers the libc and Go resolvers
+// actually query: the first three parseable "nameserver" lines (Go's
+// dnsconfig_unix.go and glibc MAXNS), in file order and as written (a zoned
+// link-local address keeps its zone).
+func resolvConfNameservers(conf []byte) []netip.Addr {
 	const maxNameservers = 3
-	seen := 0
+	var out []netip.Addr
 	scanner := bufio.NewScanner(bytes.NewReader(conf))
-	for scanner.Scan() && seen < maxNameservers {
+	for scanner.Scan() && len(out) < maxNameservers {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) < 2 || fields[0] != "nameserver" {
 			continue
@@ -128,15 +139,24 @@ func hostResolverAllowedByEgressFilter(conf []byte) bool {
 		if err != nil {
 			continue
 		}
-		seen++
-		// A zoned link-local address (fe80::1%eth0) never matches a prefix,
-		// so drop the zone before the containment check.
-		addr = addr.WithZone("").Unmap()
-		if stubs[addr] || !addrInEgressDeny(addr) {
+		out = append(out, addr)
+	}
+	return out
+}
+
+// nameserverAllowedByEgressFilter reports whether a unit under the egress
+// filter can reach addr: it is a pierced resolved stub, or it is outside
+// every denied range.
+func nameserverAllowedByEgressFilter(addr netip.Addr) bool {
+	// A zoned link-local address (fe80::1%eth0) never matches a prefix,
+	// so drop the zone before the containment check.
+	addr = addr.WithZone("").Unmap()
+	for _, cidr := range strings.Fields(egressAllowResolvedStub) {
+		if p, err := netip.ParsePrefix(cidr); err == nil && p.Addr() == addr {
 			return true
 		}
 	}
-	return false
+	return !addrInEgressDeny(addr)
 }
 
 func addrInEgressDeny(addr netip.Addr) bool {

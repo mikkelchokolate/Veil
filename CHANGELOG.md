@@ -16,6 +16,16 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1288: `veil doctor` now checks DNS for the protocol units. It reads
+  `/etc/resolv.conf` with the same rules the Hysteria2 and WARP renderers
+  use and reports whether any nameserver is reachable under the units'
+  kernel egress filter (the systemd-resolved stub or a public address). When
+  none is (AWS VPC `172.31.0.2`, link-local metadata resolvers, CGNAT,
+  `10.x`/`192.168.x`, a local dnsmasq on `127.0.0.1`, or no `resolv.conf`),
+  it prints a warning: Hysteria2 and WARP pin Cloudflare DoH at apply, but
+  Mieru domain lookups fail. An unreadable `resolv.conf` is reported as
+  unknown. The check is a warning only and does not change `Ready`; `--json`
+  carries it as `egressDNS`. It runs only on Linux.
 - #1288: the WARP sing-box bridge (`veil-warp`) now gets the same DNS fix as
   Hysteria2. On hosts where no `/etc/resolv.conf` nameserver is reachable under
   the unit's kernel egress filter, the rendered `warp.json` pins a Cloudflare

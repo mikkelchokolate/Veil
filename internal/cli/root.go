@@ -4,10 +4,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"runtime"
 	"time"
 
 	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
 	versionflow "github.com/mikkelchokolate/Veil/internal/cliflow/version"
+	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/syspath"
 	"github.com/spf13/cobra"
 )
@@ -85,7 +87,25 @@ func printDoctor(cmd *cobra.Command, version string, jsonOutput bool) {
 }
 
 func buildDoctorSummary(version string) doctorSummary {
-	return doctorflow.NewReadiness(version, commandLookPath).Summary()
+	readiness := doctorflow.NewReadiness(version, commandLookPath)
+	if runtime.GOOS == "linux" {
+		readiness = readiness.WithEgressDNS(doctorEgressDNSProbe)
+	}
+	return readiness.Summary()
+}
+
+// doctorEgressDNSProbe runs the same host probe the Hysteria2 and WARP
+// renderers use, so `veil doctor` reports what the next apply renders
+// (#1288). Tests replace it.
+var doctorEgressDNSProbe doctorflow.EgressDNSProbe = func() doctorflow.EgressDNSCheck {
+	report := renderer.ProbeEgressDNS()
+	return doctorflow.EgressDNSCheck{
+		Nameservers:       report.Nameservers,
+		Reachable:         report.Reachable,
+		ResolvConfMissing: report.ResolvConfMissing,
+		ReadError:         report.ReadError,
+		PinnedDoH:         report.PinnedDoH,
+	}
 }
 
 // checkLatestVersion fetches the latest Veil release tag from GitHub and
