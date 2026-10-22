@@ -434,7 +434,8 @@ func runSandboxedVersionProbe(ctx context.Context, binary string, args []string)
 		if lookupErr != nil {
 			return "", fmt.Errorf("resolve systemd-run: %w", lookupErr)
 		}
-		rootDir, createErr := os.MkdirTemp("/var/tmp", "veil-runtime-probe-root-*")
+		// PID 1 must see the root too; the helper's PrivateTmp hides /var/tmp.
+		rootDir, createErr := os.MkdirTemp(filepath.Dir(binary), ".veil-runtime-probe-root-*")
 		if createErr != nil {
 			return "", fmt.Errorf("create systemd probe root: %w", createErr)
 		}
