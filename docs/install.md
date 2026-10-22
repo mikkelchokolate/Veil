@@ -216,7 +216,7 @@ archive path with the actual path printed by `backup create`.
 ```bash
 sudo veil backup create --passphrase-file /root/veil-backup-passphrase \
   --output-dir /var/lib/veil/backups
-sudo veil backup verify /path/to/pre-upgrade.tar.gz.enc \
+sudo veil backup verify /var/lib/veil/backups/veil_backup_YYYYMMDD_HHMMSS.tar.gz.enc \
   --passphrase-file /root/veil-backup-passphrase
 ```
 
@@ -235,6 +235,7 @@ release is v0.7.3. After verifying the backup, stop the old processes before
 replacing the binary: otherwise an automatic restart could launch the new
 Panel while the old helper is still running. Run each step separately and
 stop if any command fails. Do not add `--restart` or `--staged` to the updater.
+Ignore the updater's standalone restart hint; continue with repair below.
 
 ```bash
 sudo veil update --dry-run
@@ -250,9 +251,17 @@ sudo veil status
 
 Review the repair preview before applying it. Repeat your installation's
 `--etc-dir`, `--var-dir` and `--systemd-dir` on both repair commands when they
-differ from the defaults. The explicit start is necessary because a no-op
+differ from the defaults. Repair may restart changed services itself; always
+run the explicit start immediately afterward, helper socket first. A no-op
 repair need not start stopped services. Repairs refresh install-managed units,
 including Mieru's DNS fallback hook; a binary update alone does not.
+
+If the updater fails and `veil version` still reports the old version, run
+the explicit `systemctl start` line to restore the old services. If the binary
+has already changed, or repair fails, keep services stopped while inspecting
+the error and follow the [disaster-recovery guide](disaster-recovery.md) with
+the matching pre-upgrade backup and binary. Do not assume a binary rollback
+reverses a migration.
 
 ### Native packages and containers
 

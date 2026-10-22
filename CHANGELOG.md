@@ -96,7 +96,7 @@ before production rollout.
 - CI shares measured shard timings, reuses validated build/runtime caches,
   avoids an accidental real Caddy build in a unit test, and reduces duplicate
   browser setup. The [final optimization CI run](https://github.com/mikkelchokolate/Veil/actions/runs/39773004034)
-  took 10m20s versus the measured [14m04s baseline](https://github.com/mikkelchokolate/Veil/actions/runs/39760774474);
+  took 10m20s wall-clock versus the measured [14m04s baseline](https://github.com/mikkelchokolate/Veil/actions/runs/39760774474);
   its slowest shard took 7m23s instead of 11m35s. Race,
   coverage, inventory, browser and cold-install gates remain enabled.
 - Hardened session revocation, subscription-token bindings, authenticated

@@ -145,7 +145,9 @@ web Panel is unavailable. Changes require confirmation in the menu.
 | `veil uninstall` | Remove the Panel, services, configuration, and state. |
 | `veil version` | Print the Veil version (`--check` to compare with the latest release). |
 
-Everyday examples:
+Everyday examples follow. For **v0.7.2 → v0.7.3**, use the
+[dedicated upgrade sequence](docs/install.md#5-upgrading-from-v072) instead
+of the generic staged-update example: binary rollback cannot undo its migration.
 
 ```bash
 veil status
