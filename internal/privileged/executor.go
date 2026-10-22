@@ -762,7 +762,12 @@ func loadPromotionRestoreManifest(rootDir *safefs.Dir, root, backupID, manifestP
 				if record.OldDigest == "" || promotionDigest([]byte(record.OldLinkTarget)) != record.OldDigest {
 					return nil, nil, fmt.Errorf("promotion backup symlink digest mismatch for %s", record.ArtifactID)
 				}
-				writes = append(writes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination, SymlinkTarget: record.OldLinkTarget})
+				// A managed destination is never a helper-published symlink,
+				// so restore does not recreate one from manifest metadata: a
+				// forged wasSymlink record would otherwise make root plant a
+				// link to an attacker-chosen target (#1257 F3). Restoring
+				// "the symlink was removed" leaves the destination absent.
+				removes = append(removes, ResolvedArtifact{ID: record.ArtifactID, Destination: record.Destination})
 				continue
 			}
 			source := record.SafetyPath
@@ -884,30 +889,6 @@ func ensureRuntimeArtifactOwnership(artifactID, path string) error {
 		return fmt.Errorf("set runtime artifact ownership: %w", err)
 	}
 	return nil
-}
-
-// ensureRuntimeArtifactSymlinkParents applies the directory ownership contract
-// around a promoted/restored symlink. The symlink inode itself carries no
-// permission semantics, but its parents still have to be traversable by
-// veil-proxy (audit #524).
-func ensureRuntimeArtifactSymlinkParents(artifactID, path string) error {
-	if effectiveUID() != 0 {
-		// Same contract as ensureRuntimeArtifactOwnership: the boundary must
-		// exist for ownership work to be required; without it Lstat doubles as
-		// the parent-traversal probe for the single-user consumer (#522, #524).
-		if _, err := runtimeArtifactGID(); err == nil {
-			return fmt.Errorf("set runtime artifact directory ownership for %s: requires root", artifactID)
-		}
-		if _, err := os.Lstat(path); err != nil {
-			return fmt.Errorf("runtime artifact %s is unreachable and cannot be repaired without root", artifactID)
-		}
-		return nil
-	}
-	gid, err := runtimeArtifactGID()
-	if err != nil {
-		return err
-	}
-	return ensureRuntimeArtifactParentOwnership(artifactID, path, gid)
 }
 
 type backupReadSession struct {
