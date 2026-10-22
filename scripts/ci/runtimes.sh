@@ -23,15 +23,19 @@ fetch_verified() { # <url> <file> <sha256>
   if [ -n "${cache_dir}" ]; then
     cached="${cache_dir}/${sha}"
     if [ -f "${cached}" ] && echo "${sha}  ${cached}" | sha256sum --check --status -; then
-      cp "${cached}" "${file}"
-      echo "${sha}  ${file}" | sha256sum --check - >/dev/null
+      cp "${cached}" "${file}" || return 1
+      echo "${sha}  ${file}" | sha256sum --check - >/dev/null || return 1
       printf '[ci] verified cached download %s (sha256 %s)\n' "${file}" "${sha}"
       return 0
     fi
     rm -f "${cached}"
   fi
-  curl --fail --silent --show-error --location "${url}" -o "${file}"
-  echo "${sha}  ${file}" | sha256sum --check - >/dev/null
+  # Explicit returns: callers use `fetch_verified A || fetch_verified B`
+  # (naive mirror fallback), where errexit is suspended inside the function,
+  # so a failed download or checksum must not fall through to success.
+  rm -f "${file}"
+  curl --fail --silent --show-error --location "${url}" -o "${file}" || return 1
+  echo "${sha}  ${file}" | sha256sum --check - >/dev/null || { rm -f "${file}"; return 1; }
   if [ -n "${cached}" ]; then
     mkdir -p "${cache_dir}"
     cp "${file}" "${cached}.tmp.$$"
@@ -42,13 +46,10 @@ fetch_verified() { # <url> <file> <sha256>
 # SHA256 pins of every asset install_pinned_runtimes downloads. The CI cache
 # key is derived from this list, and a cache is only saved once it is complete.
 # Must list exactly the pins passed to fetch_verified in this file
-# (TestCIRuntimeDownloadShasMatchFetchSites enforces it). The naive client is
-# deliberately NOT cached: fetch_naive_client owns the #1373 404 soft-skip and
-# downloads directly, so listing its pin would make the cache never complete.
-# Its durable replacement is the ci-deps mirror (#1375, #1373 phase B).
+# (TestCIRuntimeDownloadShasMatchFetchSites enforces it).
 pinned_runtime_download_shas() {
   printf '%s\n' "${CI_HYSTERIA_SHA256}" "${CI_MITA_SHA256}" "${CI_MIERU_CLIENT_SHA256}" \
-    "${CI_SINGBOX_SHA256}"
+    "${CI_NAIVE_CLIENT_SHA256}" "${CI_SINGBOX_SHA256}"
 }
 
 pinned_runtime_download_cache_complete() { # <cache-dir>
@@ -57,38 +58,6 @@ pinned_runtime_download_cache_complete() { # <cache-dir>
     [ -f "$1/${sha}" ] || return 1
     echo "${sha}  $1/${sha}" | sha256sum --check --status - || return 1
   done < <(pinned_runtime_download_shas)
-}
-
-# Upstream klzgrad removed the naiveproxy client binaries from every release
-# (#1373). A 404 is tolerated ONLY for the exact URL declared gone in
-# versions.sh (CI_NAIVE_CLIENT_KNOWN_GONE_URL), compared against the URL that
-# was actually fetched: it leaves a marker so e2e.sh skips the naive data path
-# loudly. A 404 for any other URL (a bumped tag or asset, or a mirror such as
-# ci-deps), any other HTTP failure, and any checksum mismatch stay fatal.
-NAIVE_CLIENT_UNAVAILABLE_MARKER="naive.unavailable"
-
-naive_client_url() {
-  printf '%s\n' "https://github.com/klzgrad/naiveproxy/releases/download/${CI_NAIVE_CLIENT_TAG}/${CI_NAIVE_CLIENT_ASSET}"
-}
-
-fetch_naive_client() { # <url> <file> <sha256> <dest-dir>; 0=installed-ready, 2=unavailable(404)
-  local code
-  code="$(curl --silent --show-error --location --output "$2" --write-out '%{http_code}' "$1")" || {
-    echo "naiveproxy client download failed: $1" >&2
-    return 1
-  }
-  if [ "${code}" = "404" ] && [ -n "${CI_NAIVE_CLIENT_KNOWN_GONE_URL:-}" ] \
-    && [ "$1" = "${CI_NAIVE_CLIENT_KNOWN_GONE_URL}" ]; then
-    rm -f "$2"
-    printf 'pinned naiveproxy client asset returned HTTP 404: %s\n' "$1" >"$4/${NAIVE_CLIENT_UNAVAILABLE_MARKER}"
-    echo "::warning title=naiveproxy client unavailable::pinned asset $1 returned 404; the naive e2e data path will be SKIPPED"
-    return 2
-  fi
-  if [ "${code}" != "200" ]; then
-    echo "naiveproxy client download returned HTTP ${code}: $1" >&2
-    return 1
-  fi
-  echo "$3  $2" | sha256sum --check - >/dev/null
 }
 
 caddy_test_runtime_is_pinned() { # <binary>
@@ -233,14 +202,15 @@ install_pinned_runtimes() { # <destdir> <veil-binary-for-caddy-build>
     mkdir -p mieru-client && tar -xzf mieru.tar.gz -C mieru-client
     install -m 0755 "$(find mieru-client -type f -name mieru | head -n1)" "${dest}/mieru"
 
-    naive_rc=0
-    fetch_naive_client "$(naive_client_url)" naive.tar.xz "${CI_NAIVE_CLIENT_SHA256}" "${dest}" || naive_rc=$?
-    if [ "${naive_rc}" -eq 0 ]; then
-      mkdir -p naive-client && tar -xJf naive.tar.xz -C naive-client
-      install -m 0755 "$(find naive-client -type f -name naive | head -n1)" "${dest}/naive"
-    elif [ "${naive_rc}" -ne 2 ]; then
-      exit "${naive_rc}"
-    fi
+    # naiveproxy client: our ci-deps mirror first (#1373), then upstream. Both
+    # are verified against the same pin; a mismatch or a miss on both fails.
+    # The upstream fallback is DORMANT for the current pin (upstream's original
+    # tarball had a different sha and is deleted); it only becomes live again
+    # once the pin is repointed at an upstream-published artifact.
+    fetch_verified "${CI_NAIVE_CLIENT_MIRROR_URL}" naive.tar.xz "${CI_NAIVE_CLIENT_SHA256}" \
+      || fetch_verified "https://github.com/klzgrad/naiveproxy/releases/download/${CI_NAIVE_CLIENT_TAG}/${CI_NAIVE_CLIENT_ASSET}" naive.tar.xz "${CI_NAIVE_CLIENT_SHA256}"
+    mkdir -p naive-client && tar -xJf naive.tar.xz -C naive-client
+    install -m 0755 "$(find naive-client -type f -name naive | head -n1)" "${dest}/naive"
 
     install_singbox_from_workdir "${dest}"
   )

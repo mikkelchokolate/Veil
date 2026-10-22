@@ -146,6 +146,7 @@ ARG CI_MIERU_CLIENT_SHA256
 ARG CI_NAIVE_CLIENT_TAG
 ARG CI_NAIVE_CLIENT_ASSET
 ARG CI_NAIVE_CLIENT_SHA256
+ARG CI_NAIVE_CLIENT_MIRROR_URL
 ARG CI_SINGBOX_TAG
 ARG CI_SINGBOX_ASSET
 ARG CI_SINGBOX_SHA256
@@ -164,7 +165,9 @@ RUN set -euo pipefail; \
     echo "${CI_MIERU_CLIENT_SHA256}  mieru.tar.gz" | sha256sum --check -; \
     mkdir -p /tmp/mieru-client && tar -xzf mieru.tar.gz -C /tmp/mieru-client; \
     install -m 0755 "$(find /tmp/mieru-client -type f -name mieru | head -n1)" /opt/veil-runtime/mieru; \
-    curl --fail --location "https://github.com/klzgrad/naiveproxy/releases/download/${CI_NAIVE_CLIENT_TAG}/${CI_NAIVE_CLIENT_ASSET}" -o naive.tar.xz; \
+    { curl --fail --location "${CI_NAIVE_CLIENT_MIRROR_URL}" -o naive.tar.xz \
+      && echo "${CI_NAIVE_CLIENT_SHA256}  naive.tar.xz" | sha256sum --check -; } \
+      || curl --fail --location "https://github.com/klzgrad/naiveproxy/releases/download/${CI_NAIVE_CLIENT_TAG}/${CI_NAIVE_CLIENT_ASSET}" -o naive.tar.xz; \
     echo "${CI_NAIVE_CLIENT_SHA256}  naive.tar.xz" | sha256sum --check -; \
     mkdir -p /tmp/naive-client && tar -xJf naive.tar.xz -C /tmp/naive-client; \
     install -m 0755 "$(find /tmp/naive-client -type f -name naive | head -n1)" /opt/veil-runtime/naive; \
