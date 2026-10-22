@@ -20,7 +20,9 @@ import (
 //     only rows that still exist live are updated.
 //   - A disable, depletion, or expiry recorded after the snapshot is never
 //     undone: enabled merges as AND, depleted as OR, and expires_at keeps the
-//     earlier non-zero value.
+//     earlier non-zero value. Depletion is derived quota state, so it is
+//     carried forward only onto a row that still has a quota; a row restored
+//     without one transitions to unlimited like a live quota clear (#1350).
 //   - A rotated runtime identity stays rotated.
 //   - Credential rows are never deleted or re-activated here. Retained
 //     bindings keep their live rows — active values and revoked tombstones
@@ -55,7 +57,23 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 			return fmt.Errorf("client: read live client %s: %w", item.ID, err)
 		}
 		item.Enabled = item.Enabled && live.Enabled
-		item.Depleted = item.Depleted || live.Depleted
+		// Depletion is derived quota state (#1350): it survives only while
+		// the restored row still has a quota. Restoring "no quota" is an
+		// explicit transition to unlimited, handled like a live quota clear
+		// (normalizeClearedQuota + prepareQuotaClear): the flag is dropped
+		// and any enforcement target bound to the old plan is superseded,
+		// so neither depleted-without-quota nor a pending depleted runtime
+		// target can survive the rollback.
+		if item.QuotaBytes == nil {
+			item.Depleted = false
+			if live.hasQuotaState() {
+				if err := tx.SupersedeQuotaEnforcement(item.ID); err != nil {
+					return err
+				}
+			}
+		} else {
+			item.Depleted = item.Depleted || live.Depleted
+		}
 		item.ExpiresAt = earlierExpiry(item.ExpiresAt, live.ExpiresAt)
 		item.UpdatedAt = now
 		version, err := nextRetainedVersion(tx, "clients", item.ID, item.Version)
@@ -154,17 +172,28 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 }
 
 type liveClientSecurity struct {
-	Enabled   bool
-	Depleted  bool
-	ExpiresAt *int64
-	CreatedAt int64
+	Enabled          bool
+	Depleted         bool
+	ExpiresAt        *int64
+	CreatedAt        int64
+	QuotaBytes       *int64
+	QuotaResetPolicy string
+	QuotaResetAt     *int64
+}
+
+// hasQuotaState mirrors prepareQuotaClear's trigger: the live row carries a
+// quota plan or derived quota state that a transition to unlimited must
+// supersede.
+func (row liveClientSecurity) hasQuotaState() bool {
+	return row.QuotaBytes != nil || row.Depleted || row.QuotaResetAt != nil ||
+		(row.QuotaResetPolicy != "" && row.QuotaResetPolicy != ResetNever)
 }
 
 func liveClientRow(tx *Tx, id string) (liveClientSecurity, error) {
 	var row liveClientSecurity
 	var enabled, depleted int
-	err := tx.QueryRow(`SELECT enabled, depleted, expires_at, created_at FROM clients WHERE id=?`, id).
-		Scan(&enabled, &depleted, &row.ExpiresAt, &row.CreatedAt)
+	err := tx.QueryRow(`SELECT enabled, depleted, expires_at, created_at, quota_bytes, quota_reset_policy, quota_reset_at FROM clients WHERE id=?`, id).
+		Scan(&enabled, &depleted, &row.ExpiresAt, &row.CreatedAt, &row.QuotaBytes, &row.QuotaResetPolicy, &row.QuotaResetAt)
 	row.Enabled = enabled != 0
 	row.Depleted = depleted != 0
 	return row, err
