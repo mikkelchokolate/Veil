@@ -120,6 +120,9 @@ func (d Readiness) Summary() Summary {
 	if d.egressDNS != nil {
 		check := d.egressDNS()
 		check.Warning = egressDNSWarning(check)
+		if check.Nameservers == nil {
+			check.Nameservers = []string{}
+		}
 		summary.EgressDNS = &check
 	}
 	return summary

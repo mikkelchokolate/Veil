@@ -98,9 +98,16 @@ func buildDoctorSummary(version string) doctorSummary {
 // renderers use, so `veil doctor` reports what the next apply renders
 // (#1288). Tests replace it.
 var doctorEgressDNSProbe doctorflow.EgressDNSProbe = func() doctorflow.EgressDNSCheck {
-	report := renderer.ProbeEgressDNS()
+	return egressDNSCheckFromReport(renderer.ProbeEgressDNS())
+}
+
+// egressDNSCheckFromReport maps the renderer probe onto the doctor check.
+// Nameservers is never nil, so --json emits [] rather than null for a
+// missing or empty resolv.conf.
+func egressDNSCheckFromReport(report renderer.EgressDNSReport) doctorflow.EgressDNSCheck {
+	nameservers := append([]string{}, report.Nameservers...)
 	return doctorflow.EgressDNSCheck{
-		Nameservers:       report.Nameservers,
+		Nameservers:       nameservers,
 		Reachable:         report.Reachable,
 		ResolvConfMissing: report.ResolvConfMissing,
 		ReadError:         report.ReadError,
