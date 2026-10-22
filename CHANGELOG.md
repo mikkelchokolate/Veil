@@ -16,6 +16,18 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1292: WARP auto-registration no longer trusts the Cloudflare
+  registration response blindly. The peer endpoint it returns is advisory:
+  it is used only when it is `host:port` with a valid port and a host inside
+  `cloudflareclient.com`, and only when the `PUT /api/warp` request left the
+  endpoint unset or at the stock `engage.cloudflareclient.com:2408`. An
+  endpoint the operator set is kept, and a foreign host or IP literal falls
+  back to the stock endpoint, so a tampered response cannot repoint WARP
+  egress. The peer public key must be a base64 32-byte key, the interface
+  addresses must be bare IPv4/IPv6 addresses of the right family, and
+  `client_id` must decode to 3 reserved bytes. A malformed response now fails
+  the PUT with a `WARP registration failed: ...` error naming the field,
+  instead of being persisted and later rejected by `sing-box check`.
 - #1288: Mieru (`veil-mieru`) now resolves names on hosts where no
   `/etc/resolv.conf` nameserver is reachable under the protocol units'
   kernel egress filter (AWS VPC `172.31.0.2`, `169.254.169.253/.254`,

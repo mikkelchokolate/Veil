@@ -30,7 +30,7 @@ func PreserveRedacted(update, current Config) Config {
 
 func SetDefaults(warp *Config) {
 	if warp.Endpoint == "" {
-		warp.Endpoint = "engage.cloudflareclient.com:2408"
+		warp.Endpoint = DefaultEndpoint
 	}
 	// The protocol-unit egress filters only pierce the reserved 127.41.0.0/16
 	// loopback band (#1097), so a persisted or submitted loopback socksListen

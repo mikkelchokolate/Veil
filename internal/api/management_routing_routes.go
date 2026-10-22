@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/routing"
@@ -229,7 +230,10 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 				warp.PeerPublicKey = reg.PeerPublicKey
 				warp.LocalAddress = reg.LocalAddress
 				warp.Reserved = reg.Reserved
-				if reg.Endpoint != "" {
+				// The registrar's endpoint is advisory: it may fill an empty
+				// or default endpoint, but never overrides one the operator
+				// set explicitly in this PUT (#1292).
+				if reg.Endpoint != "" && warpEndpointIsDefault(warp.Endpoint) {
 					warp.Endpoint = reg.Endpoint
 				}
 				if reg.License != "" {
@@ -277,4 +281,12 @@ func (s *managementState) handleWarp(w http.ResponseWriter, r *http.Request) {
 		}
 		return nil
 	})
+}
+
+// warpEndpointIsDefault reports whether endpoint is unset or the stock
+// Cloudflare endpoint, i.e. whether a registrar-supplied endpoint may
+// replace it without discarding an operator choice.
+func warpEndpointIsDefault(endpoint string) bool {
+	endpoint = strings.TrimSpace(endpoint)
+	return endpoint == "" || strings.EqualFold(endpoint, veilwarp.DefaultEndpoint)
 }
