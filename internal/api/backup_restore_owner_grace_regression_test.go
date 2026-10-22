@@ -35,7 +35,7 @@ func ownerSessionLive(state *managementState, token string) bool {
 
 func TestBackupRestoreOwnerSessionRevokedAfterGrace(t *testing.T) {
 	state := newPanelBackupState(t)
-	state.backupRestoreOwnerSessionGrace = 150 * time.Millisecond
+	state.backupRestoreOwnerSessionGrace = 500 * time.Millisecond
 	owner := seedSucceededRestoreJob(t, state, "job-grace")
 
 	state.scheduleBackupRestoreOwnerSessionRevocation("job-grace", owner.Token)
@@ -106,5 +106,45 @@ func TestBackupRestoreCloseFlushesPendingOwnerGrace(t *testing.T) {
 	}
 	if ownerSessionLive(state, owner.Token) {
 		t.Fatal("Close left a pending-grace owner session alive to natural expiry")
+	}
+}
+
+// Review nit on #1385: the flush must not depend on the job still being
+// retained, or pruning a job inside its grace leaks the session.
+func TestBackupRestoreFlushRevokesOwnerOfPrunedJob(t *testing.T) {
+	state := newPanelBackupState(t)
+	state.backupRestoreOwnerSessionGrace = time.Hour
+	owner := seedSucceededRestoreJob(t, state, "job-pruned")
+	state.scheduleBackupRestoreOwnerSessionRevocation("job-pruned", owner.Token)
+	state.backupJobsMu.Lock()
+	delete(state.backupJobs, "job-pruned")
+	state.backupJobsMu.Unlock()
+	state.flushBackupRestoreOwnerSessionRevocations()
+	if ownerSessionLive(state, owner.Token) {
+		t.Fatal("flush skipped the owner session of a pruned job")
+	}
+}
+
+// Re-arming a job id keeps the replacement visible to the flush and still
+// ends the replaced grace's session.
+func TestBackupRestoreRearmedGraceStaysFlushable(t *testing.T) {
+	state := newPanelBackupState(t)
+	state.backupRestoreOwnerSessionGrace = time.Hour
+	first := seedSucceededRestoreJob(t, state, "job-rearm")
+	state.scheduleBackupRestoreOwnerSessionRevocation("job-rearm", first.Token)
+	second, err := state.sessionRegistry().Create(SessionCreateInput{Username: "alice", Role: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.scheduleBackupRestoreOwnerSessionRevocation("job-rearm", second.Token)
+	if ownerSessionLive(state, first.Token) {
+		t.Fatal("replacing a pending grace left its session alive")
+	}
+	if !ownerSessionLive(state, second.Token) {
+		t.Fatal("replacement grace revoked its session early")
+	}
+	state.flushBackupRestoreOwnerSessionRevocations()
+	if ownerSessionLive(state, second.Token) {
+		t.Fatal("flush missed the replacement grace")
 	}
 }

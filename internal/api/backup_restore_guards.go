@@ -85,9 +85,11 @@ func validateBackupRetention(daily, weekly, monthly int) error {
 
 // scheduleBackupRestoreOwnerSessionRevocation ends the restore owner's
 // pre-restore cookie session after a succeeded restore. An owner who no
-// longer validates against the restored users/roles is revoked at once;
-// otherwise the session survives only for the owner-session grace so the SPA
-// can read the terminal job, then a timer revokes it. The revocation is
+// longer validates against the restored users/roles is revoked at once, and
+// so is one whose revalidation errors (fail closed: an owner that cannot be
+// verified does not get a grace). Otherwise the session survives only for
+// the owner-session grace so the SPA can read the terminal job, then a timer
+// revokes it. The revocation is
 // deliberately NOT triggered by reading the job: GET
 // /api/backup-restore-jobs/{id} is a safe method, and SameSite=Lax sends the
 // cookie on cross-site top-level navigation, so a read-triggered revocation
@@ -114,19 +116,38 @@ func (s *managementState) scheduleBackupRestoreOwnerSessionRevocation(jobID, tok
 		return
 	}
 	s.backupJobsMu.Lock()
-	defer s.backupJobsMu.Unlock()
 	if s.backupOwnerRevocations == nil {
-		s.backupOwnerRevocations = make(map[string]*time.Timer)
+		s.backupOwnerRevocations = make(map[string]backupOwnerRevocation)
 	}
-	if previous, ok := s.backupOwnerRevocations[jobID]; ok {
-		previous.Stop()
+	replacedToken := ""
+	if previous, ok := s.backupOwnerRevocations[jobID]; ok && previous.timer.Stop() && previous.token != token {
+		// A replaced, never-fired grace must still end its own session.
+		replacedToken = previous.token
 	}
-	s.backupOwnerRevocations[jobID] = time.AfterFunc(grace, func() {
+	var timer *time.Timer
+	timer = time.AfterFunc(grace, func() {
 		s.backupJobsMu.Lock()
-		delete(s.backupOwnerRevocations, jobID)
+		// Only drop the entry if it is still this timer's: a re-armed job
+		// id must keep its replacement visible to the Close() flush.
+		if current, ok := s.backupOwnerRevocations[jobID]; ok && current.timer == timer {
+			delete(s.backupOwnerRevocations, jobID)
+		}
 		s.backupJobsMu.Unlock()
 		s.revokeBackupRestoreOwnerSession(jobID, token)
 	})
+	s.backupOwnerRevocations[jobID] = backupOwnerRevocation{timer: timer, token: token}
+	s.backupJobsMu.Unlock()
+	if replacedToken != "" {
+		s.revokeBackupRestoreOwnerSession(jobID, replacedToken)
+	}
+}
+
+// backupOwnerRevocation is one pending owner-session grace. The token is
+// kept with the timer so a flush does not depend on the job still being
+// retained (pruning must not let the session outlive the grace).
+type backupOwnerRevocation struct {
+	timer *time.Timer
+	token string
 }
 
 // backupRestoreOwnerSessionGraceDuration returns the configured grace, the
@@ -147,11 +168,9 @@ func (s *managementState) flushBackupRestoreOwnerSessionRevocations() {
 	type pending struct{ jobID, token string }
 	s.backupJobsMu.Lock()
 	var due []pending
-	for jobID, timer := range s.backupOwnerRevocations {
-		if timer.Stop() {
-			if job, ok := s.backupJobs[jobID]; ok && job.ownerSessionToken != "" {
-				due = append(due, pending{jobID, job.ownerSessionToken})
-			}
+	for jobID, entry := range s.backupOwnerRevocations {
+		if entry.timer.Stop() {
+			due = append(due, pending{jobID, entry.token})
 		}
 		delete(s.backupOwnerRevocations, jobID)
 	}
