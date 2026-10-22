@@ -49,17 +49,27 @@ func TestPromotionRecoveryWaitsForPromotionLock(t *testing.T) {
 		},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			withStubbedArtifactOwnership(t, func() {
-				assertRecoveryWaitsForLock(t, tc.run)
+		// "a_commits": A retires its journal before releasing the lock, so B
+		// must leave A's result alone. "a_crashed": A releases the lock with
+		// its journal still on disk, so B must still recover it once it
+		// holds the lock (roll config-1.json back and retire the journal).
+		for _, aCrashed := range []bool{false, true} {
+			mode := "a_commits"
+			if aCrashed {
+				mode = "a_crashed"
+			}
+			t.Run(tc.name+"/"+mode, func(t *testing.T) {
+				withStubbedArtifactOwnership(t, func() {
+					assertRecoveryWaitsForLock(t, tc.run, aCrashed)
+				})
 			})
-		})
+		}
 	}
 }
 
 const lockTestRestoreBackupID = "20260605T120000.000000000Z"
 
-func assertRecoveryWaitsForLock(t *testing.T, run func(string, func(string, string) bool) error) {
+func assertRecoveryWaitsForLock(t *testing.T, run func(string, func(string, string) bool) error, aCrashed bool) {
 	t.Helper()
 	root := t.TempDir()
 	backupRoot := filepath.Join(root, "backups")
@@ -119,8 +129,13 @@ func assertRecoveryWaitsForLock(t *testing.T, run func(string, func(string, stri
 		t.Fatalf("request B consumed request A's in-flight journal before taking the lock: %v", err)
 	}
 
-	// Request A commits: its journal is retired, then the lock is released.
-	if err := os.Remove(journalPath); err != nil {
+	want := "new-1"
+	if aCrashed {
+		// Request A dies mid-publish: the kernel drops its flock, its journal
+		// stays behind, and B must roll it back under the lock.
+		want = "old-1"
+	} else if err := os.Remove(journalPath); err != nil {
+		// Request A commits: its journal is retired, then the lock is released.
 		t.Fatal(err)
 	}
 	if err := unix.Flock(int(lock.Fd()), unix.LOCK_UN); err != nil {
@@ -135,7 +150,7 @@ func assertRecoveryWaitsForLock(t *testing.T, run func(string, func(string, stri
 	case <-time.After(5 * time.Second):
 		t.Fatal("request B did not proceed after the promotion lock was released")
 	}
-	assertFileContent(t, destination, "new-1")
+	assertFileContent(t, destination, want)
 	if _, err := os.Stat(journalPath); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("journal after request B: %v", err)
 	}

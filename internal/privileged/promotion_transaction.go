@@ -312,6 +312,10 @@ func rollbackPromotionAfterError(rootDir *safefs.Dir, root string, journal promo
 	return cause
 }
 
+// recoverPromotionTransactionWithPolicy is the recovery-only entry point. No
+// production path calls it any more: every live path recovers inside its own
+// withPromotionLock hold (#1257 F2). It is kept, locked, for tests and so a
+// future recovery-only caller cannot reintroduce an unlocked recovery.
 func recoverPromotionTransactionWithPolicy(root string, validateDestination func(string, string) bool, acceptedGeneration uint64) error {
 	if root == "" {
 		// No configured root means no journal can exist to recover; every
