@@ -16,6 +16,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1288: root `veil install` and `veil repair` now print the same
+  protocol-unit DNS warning as `veil doctor`. The install capability report
+  has a new `egress-dns` row: `ok` when a `/etc/resolv.conf` nameserver is
+  reachable under the units' kernel egress filter, and `warn` with the
+  doctor's remedy when none is, when `resolv.conf` is missing, or when it
+  cannot be read. `warn` is advisory and never blocks the install. `veil
+  repair` (including `--dry-run`) prints the warning after its plan. Both
+  checks run only on Linux; non-root installs, which manage no protocol
+  units, skip it.
 - #1288: `veil doctor` now checks DNS for the protocol units. It reads
   `/etc/resolv.conf` with the same rules the Hysteria2 and WARP renderers
   use and reports whether any nameserver is reachable under the units'

@@ -7,6 +7,7 @@ import (
 	"os/user"
 	"strings"
 
+	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 )
@@ -24,6 +25,9 @@ const (
 	preflightProvision preflightStatus = "provision" // absent, auto-provisionable
 	preflightMissing   preflightStatus = "missing"   // required, cannot provision
 	preflightSkipped   preflightStatus = "skipped"   // not needed for this install
+	// preflightWarn is advisory: printed with its remedy but never blocks the
+	// install, because the gap degrades a protocol rather than the install.
+	preflightWarn preflightStatus = "warn"
 )
 
 type preflightCheck struct {
@@ -59,7 +63,7 @@ func (r installPreflightReport) String() string {
 	fmt.Fprintf(&b, "%s\n", strings.Repeat("-", 40))
 	for _, c := range r.Checks {
 		fmt.Fprintf(&b, "%-22s %-9s %s\n", c.ID, c.Status, c.Detail)
-		if c.Remedy != "" && (c.Status == preflightMissing || c.Status == preflightProvision) {
+		if c.Remedy != "" && (c.Status == preflightMissing || c.Status == preflightProvision || c.Status == preflightWarn) {
 			fmt.Fprintf(&b, "%-22s %-9s %s\n", "", "", "remedy: "+c.Remedy)
 		}
 	}
@@ -257,9 +261,15 @@ func collectInstallPreflight(ctx context.Context, profile installer.RURecommende
 				Remedy:  remedy,
 				Package: pkgFor("sysctl")})
 		}
+
+		// 6. Protocol-unit DNS under the kernel egress filter (#1288): the
+		//    same probe `veil doctor` and the Hysteria2/WARP renderers use.
+		if platform.OS == "linux" {
+			add(egressDNSPreflightCheck(doctorEgressDNSProbe()))
+		}
 	}
 
-	// 6. ACME prerequisites — only for direct mode with LE IP certs (audit #298).
+	// 7. ACME prerequisites — only for direct mode with LE IP certs (audit #298).
 	if profile.PanelAccess == "direct" && opts.LEIPCert {
 		for _, tool := range []struct{ name, prereq string }{
 			{"curl", "curl"},
@@ -280,7 +290,7 @@ func collectInstallPreflight(ctx context.Context, profile installer.RURecommende
 		add(preflightCheck{ID: "acme", Status: preflightSkipped, Detail: "no ACME issuance for this profile"})
 	}
 
-	// 7. Archive/checksum tools for runtime downloads and verification.
+	// 8. Archive/checksum tools for runtime downloads and verification.
 	for _, tool := range []string{"tar", "gzip", "xz", "sha256sum"} {
 		if _, ok := anyLookPath(tool); ok {
 			add(preflightCheck{ID: "tool-" + tool, Status: preflightOK, Detail: tool + " present"})
@@ -299,7 +309,7 @@ func collectInstallPreflight(ctx context.Context, profile installer.RURecommende
 			Package: pkg})
 	}
 
-	// 8. Caddy binary — the runtime phase provisions the pinned build when the
+	// 9. Caddy binary — the runtime phase provisions the pinned build when the
 	//    profile needs it, so absence is provisionable without a package.
 	if profile.InstallPanelCaddy {
 		if _, ok := anyLookPath("caddy"); ok {
@@ -345,4 +355,31 @@ func provisionInstallPreflight(ctx context.Context, report installPreflightRepor
 		}
 	}
 	return nil
+}
+
+// egressDNSPreflightCheck turns the protocol-unit DNS probe into an advisory
+// install check (#1288). The protocol units run under an egress filter that
+// only pierces the systemd-resolved stubs, so on hosts whose resolv.conf
+// names a private, link-local or loopback resolver the units come up active
+// while Mieru's domain lookups are dropped. That is a warning, not a
+// blocker: Hysteria2 and WARP pin Cloudflare DoH on such hosts.
+func egressDNSPreflightCheck(check doctorflow.EgressDNSCheck) preflightCheck {
+	warning := doctorflow.EgressDNSWarning(check)
+	if warning == "" {
+		detail := "host resolver reachable from protocol units"
+		if len(check.Nameservers) > 0 {
+			detail += " (" + strings.Join(check.Nameservers, ", ") + ")"
+		}
+		return preflightCheck{ID: "egress-dns", Status: preflightOK, Detail: detail}
+	}
+	detail := "protocol units cannot reach the host resolver"
+	switch {
+	case check.ReadError != "":
+		detail = "cannot read /etc/resolv.conf"
+	case check.ResolvConfMissing:
+		detail = "no /etc/resolv.conf; protocol units have no reachable resolver"
+	case len(check.Nameservers) > 0:
+		detail += " (" + strings.Join(check.Nameservers, ", ") + ")"
+	}
+	return preflightCheck{ID: "egress-dns", Status: preflightWarn, Detail: detail, Remedy: warning}
 }

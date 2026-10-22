@@ -54,3 +54,41 @@ func TestRunRejectsUnsupportedProfileAndPropagatesPlanError(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// #1288: the protocol-unit DNS warning is printed after the plan on both
+// dry-run and apply, and nothing is printed when the probe is clean.
+func TestRunPrintsEgressDNSWarning(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		dryRun  bool
+		warning string
+	}{
+		{"dry-run warns", true, "no resolv.conf nameserver is reachable (#1288)"},
+		{"apply warns", false, "no resolv.conf nameserver is reachable (#1288)"},
+		{"clean probe", true, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			err := Run(Options{Profile: "ru-recommended", DryRun: tc.dryRun, Yes: !tc.dryRun}, &out, Dependencies{
+				BuildPlan:        func(Options) (installer.RepairPlan, error) { return installer.RepairPlan{}, nil },
+				ApplyPlan:        func(installer.RepairPlan, Options) error { return nil },
+				EgressDNSWarning: func() string { return tc.warning },
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			got := out.String()
+			if tc.warning == "" {
+				if strings.Contains(got, "warning:") {
+					t.Fatalf("clean probe printed a warning:\n%s", got)
+				}
+				return
+			}
+			planAt := strings.Index(got, "Veil repair plan")
+			warnAt := strings.Index(got, "warning: "+tc.warning)
+			if planAt < 0 || warnAt < planAt {
+				t.Fatalf("warning must follow the plan:\n%s", got)
+			}
+		})
+	}
+}
