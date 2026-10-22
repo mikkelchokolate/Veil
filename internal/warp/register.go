@@ -8,12 +8,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/curve25519"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 // test hooks; overridden in tests only.
@@ -27,11 +32,18 @@ var (
 const (
 	defaultRegBaseURL = "https://api.cloudflareclient.com/v0a4005"
 	defaultClientVer  = "a-6.30-3596"
-	defaultEndpoint   = "engage.cloudflareclient.com:2408"
+	defaultEndpoint   = DefaultEndpoint
+	// registrarEndpointDomain is the only DNS zone a registration response
+	// may point the WireGuard peer at. See registrarEndpoint.
+	registrarEndpointDomain = "cloudflareclient.com"
 	// maxRegistrationResponseBytes caps Cloudflare registration JSON. The
 	// payload is a small device/config object; hundreds of KiB is ample.
 	maxRegistrationResponseBytes = 256 << 10
 )
+
+// DefaultEndpoint is the public Cloudflare WARP WireGuard endpoint used when
+// neither the operator nor the registrar supplies one.
+const DefaultEndpoint = model.WarpDefaultEndpoint
 
 // Registration is a provisioned Cloudflare WARP account, ready to drop into a
 // WarpConfig. It is obtained for free, with no user input, by registering a
@@ -181,20 +193,35 @@ func (r *Registrar) Register(ctx context.Context) (Registration, error) {
 		return Registration{}, fmt.Errorf("warp: incomplete registration response")
 	}
 
-	endpoint := parsed.Config.Peers[0].Endpoint.Host
-	if endpoint == "" {
-		endpoint = defaultEndpoint
+	// Everything below comes from the registration API and is persisted
+	// straight into the WARP egress config, so it is validated here rather
+	// than left for `sing-box check` to reject opaquely at apply time (#1292).
+	peerPublicKey := parsed.Config.Peers[0].PublicKey
+	if err := validateWireGuardKey(peerPublicKey); err != nil {
+		return Registration{}, fmt.Errorf("warp: registration peer public_key: %w", err)
 	}
+	endpoint := registrarEndpoint(parsed.Config.Peers[0].Endpoint.Host)
 	reserved, err := decodeReserved(parsed.Config.ClientID)
 	if err != nil {
 		return Registration{}, err
 	}
+	if len(reserved) != 0 && len(reserved) != 3 {
+		return Registration{}, fmt.Errorf("warp: registration client_id must decode to 3 reserved bytes, got %d", len(reserved))
+	}
 	addresses := []string{}
 	if v4 := parsed.Config.Interface.Addresses.V4; v4 != "" {
-		addresses = append(addresses, v4+"/32")
+		addr, err := parseInterfaceAddress(v4, true)
+		if err != nil {
+			return Registration{}, fmt.Errorf("warp: registration interface v4 address: %w", err)
+		}
+		addresses = append(addresses, addr.String()+"/32")
 	}
 	if v6 := parsed.Config.Interface.Addresses.V6; v6 != "" {
-		addresses = append(addresses, v6+"/128")
+		addr, err := parseInterfaceAddress(v6, false)
+		if err != nil {
+			return Registration{}, fmt.Errorf("warp: registration interface v6 address: %w", err)
+		}
+		addresses = append(addresses, addr.String()+"/128")
 	}
 	if len(addresses) == 0 {
 		return Registration{}, fmt.Errorf("warp: registration response has no interface addresses")
@@ -202,7 +229,7 @@ func (r *Registrar) Register(ctx context.Context) (Registration, error) {
 
 	return Registration{
 		PrivateKey:    privateKey,
-		PeerPublicKey: parsed.Config.Peers[0].PublicKey,
+		PeerPublicKey: peerPublicKey,
 		Endpoint:      endpoint,
 		LocalAddress:  strings.Join(addresses, ","),
 		Reserved:      reserved,
@@ -227,4 +254,83 @@ func decodeReserved(clientID string) ([]int, error) {
 		reserved = append(reserved, int(b))
 	}
 	return reserved, nil
+}
+
+// validateWireGuardKey requires a standard-base64 32-byte curve25519 key.
+func validateWireGuardKey(key string) error {
+	raw, err := base64.StdEncoding.DecodeString(key)
+	if err != nil {
+		return fmt.Errorf("not base64: %w", err)
+	}
+	if len(raw) != curve25519.PointSize {
+		return fmt.Errorf("must decode to %d bytes, got %d", curve25519.PointSize, len(raw))
+	}
+	return nil
+}
+
+// parseInterfaceAddress parses a bare interface address of the expected
+// family. Prefixes, zones and IPv4-mapped IPv6 forms are rejected, as is
+// anything that cannot be a tunnel source (unspecified, multicast, loopback).
+func parseInterfaceAddress(raw string, wantV4 bool) (netip.Addr, error) {
+	addr, err := netip.ParseAddr(raw)
+	if err != nil {
+		return netip.Addr{}, err
+	}
+	switch {
+	case addr.Zone() != "":
+		return netip.Addr{}, fmt.Errorf("%q must not carry a zone", raw)
+	case wantV4 && !addr.Is4():
+		return netip.Addr{}, fmt.Errorf("%q is not an IPv4 address", raw)
+	case !wantV4 && (!addr.Is6() || addr.Is4In6()):
+		return netip.Addr{}, fmt.Errorf("%q is not an IPv6 address", raw)
+	case addr.IsUnspecified() || addr.IsMulticast() || addr.IsLoopback():
+		return netip.Addr{}, fmt.Errorf("%q cannot be a tunnel interface address", raw)
+	}
+	return addr, nil
+}
+
+// registrarEndpoint treats the registration response's peer endpoint as
+// advisory. It is accepted only as host:port with a valid port and a host
+// inside Cloudflare's cloudflareclient.com zone; anything else (an IP
+// literal, a foreign hostname, garbage) falls back to DefaultEndpoint. A
+// tampered or compromised registration response therefore cannot repoint
+// the persisted WARP egress at an arbitrary host (#1292).
+func registrarEndpoint(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return defaultEndpoint
+	}
+	host, portText, err := net.SplitHostPort(raw)
+	if err != nil {
+		return defaultEndpoint
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 1 || port > 65535 {
+		return defaultEndpoint
+	}
+	host = strings.ToLower(host)
+	if host != registrarEndpointDomain {
+		sub, ok := strings.CutSuffix(host, "."+registrarEndpointDomain)
+		if !ok {
+			return defaultEndpoint
+		}
+		for _, label := range strings.Split(sub, ".") {
+			if !validDNSLabel(label) {
+				return defaultEndpoint
+			}
+		}
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port))
+}
+
+func validDNSLabel(label string) bool {
+	if label == "" || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+		return false
+	}
+	for _, r := range label {
+		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+			return false
+		}
+	}
+	return true
 }

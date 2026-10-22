@@ -60,7 +60,7 @@ func TestRegistrarRegisterParsesCloudflareResponse(t *testing.T) {
 			"config":{
 				"client_id":"t0o+",
 				"interface":{"addresses":{"v4":"172.16.0.2","v6":"2606:4700:110:8cdc::1"}},
-				"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
+				"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
 			}
 		}`))
 	}))
@@ -90,7 +90,7 @@ func TestRegistrarRegisterParsesCloudflareResponse(t *testing.T) {
 	if want := base64.StdEncoding.EncodeToString(pubBytes); reqFields.Key != want {
 		t.Fatalf("request key = %q, want derived public key %q", reqFields.Key, want)
 	}
-	if reg.PeerPublicKey != "PEERPUBKEY=" {
+	if reg.PeerPublicKey != "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=" {
 		t.Fatalf("peer public key = %q", reg.PeerPublicKey)
 	}
 	if reg.Endpoint != "engage.cloudflareclient.com:2408" {
@@ -217,7 +217,7 @@ func TestRegistrarRegisterUsesDefaultEndpoint(t *testing.T) {
 			"config":{
 				"client_id":"t0o+",
 				"interface":{"addresses":{"v4":"172.16.0.2","v6":"2606:4700:110:8cdc::1"}},
-				"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":""}}]
+				"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":""}}]
 			}
 		}`))
 	}))
@@ -240,7 +240,7 @@ func TestRegistrarRegisterOnlyV4Address(t *testing.T) {
 			"config":{
 				"client_id":"t0o+",
 				"interface":{"addresses":{"v4":"172.16.0.2"}},
-				"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
+				"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
 			}
 		}`))
 	}))
@@ -263,7 +263,7 @@ func TestRegistrarRegisterOnlyV6Address(t *testing.T) {
 			"config":{
 				"client_id":"t0o+",
 				"interface":{"addresses":{"v6":"2606:4700:110:8cdc::1"}},
-				"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
+				"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
 			}
 		}`))
 	}))
@@ -286,7 +286,7 @@ func TestRegistrarRegisterMissingAddresses(t *testing.T) {
 			"config":{
 				"client_id":"t0o+",
 				"interface":{"addresses":{}},
-				"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
+				"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
 			}
 		}`))
 	}))
@@ -309,7 +309,7 @@ func TestRegistrarRegisterMissingID(t *testing.T) {
 			"config":{
 				"client_id":"t0o+",
 				"interface":{"addresses":{"v4":"172.16.0.2"}},
-				"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
+				"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
 			}
 		}`))
 	}))
@@ -355,7 +355,7 @@ func TestRegistrarRegisterInvalidClientID(t *testing.T) {
 			"config":{
 				"client_id":"not-valid-base64!!!",
 				"interface":{"addresses":{"v4":"172.16.0.2"}},
-				"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
+				"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
 			}
 		}`))
 	}))
@@ -489,7 +489,7 @@ func TestRegistrarRegisterUsesHostnameOverride(t *testing.T) {
 			"config":{
 				"client_id":"t0o+",
 				"interface":{"addresses":{"v4":"172.16.0.2"}},
-				"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
+				"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]
 			}
 		}`))
 	}))

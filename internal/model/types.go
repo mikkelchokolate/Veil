@@ -192,6 +192,12 @@ const (
 	// egressAllowWarpSocksBand — the validation contract and the ACL pierce
 	// must never drift apart.
 	WarpSocksEgressBand = "127.41.0.0/16"
+
+	// WarpDefaultEndpoint is the public Cloudflare WARP WireGuard endpoint
+	// used when neither the operator nor the registrar supplies one. It is
+	// the single source of truth for the stock endpoint across the WARP
+	// policy, the registrar, the default state and the sing-box renderer.
+	WarpDefaultEndpoint = "engage.cloudflareclient.com:2408"
 )
 
 var warpSocksEgressPrefix = netip.MustParsePrefix(WarpSocksEgressBand)
