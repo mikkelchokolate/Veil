@@ -68,8 +68,10 @@ failed checks cannot authorize publication. If main CI is still running, the
 gate waits up to 20 minutes and otherwise fails closed.
 
 Tag only after both main workflows are green; the bounded wait is not a
-replacement for that release check. Main CodeQL runs are not cancelled by a
-newer push. A cancelled/failed run must be rerun successfully before tagging.
+replacement for that release check. Already-running main CodeQL runs are not
+cancelled by a newer push, but GitHub may replace a pending CI/CodeQL run
+during bursty pushes. A cancelled/failed run must be rerun successfully before
+tagging.
 
 Release archive/package builds restore the frontend from that verified CI
 run. The existing dist verifier checks the source SHA, complete file/hash
