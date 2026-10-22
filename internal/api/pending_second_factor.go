@@ -16,7 +16,8 @@ const pendingSecondFactorTTL = 5 * time.Minute
 // pendingSecondFactorMaxAttempts hard-caps code guesses against a single
 // pending challenge: past this the challenge is destroyed and the caller must
 // re-authenticate with a password. The per-(client, username) rate limiter and
-// the shared login backoff still apply on top, so this bound is the last —
+// the "2fa|" login-backoff bucket (separate from the password-stage bucket)
+// still apply on top, so this bound is the last —
 // always-enforced — line against TOTP brute force.
 const pendingSecondFactorMaxAttempts = 5
 
