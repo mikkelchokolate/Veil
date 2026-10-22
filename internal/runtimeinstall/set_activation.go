@@ -350,6 +350,9 @@ func copyRuntimeFile(source, target string, mode os.FileMode) (returnErr error) 
 	if _, err := io.Copy(out, in); err != nil {
 		return err
 	}
+	if err := out.Chmod(mode); err != nil {
+		return err
+	}
 	if err := out.Sync(); err != nil {
 		return err
 	}

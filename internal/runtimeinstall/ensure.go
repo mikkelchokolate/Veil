@@ -55,7 +55,7 @@ func runtimeVerificationIdentity(opts Options, runtime Runtime, path, digest str
 	return strings.Join(append(fields, runtime.VersionArgs...), "\x00")
 }
 
-// Ensure reuses only a regular executable with matching installer provenance
+// Ensure reuses only a regular 0755 executable with matching installer provenance
 // and the pinned version probe. Missing, modified or older binaries are repaired.
 func Ensure(ctx context.Context, opts Options, runtime Runtime) Result {
 	return ensure(ctx, opts, runtime, nil)
@@ -73,7 +73,7 @@ func ensure(ctx context.Context, opts Options, runtime Runtime, cache *runtimeVe
 	active := filepath.Join(opts.BinDir, runtime.Binary)
 	manifest, ok := readRuntimeGenerationManifest(filepath.Join(opts.BinDir, runtimeSetManifestName))
 	info, err := os.Lstat(active)
-	if ok && err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
+	if ok && err == nil && info.Mode() == 0o755 {
 		digest, err := runtimeFileSHA256(active)
 		if err == nil && digest != "" && digest == manifest.Digests[runtime.Binary] {
 			identity := runtimeVerificationIdentity(opts, runtime, active, digest)
