@@ -205,7 +205,10 @@ func (row liveClientSecurity) hasQuotaState() bool {
 
 // quotaPlanDiffers reports whether a restored client that still has a quota
 // carries a different effective plan than the live row. It is compared by
-// value, with an empty policy meaning "never".
+// value, with an empty policy meaning "never" on both sides. This is
+// deliberately stricter about "effective" than prepareQuotaResetTransition,
+// which compares the raw policy strings: there a ""->"never" edit costs only
+// a spurious replan, while here it would drop a record for the same plan.
 func (row liveClientSecurity) quotaPlanDiffers(restored Client) bool {
 	livePolicy, restoredPolicy := row.QuotaResetPolicy, restored.QuotaResetPolicy
 	if livePolicy == "" {
