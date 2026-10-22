@@ -148,6 +148,9 @@ type managementState struct {
 	backupJobsPath                 string
 	backupRestoreAudit             func(audit.Record) error
 	backupRestoreOwnerSessionGrace time.Duration
+	// backupOwnerRevocations holds the pending grace timer per succeeded
+	// restore job; guarded by backupJobsMu.
+	backupOwnerRevocations         map[string]*time.Timer
 	serviceActionMu                sync.Mutex
 	updateMu                       sync.Mutex
 	updateWG                       sync.WaitGroup

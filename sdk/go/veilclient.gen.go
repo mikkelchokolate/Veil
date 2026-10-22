@@ -4440,7 +4440,7 @@ type ClientInterface interface {
 
 	// GetApiBackupRestoreJobsId Read queued restore progress
 	//
-	// Requires an admin session or the restore owner's one-time revalidated recovery session.
+	// Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace.
 	//
 	// Corresponds with GET /api/backup-restore-jobs/{id} (the `GetApiBackupRestoreJobsId` operationId).
 	GetApiBackupRestoreJobsId(ctx context.Context, id RestoreJobID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -5994,7 +5994,7 @@ func (c *Client) GetApiAuthStatus(ctx context.Context, reqEditors ...RequestEdit
 
 // GetApiBackupRestoreJobsId Read queued restore progress
 //
-// Requires an admin session or the restore owner's one-time revalidated recovery session.
+// Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace.
 //
 // Corresponds with GET /api/backup-restore-jobs/{id} (the `GetApiBackupRestoreJobsId` operationId).
 func (c *Client) GetApiBackupRestoreJobsId(ctx context.Context, id RestoreJobID, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -14667,7 +14667,7 @@ type ClientWithResponsesInterface interface {
 
 	// GetApiBackupRestoreJobsIdWithResponse Read queued restore progress
 	//
-	// Requires an admin session or the restore owner's one-time revalidated recovery session.
+	// Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace.
 	//
 	// Returns a wrapper object for the known response body format(s).
 	//
@@ -25315,7 +25315,7 @@ func (c *ClientWithResponses) GetApiAuthStatusWithResponse(ctx context.Context, 
 
 // GetApiBackupRestoreJobsIdWithResponse Read queued restore progress
 //
-// Requires an admin session or the restore owner's one-time revalidated recovery session.
+// Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace.
 //
 // Returns a wrapper object for the known response body format(s).
 //

@@ -443,6 +443,9 @@ func (s *managementState) Close() error {
 		s.lifecycleCancel()
 	}
 	s.updateWG.Wait()
+	// No restore can schedule a new owner-session grace while
+	// clientRequestMu is held; end the pending ones now (#1266).
+	s.flushBackupRestoreOwnerSessionRevocations()
 
 	s.mu.Lock()
 	workers := detachClientBackgroundWorkers(s)

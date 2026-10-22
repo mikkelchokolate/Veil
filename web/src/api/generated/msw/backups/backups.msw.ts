@@ -1216,7 +1216,7 @@ export const usePostApiBackupsSftpFetch = <TError = BadRequestResponse | Unautho
 }
 
 /**
- * Requires an admin session or the restore owner's one-time revalidated recovery session.
+ * Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace.
  * @summary Read queued restore progress
  */
 export const getApiBackupRestoreJobsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<BackupRestoreJob> => {

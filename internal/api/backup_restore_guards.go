@@ -83,6 +83,16 @@ func validateBackupRetention(daily, weekly, monthly int) error {
 	return nil
 }
 
+// scheduleBackupRestoreOwnerSessionRevocation ends the restore owner's
+// pre-restore cookie session after a succeeded restore. An owner who no
+// longer validates against the restored users/roles is revoked at once;
+// otherwise the session survives only for the owner-session grace so the SPA
+// can read the terminal job, then a timer revokes it. The revocation is
+// deliberately NOT triggered by reading the job: GET
+// /api/backup-restore-jobs/{id} is a safe method, and SameSite=Lax sends the
+// cookie on cross-site top-level navigation, so a read-triggered revocation
+// let a crafted link force-log-out the owner and left the session alive to
+// natural expiry when the job was never polled (#1266, #1268).
 func (s *managementState) scheduleBackupRestoreOwnerSessionRevocation(jobID, token string) {
 	if token == "" || s.sessions == nil {
 		return
@@ -94,10 +104,61 @@ func (s *managementState) scheduleBackupRestoreOwnerSessionRevocation(jobID, tok
 	}
 	s.mu.Unlock()
 	valid, err := s.sessionRegistry().RevalidateToken(token, roles)
-	if err != nil || valid {
+	if err != nil || !valid {
+		s.revokeBackupRestoreOwnerSession(jobID, token)
 		return
 	}
-	s.revokeBackupRestoreOwnerSession(jobID, token)
+	grace := s.backupRestoreOwnerSessionGraceDuration()
+	if grace <= 0 {
+		s.revokeBackupRestoreOwnerSession(jobID, token)
+		return
+	}
+	s.backupJobsMu.Lock()
+	defer s.backupJobsMu.Unlock()
+	if s.backupOwnerRevocations == nil {
+		s.backupOwnerRevocations = make(map[string]*time.Timer)
+	}
+	if previous, ok := s.backupOwnerRevocations[jobID]; ok {
+		previous.Stop()
+	}
+	s.backupOwnerRevocations[jobID] = time.AfterFunc(grace, func() {
+		s.backupJobsMu.Lock()
+		delete(s.backupOwnerRevocations, jobID)
+		s.backupJobsMu.Unlock()
+		s.revokeBackupRestoreOwnerSession(jobID, token)
+	})
+}
+
+// backupRestoreOwnerSessionGraceDuration returns the configured grace, the
+// default when unset, and a non-positive value (revoke immediately) when a
+// caller set it negative.
+func (s *managementState) backupRestoreOwnerSessionGraceDuration() time.Duration {
+	if s.backupRestoreOwnerSessionGrace == 0 {
+		return defaultBackupRestoreOwnerSessionGrace
+	}
+	return s.backupRestoreOwnerSessionGrace
+}
+
+// flushBackupRestoreOwnerSessionRevocations stops every pending grace timer
+// and revokes its owner session now. The grace is an in-process courtesy that
+// cannot survive a restart (owner tokens are never persisted with the job),
+// so shutdown must not leave the session alive to natural expiry.
+func (s *managementState) flushBackupRestoreOwnerSessionRevocations() {
+	type pending struct{ jobID, token string }
+	s.backupJobsMu.Lock()
+	var due []pending
+	for jobID, timer := range s.backupOwnerRevocations {
+		if timer.Stop() {
+			if job, ok := s.backupJobs[jobID]; ok && job.ownerSessionToken != "" {
+				due = append(due, pending{jobID, job.ownerSessionToken})
+			}
+		}
+		delete(s.backupOwnerRevocations, jobID)
+	}
+	s.backupJobsMu.Unlock()
+	for _, p := range due {
+		s.revokeBackupRestoreOwnerSession(p.jobID, p.token)
+	}
 }
 
 func (s *managementState) revokeBackupRestoreOwnerSession(jobID, token string) {
