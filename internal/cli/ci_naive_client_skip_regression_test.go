@@ -80,14 +80,19 @@ func TestCINaiveClientKnownGoneURLIsCurrent(t *testing.T) {
 	checkBash(t)
 	cmd := exec.Command("bash", "-c", `set -euo pipefail
 source ../../scripts/ci/runtimes.sh
-printf '%s\n%s\n' "$(naive_client_url)" "${CI_NAIVE_CLIENT_KNOWN_GONE_URL:-}"`)
+printf '%s\n%s\n%s\n' "$(naive_client_url)" "${CI_NAIVE_CLIENT_KNOWN_GONE_URL:-}" "${CI_NAIVE_CLIENT_ASSET}"`)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		t.Fatalf("sourcing runtimes.sh: %v", err)
+		t.Fatalf("sourcing runtimes.sh: %v\n%s", err, stderr.String())
 	}
 	lines := strings.Split(strings.TrimRight(string(out), "\n"), "\n")
-	if len(lines) != 2 {
+	if len(lines) != 3 {
 		t.Fatalf("unexpected output %q", out)
+	}
+	if asset := lines[2]; asset == "" || !strings.HasSuffix(lines[0], "/"+asset) || strings.Contains(lines[0], "//"+asset) {
+		t.Fatalf("naive_client_url = %q must end in /<tag>/%s with both pins non-empty", lines[0], asset)
 	}
 	fetched, gone := lines[0], lines[1]
 	if !strings.HasPrefix(fetched, "https://") {
