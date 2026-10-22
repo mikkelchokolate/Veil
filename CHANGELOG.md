@@ -4,8 +4,108 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+## [v0.7.3] - 2026-10-22
+
+Faster panel-first installation, recovery controls that work without the web
+Panel, stronger account and state protection, and more useful live traffic
+and host diagnostics. This release includes the changes since v0.7.2, not
+only the installation and CI optimizations.
+
+### Highlights
+
+- Install only what you use: protocol runtimes are acquired when an enabled
+  Inbound is first applied; WARP acquires sing-box when enabled. Disabled
+  Inbounds do not download runtimes. Caddy Panel access still acquires its
+  required Caddy immediately.
+- Run `sudo veil` or `sudo veil menu` for terminal management and recovery:
+  service controls, logs, diagnostics, repair, credentials, backups, updates
+  and selected runtime installation remain available when the web Panel is down.
+- Follow real apply phases, including downloading, building, verifying,
+  installing and service activation, with the runtime name and elapsed time.
+- Add TOTP or WebAuthn/passkeys as a second factor for Panel login; manage
+  encrypted off-host backups over SFTP.
+- See live client presence, listeners, traffic history and managed-service
+  processes. Traffic History requests and renders only the newest 60 points;
+  stored history has a 90-day default retention and is not deleted by that
+  display cap.
+
+### Upgrade notes — read before updating
+
+- Create and verify an encrypted backup with your current Veil version
+  **before the first v0.7.3 start**. Keep the backup and its passphrase safely
+  off the server. It must preserve the matching `state.json`, `veil.db` and
+  `state.key`; copying only the executable is not a data backup.
+- The first start migrates management state to **schema 6** and authenticates
+  revision snapshots. Older binaries refuse that state. Downgrading requires
+  the matching pre-upgrade data and binary, not just replacing the executable.
+  `veil update --staged` can roll back a binary after a failed health check,
+  but does not undo state or database migrations.
+- Pre-upgrade historical revisions remain unsealed and cannot be used for
+  apply rollback. If the applied revision lags the desired revision during
+  migration, subscription feeds remain unavailable until a successful apply.
+  Invalid legacy subscription-token seals may require token re-issuance;
+  inspect startup warnings rather than assuming every legacy token migrated.
+- A binary-only update does not refresh install-managed systemd units. Review
+  `sudo veil repair --dry-run`, apply the required repairs, restart the helper
+  and Panel, then check `veil doctor` and `veil status`. Apply once from the
+  Panel to refresh generated runtime configuration and certificate routes.
+  Custom-root installations must retain their own `--etc-dir`/`--var-dir`.
+- First-use runtime downloads/builds require internet access. Verified managed
+  binaries are reused only when provenance, pinned version and executable
+  permissions match; stale or untracked binaries may be repaired. Preinstall
+  selected runtimes with `sudo veil runtime install --only mieru,hysteria2`
+  before an offline maintenance window. Cold Caddy/olcRTC source builds have a
+  15-minute apply budget and have not been timed on a 1-vCPU/1-GB VPS.
+- `VEIL_AUTO_TLS=yes` and `VEIL_AUTO_TLS=on` are no longer accepted; use a
+  strict boolean such as `true` or `false`.
+- Keep the direct IP-certificate opt-out (`VEIL_PANEL_LE_IP_CERT=0`) if you
+  do not want automatic issuance during live Apply or periodic renewal.
+
+See the [installation and upgrade guide](https://github.com/mikkelchokolate/Veil/blob/v0.7.3/docs/install.md)
+and [known limitations](https://github.com/mikkelchokolate/Veil/blob/v0.7.3/docs/known-limitations.md)
+before production rollout.
+
+### Added
+
+- Optional TOTP with recovery codes and WebAuthn/passkeys as a **second
+  factor**, not passwordless login. Enrollment requires credential checks;
+  replay protection, guess limits and last-factor removal guards apply.
+- Encrypted SFTP backup upload, retention and fetch/restore, with remote
+  status and host-key pinning/TOFU. Remote upload failures do not erase a
+  successfully committed local backup.
+- Per-client live device/IP limits for Hysteria2 HTTP authentication, honest
+  protocol capability reporting, per-user Mieru traffic accounting, and live
+  presence/listener/history views on the Traffic page.
+- Managed-service process visibility and live per-process CPU usage on the
+  System page, plus DNS reachability warnings in install, repair and doctor.
+- Best-effort direct IP-certificate issuance after a successful live apply
+  with service actions, and a Veil-owned renewal worker. Certificate failures
+  are reported without pretending the successful configuration apply failed.
+
 ### Changed
 
+- Panel installation no longer downloads every protocol runtime. Explicit
+  `veil runtime install` still installs all runtimes; `--only` selects a subset.
+  On-demand installation uses the fenced privileged helper and pinned,
+  verified artifacts; download retries never bypass integrity checks.
+- Client operations avoid repeated full-snapshot scans and redundant database
+  queries, Inbound client previews are bounded, and abandoned list/history
+  requests are cancelled. A 5,000-client fingerprint benchmark improved from
+  about 878 ms to 17 ms in [#1363](https://github.com/mikkelchokolate/Veil/pull/1363);
+  this is a focused benchmark, not a whole-Panel claim.
+- CI shares measured shard timings, reuses validated build/runtime caches,
+  avoids an accidental real Caddy build in a unit test, and reduces duplicate
+  browser setup. The [final optimization CI run](https://github.com/mikkelchokolate/Veil/actions/runs/39773004034)
+  took 10m20s wall-clock versus the measured [14m04s baseline](https://github.com/mikkelchokolate/Veil/actions/runs/39760774474);
+  its slowest shard took 7m23s instead of 11m35s. Race,
+  coverage, inventory, browser and cold-install gates remain enabled.
+- Hardened session revocation, subscription-token bindings, authenticated
+  revision snapshots, promotion/restore journals, filesystem ownership and
+  symlink handling, root tool lookup and Go build environments. Restricted
+  egress, mutation validation and rollback now fail closed more consistently.
+- Administrator passwords can be read from an interactive prompt, stdin or
+  a file. Prefer `--password-stdin` or `--password-file` for automation;
+  the legacy `--password` argument remains visible in the process list.
 - #1263/#1334: `VEIL_AUTO_TLS` is parsed strictly by `veil serve`
   with `strconv.ParseBool` (`1`, `t`, `T`, `true`, `TRUE`, `True` and the
   matching false forms). Values such as `yes` or
@@ -28,6 +128,21 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Direct-mode access URLs retain the configured port, secret base path and
+  correct IPv6 brackets; failed public-IP detection is reported honestly.
+  Installation restarts dependent services together instead of repeatedly
+  bouncing a healthy Panel into systemd's start limit.
+- Diagnostics reads the actual firewall response shape instead of crashing
+  with `(t.data ?? []).map is not a function`; generated API clients and the
+  Go SDK match the response contract.
+- Authentication-status refreshes are cancelled and invalidated when their
+  provider unmounts, preventing stale responses from changing session/CSRF
+  state or updating a page that has already closed.
+- Helper-side runtime probes work with PrivateTmp and a strict umask without
+  weakening isolation. Runtime publication/rollback preserves executable
+  permissions, managed Caddy is pinned and verified, routine applies avoid
+  repeated proven version probes, and interrupted asset bodies retry within
+  one bounded attempt budget.
 - #1292: WARP auto-registration no longer trusts the Cloudflare
   registration response blindly. The peer endpoint it returns is advisory:
   it is used only when it is `host:port` with a valid port and a host inside
@@ -103,7 +218,7 @@ All notable changes to Veil will be documented in this file.
   this, sing-box could not resolve the WARP peer hostname, so the tunnel never
   came up, and client domains and rule-set downloads failed too. Hosts on the
   systemd-resolved stub or a public nameserver render the same config as
-  before. Mieru is still affected; see docs/known-limitations.md.
+  before. Mieru's separate fallback is described above.
 - #1257 (F3): promotion journal recovery and promotion restore no longer
   recreate a symlink at a managed destination from a `wasSymlink` /
   `oldLinkTarget` record. The link target was checked only against a digest
@@ -274,8 +389,8 @@ All notable changes to Veil will be documented in this file.
   DNS-over-HTTPS resolver: `1.1.1.1:443`, or the IPv6 address on IPv6-only
   hosts. Before this, every domain request and domain ACL rule failed while
   the service stayed active. Hosts on the systemd-resolved stub or a public
-  nameserver keep their system resolver. Mieru and WARP are still affected;
-  see docs/known-limitations.md.
+  nameserver keep their system resolver. The separate Mieru and WARP fixes
+  are described above.
 - #1334: `veil uninstall` no longer warns that `VEIL_CADDY_STATE_DIR` /
   `VEIL_MITA_STATE_DIR` retarget removal when `--caddy-state-dir` /
   `--mita-state-dir` was passed explicitly, nor for a value that only
@@ -285,7 +400,7 @@ All notable changes to Veil will be documented in this file.
   copies only regular files and directories, skips source symlinks, and
   never touches operator-created destination entries.
 - #623: package postinstall and `veil install` host migration re-own an
-  existing /var/lib/mita to veil-proxy like /var/lib/caddy — systemd never
+  existing /var/lib/mita to the dedicated veil-mita identity — systemd never
   re-owns an existing StateDirectory, so a veil-owned mita tree left the
   veil-mieru.service unit unable to write its state.
 - #625/#639/#650: a custom `--etc-dir`/`--var-dir` install on a packaged
@@ -308,6 +423,23 @@ All notable changes to Veil will be documented in this file.
   veil-caddy.service.d, the protocol units, and more) instead of only
   veil-backup.service.d — stale 10-veil-install.conf overrides no longer
   merge into the next package install.
+
+### Install and verify
+
+Fresh installation of this exact release:
+
+```bash
+curl -fsSL https://github.com/mikkelchokolate/Veil/releases/download/v0.7.3/install.sh | sh -s -- --version v0.7.3
+```
+
+Linux amd64 and arm64 archives and native `.deb`, `.rpm` and `.apk` packages
+are published with SHA-256 checksums, an SPDX SBOM, SLSA provenance, Sigstore
+bundles and GitHub artifact attestations. The bootstrap verifies release
+evidence before its privileged handoff. Container images are published as
+`ghcr.io/mikkelchokolate/veil:0.7.3` and `latest`; rootless containers do not
+replace the host's privileged helper for systemd/firewall orchestration.
+
+[Full commit comparison](https://github.com/mikkelchokolate/Veil/compare/v0.7.2...v0.7.3)
 
 ## [v0.7.2] - 2026-09-18
 
