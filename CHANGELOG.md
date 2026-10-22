@@ -4,6 +4,16 @@ All notable changes to Veil will be documented in this file.
 
 ## Unreleased
 
+### Fixed
+
+- #1369: when a batched `systemctl restart` fails during install or apply,
+  the error now includes the tail of systemctl's own output (capped at
+  2 KiB), so it names the unit that failed instead of a bare
+  `exit status 1`. Flags no longer add to the restart timeout budget. A
+  descendant that keeps systemctl's output open can no longer hold the
+  command past its timeout, and it doesn't turn a successful restart into
+  a failure.
+
 ## [v0.7.3] - 2026-10-22
 
 Faster panel-first installation, recovery controls that work without the web
