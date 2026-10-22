@@ -25,11 +25,23 @@ All notable changes to Veil will be documented in this file.
   back to the stock endpoint, so a tampered response cannot repoint WARP
   egress. A `PUT /api/warp` that omits `endpoint` now keeps the stored
   endpoint instead of resetting it to the stock one; sending `"endpoint":""`
-  (the panel's cleared field) still resets it. The peer public key must be a base64 32-byte key, the interface
-  addresses must be bare IPv4/IPv6 addresses of the right family, and
+  (the panel's cleared field) still resets it. The peer public key must be
+  a base64 32-byte key, the interface addresses must be bare IPv4/IPv6
+  addresses of the right family, and
   `client_id` must decode to 3 reserved bytes. A malformed response now fails
   the PUT with a `WARP registration failed: ...` error naming the field,
   instead of being persisted and later rejected by `sing-box check`.
+- #1292: `veil repair` (and install's repair plan) no longer reads managed
+  files through a path that can be swapped after its type check. The
+  content comparison now reads through an `O_NOFOLLOW|O_NONBLOCK`
+  descriptor and judges the inode it pins, so a leaf swapped for a symlink,
+  a FIFO or a different file between the check and the read is reported as
+  drifted and atomically replaced. Before, a planted symlink to a file with
+  the expected content was reported clean, and a FIFO hung the plan
+  indefinitely. The read is bounded to the expected size. A managed-file
+  list that names the same path twice with different content, mode or owner
+  now fails the plan instead of rewriting the file on every repair;
+  identical duplicates are collapsed.
 - #1288: Mieru (`veil-mieru`) now resolves names on hosts where no
   `/etc/resolv.conf` nameserver is reachable under the protocol units'
   kernel egress filter (AWS VPC `172.31.0.2`, `169.254.169.253/.254`,
