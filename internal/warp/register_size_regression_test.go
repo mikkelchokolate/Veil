@@ -83,7 +83,7 @@ func TestRegistrarRegisterStopsAfterSizeLimitWhenContentLengthLies(t *testing.T)
 // maxRegistrationResponseBytes must succeed (#935). Trailing whitespace keeps
 // the document valid JSON while reaching the byte boundary.
 func TestRegistrarRegisterAcceptsResponseAtSizeLimit(t *testing.T) {
-	base := `{"id":"device-123","token":"tok-456","account":{"license":"LICENSE-KEY"},"config":{"client_id":"t0o+","interface":{"addresses":{"v4":"172.16.0.2"}},"peers":[{"public_key":"PEERPUBKEY=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]}}`
+	base := `{"id":"device-123","token":"tok-456","account":{"license":"LICENSE-KEY"},"config":{"client_id":"t0o+","interface":{"addresses":{"v4":"172.16.0.2"}},"peers":[{"public_key":"bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=","endpoint":{"host":"engage.cloudflareclient.com:2408"}}]}}`
 	body := base + strings.Repeat(" ", maxRegistrationResponseBytes-len(base))
 	if len(body) != maxRegistrationResponseBytes {
 		t.Fatalf("fixture is %d bytes, want %d", len(body), maxRegistrationResponseBytes)
@@ -97,7 +97,7 @@ func TestRegistrarRegisterAcceptsResponseAtSizeLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Register at exact limit: %v", err)
 	}
-	if reg.DeviceID != "device-123" || reg.PeerPublicKey != "PEERPUBKEY=" {
+	if reg.DeviceID != "device-123" || reg.PeerPublicKey != "bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=" {
 		t.Fatalf("registration = %+v", reg)
 	}
 }
