@@ -16,6 +16,16 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- #1288: the WARP sing-box bridge (`veil-warp`) now gets the same DNS fix as
+  Hysteria2. On hosts where no `/etc/resolv.conf` nameserver is reachable under
+  the unit's kernel egress filter, the rendered `warp.json` pins a Cloudflare
+  DNS-over-HTTPS server (`1.1.1.1:443`, or the IPv6 address on IPv6-only
+  hosts, where the resolver also prefers AAAA records), dialed directly and
+  used as `route.default_domain_resolver`. Before
+  this, sing-box could not resolve the WARP peer hostname, so the tunnel never
+  came up, and client domains and rule-set downloads failed too. Hosts on the
+  systemd-resolved stub or a public nameserver render the same config as
+  before. Mieru is still affected; see docs/known-limitations.md.
 - #1257 (F3): promotion journal recovery and promotion restore no longer
   recreate a symlink at a managed destination from a `wasSymlink` /
   `oldLinkTarget` record. The link target was checked only against a digest
