@@ -25,10 +25,12 @@ _script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 cd "${CI_ROOT}"
 
+# `starting` already has a live manager after basic.target; unrelated boot jobs
+# need not finish before Veil's own unit ordering and health checks can run.
 systemd_ready=1
 for _ in $(seq 1 90); do
   state="$(systemctl is-system-running 2>/dev/null || true)"
-  case "${state}" in running|degraded) systemd_ready=0; break ;; esac
+  case "${state}" in starting|running|degraded) systemd_ready=0; break ;; esac
   sleep 1
 done
 if [ "${systemd_ready}" -ne 0 ]; then

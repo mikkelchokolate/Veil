@@ -48,3 +48,34 @@ ci_die() { echo "$*" >&2; exit 1; }
 		})
 	}
 }
+
+func TestInstallAcceptanceRequiresOperationalSystemdManagerNotIdleBootQueue(t *testing.T) {
+	checkBash(t)
+	body, err := os.ReadFile("../../scripts/ci/install-acceptance.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	script := strings.ReplaceAll(string(body), "\r\n", "\n")
+	start := strings.Index(script, "systemd_ready=1")
+	end := strings.Index(script, `if [ "$(id -u)" -eq 0 ]`)
+	if start < 0 || end <= start {
+		t.Fatal("acceptance systemd manager gate missing")
+	}
+	for _, state := range []string{"starting", "running", "degraded", "initializing", "offline", "maintenance", "stopping", "unknown"} {
+		t.Run(state, func(t *testing.T) {
+			command := exec.Command("bash", "-c", `set -euo pipefail
+systemctl() { printf '%s\n' "$CI_SYSTEMD_FIXTURE_STATE"; }
+seq() { printf '1\n'; }
+sleep() { :; }
+cat() { printf 'systemd\n'; }
+ci_die() { echo "$*" >&2; exit 1; }
+`+script[start:end])
+			command.Env = append(os.Environ(), "CI_SYSTEMD_FIXTURE_STATE="+state)
+			out, err := command.CombinedOutput()
+			wantFailure := state != "starting" && state != "running" && state != "degraded"
+			if (err != nil) != wantFailure {
+				t.Fatalf("systemd state %s error=%v wantFailure=%v: %s", state, err, wantFailure, out)
+			}
+		})
+	}
+}
