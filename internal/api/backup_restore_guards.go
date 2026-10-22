@@ -83,6 +83,18 @@ func validateBackupRetention(daily, weekly, monthly int) error {
 	return nil
 }
 
+// scheduleBackupRestoreOwnerSessionRevocation ends the restore owner's
+// pre-restore cookie session after a succeeded restore. An owner who no
+// longer validates against the restored users/roles is revoked at once, and
+// so is one whose revalidation errors (fail closed: an owner that cannot be
+// verified does not get a grace). Otherwise the session survives only for
+// the owner-session grace so the SPA can read the terminal job, then a timer
+// revokes it. The revocation is
+// deliberately NOT triggered by reading the job: GET
+// /api/backup-restore-jobs/{id} is a safe method, and SameSite=Lax sends the
+// cookie on cross-site top-level navigation, so a read-triggered revocation
+// let a crafted link force-log-out the owner and left the session alive to
+// natural expiry when the job was never polled (#1266, #1268).
 func (s *managementState) scheduleBackupRestoreOwnerSessionRevocation(jobID, token string) {
 	if token == "" || s.sessions == nil {
 		return
@@ -94,10 +106,78 @@ func (s *managementState) scheduleBackupRestoreOwnerSessionRevocation(jobID, tok
 	}
 	s.mu.Unlock()
 	valid, err := s.sessionRegistry().RevalidateToken(token, roles)
-	if err != nil || valid {
+	if err != nil || !valid {
+		s.revokeBackupRestoreOwnerSession(jobID, token)
 		return
 	}
-	s.revokeBackupRestoreOwnerSession(jobID, token)
+	grace := s.backupRestoreOwnerSessionGraceDuration()
+	if grace <= 0 {
+		s.revokeBackupRestoreOwnerSession(jobID, token)
+		return
+	}
+	s.backupJobsMu.Lock()
+	if s.backupOwnerRevocations == nil {
+		s.backupOwnerRevocations = make(map[string]backupOwnerRevocation)
+	}
+	replacedToken := ""
+	if previous, ok := s.backupOwnerRevocations[jobID]; ok && previous.timer.Stop() && previous.token != token {
+		// A replaced, never-fired grace must still end its own session.
+		replacedToken = previous.token
+	}
+	var timer *time.Timer
+	timer = time.AfterFunc(grace, func() {
+		s.backupJobsMu.Lock()
+		// Only drop the entry if it is still this timer's: a re-armed job
+		// id must keep its replacement visible to the Close() flush.
+		if current, ok := s.backupOwnerRevocations[jobID]; ok && current.timer == timer {
+			delete(s.backupOwnerRevocations, jobID)
+		}
+		s.backupJobsMu.Unlock()
+		s.revokeBackupRestoreOwnerSession(jobID, token)
+	})
+	s.backupOwnerRevocations[jobID] = backupOwnerRevocation{timer: timer, token: token}
+	s.backupJobsMu.Unlock()
+	if replacedToken != "" {
+		s.revokeBackupRestoreOwnerSession(jobID, replacedToken)
+	}
+}
+
+// backupOwnerRevocation is one pending owner-session grace. The token is
+// kept with the timer so a flush does not depend on the job still being
+// retained (pruning must not let the session outlive the grace).
+type backupOwnerRevocation struct {
+	timer *time.Timer
+	token string
+}
+
+// backupRestoreOwnerSessionGraceDuration returns the configured grace, the
+// default when unset, and a non-positive value (revoke immediately) when a
+// caller set it negative.
+func (s *managementState) backupRestoreOwnerSessionGraceDuration() time.Duration {
+	if s.backupRestoreOwnerSessionGrace == 0 {
+		return defaultBackupRestoreOwnerSessionGrace
+	}
+	return s.backupRestoreOwnerSessionGrace
+}
+
+// flushBackupRestoreOwnerSessionRevocations stops every pending grace timer
+// and revokes its owner session now. The grace is an in-process courtesy that
+// cannot survive a restart (owner tokens are never persisted with the job),
+// so shutdown must not leave the session alive to natural expiry.
+func (s *managementState) flushBackupRestoreOwnerSessionRevocations() {
+	type pending struct{ jobID, token string }
+	s.backupJobsMu.Lock()
+	var due []pending
+	for jobID, entry := range s.backupOwnerRevocations {
+		if entry.timer.Stop() {
+			due = append(due, pending{jobID, entry.token})
+		}
+		delete(s.backupOwnerRevocations, jobID)
+	}
+	s.backupJobsMu.Unlock()
+	for _, p := range due {
+		s.revokeBackupRestoreOwnerSession(p.jobID, p.token)
+	}
 }
 
 func (s *managementState) revokeBackupRestoreOwnerSession(jobID, token string) {

@@ -24,14 +24,25 @@ func TestHandleBackupRestoreJob(t *testing.T) {
 	state.backupJobs[job.ID] = job
 	state.backupJobsMu.Unlock()
 
-	get := adminJSONRequest(http.MethodGet, "/api/backup-restore-jobs/job-1", "")
-	rec := httptest.NewRecorder()
-	state.handleBackupRestoreJob(rec, get)
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	if _, ok := state.sessionRegistry().Get(ownerSession.Token); ok {
-		t.Fatal("expected owner session to be revoked after reading succeeded job")
+	// A safe-method read must not mutate session state: SameSite=Lax sends
+	// the owner cookie on a cross-site top-level navigation, so a
+	// read-triggered revocation was a forced-logout link (#1266).
+	for i := 0; i < 2; i++ {
+		get := adminJSONRequest(http.MethodGet, "/api/backup-restore-jobs/job-1", "")
+		get.AddCookie(&http.Cookie{Name: "veil_session", Value: ownerSession.Token})
+		get.Header.Set("Sec-Fetch-Site", "cross-site")
+		get.Header.Set("Sec-Fetch-Mode", "navigate")
+		rec := httptest.NewRecorder()
+		state.handleBackupRestoreJob(rec, get)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("read %d: status=%d body=%s", i, rec.Code, rec.Body.String())
+		}
+		if _, ok := state.sessionRegistry().Get(ownerSession.Token); !ok {
+			t.Fatalf("read %d of a succeeded job revoked the owner session", i)
+		}
+		if got, _ := state.backupRestoreJob("job-1"); got.ownerSessionToken != ownerSession.Token {
+			t.Fatalf("read %d cleared the job's owner token", i)
+		}
 	}
 }
 

@@ -151,6 +151,7 @@ func TestBackupRoutesRejectTraversalAndPruneManagedArchives(t *testing.T) {
 func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	stubManagementApplySideEffects(t)
 	state := newPanelBackupState(t)
+	state.backupRestoreOwnerSessionGrace = 3 * time.Second
 	collectorBeforeRestore := state.trafficCollector
 	reconcilerBeforeRestore := state.trafficReconciler
 	auditStarted := make(chan audit.Record, 1)
@@ -259,8 +260,20 @@ func TestBackupRestoreRunsAsQueuedJobAndRevokesSessions(t *testing.T) {
 	if statusResponse.Code != http.StatusOK {
 		t.Fatalf("job status=%d body=%s", statusResponse.Code, statusResponse.Body.String())
 	}
-	if _, ok := state.sessionRegistry().Get(ownerSession.Token); ok {
-		t.Fatal("restore did not revoke owner session after final status poll")
+	// The final poll itself is side-effect free (#1266); the owner session
+	// ends when the grace timer fires.
+	if _, ok := state.sessionRegistry().Get(ownerSession.Token); !ok {
+		t.Fatal("reading the succeeded job revoked the owner session")
+	}
+	revokeDeadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, ok := state.sessionRegistry().Get(ownerSession.Token); !ok {
+			break
+		}
+		if time.Now().After(revokeDeadline) {
+			t.Fatal("owner session survived the restore grace")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 

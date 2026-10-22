@@ -730,10 +730,10 @@ func (s *managementState) handleBackupRestoreJob(w http.ResponseWriter, r *http.
 	if responseStatus == 0 {
 		responseStatus = http.StatusOK
 	}
+	// Reading a job is side-effect free: the succeeded owner session is
+	// ended by scheduleBackupRestoreOwnerSessionRevocation's grace timer, not
+	// by this GET (#1266).
 	writeJSONStatus(w, responseStatus, job)
-	if job.Status == "succeeded" && job.ownerSessionToken != "" {
-		s.revokeBackupRestoreOwnerSession(id, job.ownerSessionToken)
-	}
 }
 
 func (s *managementState) backupRestoreJob(id string) (BackupRestoreJob, bool) {
