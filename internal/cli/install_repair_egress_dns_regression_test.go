@@ -143,9 +143,9 @@ func TestRepairDryRunPrintsEgressDNSWarning(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stubEgressDNSProbe(t, tc.check)
-			oldOS := repairPlatformOS
-			repairPlatformOS = func() string { return tc.os }
-			t.Cleanup(func() { repairPlatformOS = oldOS })
+			oldPlatform := installPlatformFunc
+			installPlatformFunc = func() hostenv.Platform { return hostenv.Platform{OS: tc.os, Arch: "amd64"} }
+			t.Cleanup(func() { installPlatformFunc = oldPlatform })
 
 			dir := t.TempDir()
 			cmd := NewRootCommand("test")

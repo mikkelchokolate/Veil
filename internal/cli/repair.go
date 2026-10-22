@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"runtime"
-
 	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
 	repairflow "github.com/mikkelchokolate/Veil/internal/cliflow/repair"
 	"github.com/mikkelchokolate/Veil/internal/installer"
@@ -89,13 +87,11 @@ func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
 }
 
 // repairEgressDNSWarning reports the protocol-unit DNS warning `veil doctor`
-// prints (#1288). The egress filter only exists on Linux.
+// prints (#1288). The egress filter only exists on Linux; the platform seam
+// is the one install's preflight uses, so one stub covers both commands.
 func repairEgressDNSWarning() string {
-	if repairPlatformOS() != "linux" {
+	if installPlatformFunc().OS != "linux" {
 		return ""
 	}
 	return doctorflow.EgressDNSWarning(doctorEgressDNSProbe())
 }
-
-// repairPlatformOS reports the host OS; tests stub it.
-var repairPlatformOS = func() string { return runtime.GOOS }
