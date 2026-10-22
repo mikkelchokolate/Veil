@@ -265,7 +265,8 @@ function HistoryCard() {
 	const { t } = useI18n();
 	const history = useQuery<TrafficHistoryResponse>({
 		queryKey: ["traffic", "history"],
-		queryFn: () => apiFetch(`/api/v1/traffic/history?limit=${HISTORY_LIMIT}`),
+		queryFn: ({ signal }) =>
+			apiFetch(`/api/v1/traffic/history?limit=${HISTORY_LIMIT}`, { signal }),
 		refetchInterval: 30000,
 	});
 
@@ -273,9 +274,9 @@ function HistoryCard() {
 	// start so the chart is always time-ascending.
 	const buckets = useMemo(
 		() =>
-			[...(history.data?.items ?? [])].sort(
-				(a, b) => a.bucketStart - b.bucketStart,
-			),
+			[...(history.data?.items ?? [])]
+				.sort((a, b) => a.bucketStart - b.bucketStart)
+				.slice(-HISTORY_LIMIT),
 		[history.data],
 	);
 	const option = useMemo(() => historyChartOption(buckets, t), [buckets, t]);

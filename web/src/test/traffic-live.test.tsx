@@ -348,6 +348,38 @@ describe("Traffic page history card", () => {
 		expect(option.series[1]?.data).toEqual([2048, 4096]);
 	});
 
+	it("requests and renders at most the newest 60 points even after days of history", async () => {
+		summaryApi();
+		let requestedLimit: string | null = null;
+		const count = 7 * 24 * 60;
+		server.use(
+			http.get("/api/v1/traffic/history", ({ request }) => {
+				requestedLimit = new URL(request.url).searchParams.get("limit");
+				return HttpResponse.json({
+					items: Array.from({ length: count }, (_, i) => ({
+						bucketStart: 1700000000 + i * 60,
+						clientId: "",
+						bindingId: "",
+						uploadDelta: i,
+						downloadDelta: i * 2,
+					})).reverse(),
+					count,
+				});
+			}),
+		);
+		renderTraffic();
+		await cardWithHeading("Traffic history");
+		await waitFor(() => {
+			const option =
+				echartsMocks.instances[0]?.setOption.mock.calls.at(-1)?.[0];
+			expect(option?.series[0].data).toEqual(
+				Array.from({ length: 60 }, (_, i) => count - 60 + i),
+			);
+			expect(option?.xAxis.data).toHaveLength(60);
+		});
+		expect(requestedLimit).toBe("60");
+	});
+
 	it("shows an empty state when no history is recorded", async () => {
 		summaryApi();
 		renderTraffic();
