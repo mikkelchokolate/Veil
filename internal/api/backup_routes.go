@@ -712,23 +712,26 @@ func (s *managementState) handleBackupRestoreJob(w http.ResponseWriter, r *http.
 		return
 	}
 	job, ok := s.backupRestoreJob(id)
-	if !ok {
-		writeNotFound(w)
-		return
-	}
-	authorized := requestHasAdminRole(s, r)
-	if !authorized && job.ownerSessionToken != "" {
+	authorized := ok && requestHasAdminRole(s, r)
+	if ok && !authorized && job.ownerSessionToken != "" {
 		if cookie, err := r.Cookie("veil_session"); err == nil {
 			authorized = subtle.ConstantTimeCompare([]byte(cookie.Value), []byte(job.ownerSessionToken)) == 1
 		}
 	}
+	// A caller who is neither an admin nor the job's owner gets the same 404
+	// as for an unknown id, so a leaked job id cannot be confirmed to exist
+	// (#1268 item 2).
 	if !authorized {
-		writeError(w, "forbidden: restore owner or admin role required", http.StatusForbidden)
+		writeNotFound(w)
 		return
 	}
 	responseStatus := job.HTTPStatus
 	if responseStatus == 0 {
 		responseStatus = http.StatusOK
+	}
+	if !validBackupRestoreJobHTTPStatus(responseStatus) {
+		// Never replay a code WriteHeader would panic on (#1268 item 4).
+		responseStatus = http.StatusInternalServerError
 	}
 	// Reading a job is side-effect free: the succeeded owner session is
 	// ended by scheduleBackupRestoreOwnerSessionRevocation's grace timer, not

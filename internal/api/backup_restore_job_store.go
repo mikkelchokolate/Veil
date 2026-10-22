@@ -51,12 +51,16 @@ func (s *managementState) loadBackupRestoreJobs() error {
 	if stored.Version != 1 || len(stored.Jobs) > maxPersistedBackupRestoreJobs {
 		return fmt.Errorf("invalid restore job history")
 	}
+	// Validate every entry before adopting any, so a rejected history is
+	// rejected as a whole instead of being half-loaded.
+	for _, job := range stored.Jobs {
+		if err := validatePersistedBackupRestoreJob(job); err != nil {
+			return err
+		}
+	}
 	now := time.Now().UTC()
 	changed := false
 	for _, job := range stored.Jobs {
-		if job.ID == "" || job.Archive == "" {
-			return fmt.Errorf("invalid restore job history entry")
-		}
 		if job.Status == "queued" || job.Status == "running" {
 			committed := false
 			if job.Status == "running" {
@@ -92,6 +96,38 @@ func (s *managementState) loadBackupRestoreJobs() error {
 		persistErr := s.persistBackupRestoreJobsLocked()
 		s.backupJobsMu.Unlock()
 		return errors.Join(persistErr, clearErr)
+	}
+	return nil
+}
+
+// backupRestoreJobStatuses is the closed set of job statuses the panel
+// writes (see BackupRestoreJob.status in docs/openapi.yaml).
+var backupRestoreJobStatuses = map[string]bool{
+	"queued": true, "running": true, "pending": true,
+	"succeeded": true, "failed": true, "degraded": true,
+}
+
+// validBackupRestoreJobHTTPStatus reports whether a recorded job HTTP status
+// can be replayed by handleBackupRestoreJob. 0 is the legacy "unset" value
+// (served as 200); anything else must be a real final status code, because
+// http.ResponseWriter.WriteHeader panics outside [100, 999] and 1xx is not a
+// final response (#1268 item 4).
+func validBackupRestoreJobHTTPStatus(code int) bool {
+	return code == 0 || (code >= 200 && code <= 599)
+}
+
+// validatePersistedBackupRestoreJob rejects history entries the panel could
+// not have written. backup-restore-jobs.json lives in the veil-writable state
+// directory, so its contents are not trusted beyond what this checks.
+func validatePersistedBackupRestoreJob(job BackupRestoreJob) error {
+	if job.ID == "" || job.Archive == "" {
+		return fmt.Errorf("invalid restore job history entry")
+	}
+	if !backupRestoreJobStatuses[job.Status] {
+		return fmt.Errorf("invalid restore job history entry %q: unknown status %q", job.ID, job.Status)
+	}
+	if !validBackupRestoreJobHTTPStatus(job.HTTPStatus) {
+		return fmt.Errorf("invalid restore job history entry %q: http status %d out of range", job.ID, job.HTTPStatus)
 	}
 	return nil
 }

@@ -1336,7 +1336,7 @@ export const getGetApiBackupRestoreJobsIdUrl = (id: string,) => {
 }
 
 /**
- * Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace.
+ * Requires an admin session or the restore owner's revalidated recovery session. Reading the job does not consume that session; it ends after a short post-success grace. Callers that are neither an admin nor the job's owner get 404, the same as for an unknown id.
  * @summary Read queued restore progress
  */
 export const getApiBackupRestoreJobsId = async (id: string, options?: Parameters<typeof apiFetch>[1]): Promise<BackupRestoreJob> => {
