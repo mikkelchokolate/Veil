@@ -67,6 +67,11 @@ sudo veil backup verify \
   --passphrase-file /root/veil-backup-passphrase
 ```
 
+Retention counts are limited to daily 0-365, weekly 0-104 and monthly
+0-120, the same limits as the Panel. Setting all three to 0 selects the
+default policy (7/4/12), as it does in the Panel. It does not delete every
+archive.
+
 List managed archives and preview retention:
 
 ```bash

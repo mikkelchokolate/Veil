@@ -95,6 +95,20 @@ func newBackupCommand(version string) *cobra.Command {
 				return errors.New("backup encryption is required; provide --passphrase/--passphrase-file or explicitly use --allow-unencrypted")
 			}
 
+			// Resolve retention before writing anything so an out-of-range
+			// policy fails without leaving a half-processed run behind.
+			var prunePolicy backup.RetentionPolicy
+			if pruneAfterCreate {
+				policy, defaulted, err := backup.ResolveRetentionPolicy(daily, weekly, monthly)
+				if err != nil {
+					return err
+				}
+				prunePolicy = policy
+				if defaulted {
+					printRetentionDefaulted(cmd, policy)
+				}
+			}
+
 			targetOutput := outputPath
 			if targetOutput != "" && outputDir != "" {
 				return errors.New("--output and --output-dir are mutually exclusive")
@@ -161,7 +175,7 @@ func newBackupCommand(version string) *cobra.Command {
 				if dir == "" {
 					dir = filepath.Dir(targetOutput)
 				}
-				policy := backup.RetentionPolicy{Daily: daily, Weekly: weekly, Monthly: monthly}
+				policy := prunePolicy
 				result, err := backup.PruneArchives(dir, policy, false)
 				if err != nil {
 					return fmt.Errorf("prune backups after create: %w", err)
@@ -305,7 +319,13 @@ func newBackupCommand(version string) *cobra.Command {
 		Use:   "prune",
 		Short: "Apply daily, weekly, and monthly backup retention",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			policy := backup.RetentionPolicy{Daily: daily, Weekly: weekly, Monthly: monthly}
+			policy, defaulted, err := backup.ResolveRetentionPolicy(daily, weekly, monthly)
+			if err != nil {
+				return err
+			}
+			if defaulted {
+				printRetentionDefaulted(cmd, policy)
+			}
 			result, err := backup.PruneArchives(backupDir, policy, dryRun)
 			if err != nil {
 				return err
@@ -500,10 +520,17 @@ func printRemotePruneResult(cmd *cobra.Command, engine backupsftp.Engine, policy
 	}
 }
 
+// printRetentionDefaulted tells the operator that an all-zero retention
+// triple was replaced with the default policy, the same meaning the API and
+// the privileged helper give it (#1412).
+func printRetentionDefaulted(cmd *cobra.Command, policy backup.RetentionPolicy) {
+	fmt.Fprintf(cmd.ErrOrStderr(), "Note: --daily/--weekly/--monthly are all 0; using the default retention (daily %d, weekly %d, monthly %d)\n", policy.Daily, policy.Weekly, policy.Monthly)
+}
+
 func addRetentionFlags(cmd *cobra.Command, daily, weekly, monthly *int) {
-	cmd.Flags().IntVar(daily, "daily", 7, "number of latest UTC days to retain")
-	cmd.Flags().IntVar(weekly, "weekly", 4, "number of latest ISO weeks to retain")
-	cmd.Flags().IntVar(monthly, "monthly", 12, "number of latest UTC months to retain")
+	cmd.Flags().IntVar(daily, "daily", 7, "number of latest UTC days to retain (0-365; all three 0 means the default policy)")
+	cmd.Flags().IntVar(weekly, "weekly", 4, "number of latest ISO weeks to retain (0-104)")
+	cmd.Flags().IntVar(monthly, "monthly", 12, "number of latest UTC months to retain (0-120)")
 }
 
 type fileReplace struct {

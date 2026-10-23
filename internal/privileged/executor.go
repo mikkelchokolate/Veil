@@ -1046,9 +1046,9 @@ func runProductionBackup(ctx context.Context, config ProductionConfig, request R
 	case BackupActionRead:
 		return readBackupArchiveFromStableDescriptor(config, request)
 	case BackupActionPrune:
-		policy := backup.RetentionPolicy{Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly}
-		if request.Daily == 0 && request.Weekly == 0 && request.Monthly == 0 {
-			policy = backup.DefaultRetentionPolicy()
+		policy, _, err := backup.ResolveRetentionPolicy(request.Daily, request.Weekly, request.Monthly)
+		if err != nil {
+			return BackupResult{}, newError(ErrorInvalidRequest, err.Error())
 		}
 		pruned, err := backup.PruneArchives(request.BackupRoot, policy, false)
 		if err != nil {

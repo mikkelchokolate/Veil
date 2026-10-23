@@ -6,6 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil backup prune` and `veil backup create --prune` no longer treat
+  `--daily 0 --weekly 0 --monthly 0` as "keep nothing". That used to delete
+  every local archive, including the one `create` had just written, and then
+  apply the same policy to the SFTP destination. The Panel API and the
+  privileged helper already read an all-zero triple as the default 7/4/12
+  policy. The CLI now does the same and prints a note on stderr. It also
+  rejects counts outside the API limits (daily 0-365, weekly 0-104,
+  monthly 0-120), and `create --prune` checks them before it writes the
+  archive (#1412).
 - `PATCH /api/v1/clients/{id}` with `"enabled": null` no longer disables
   the client. Null used to map to `false`, which took the client offline,
   while create treats a null or omitted `enabled` as the default `true` and
