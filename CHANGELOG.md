@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil admin set` on an existing user no longer strips that user's second
+  factors. It used to rebuild the record from the username, password, role
+  and locale only, so a password or role change (the documented CLI path)
+  silently disabled TOTP, deleted the TOTP secret and recovery codes, deleted
+  every registered passkey and reset the TOTP replay watermark to 0. It now
+  changes only the password (and the role when `--role` is passed) and says
+  which factors were kept. The new `--clear-2fa` flag removes the TOTP
+  factor, recovery codes and passkeys on purpose for lost-authenticator
+  recovery, keeps the replay watermark like the admin 2FA reset API, and
+  reports what it cleared. It refuses an unknown `--username` instead of creating
+  a new account (#1447).
 - The client-expiry reconciler no longer busy-loops when an already-due
   expiry can't be enforced yet. If an expiry apply had failed and was in retry
   backoff (up to 5 min), or enforcement was paused because runtime
