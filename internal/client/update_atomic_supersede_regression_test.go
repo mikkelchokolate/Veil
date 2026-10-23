@@ -6,10 +6,11 @@ import (
 )
 
 // #1272 item 3: Service.Update used to supersede the quota enforcement record
-// in autocommit before the version-checked UPDATE. A stale version then left
-// the supersede committed for a client whose quota plan never changed. The
-// supersede and the update must commit or roll back together.
-func TestUpdateStaleVersionDoesNotCommitQuotaSupersede(t *testing.T) {
+// in autocommit before validation and the version-checked UPDATE. A stale
+// version or a validation error then left the supersede committed for a
+// client whose quota plan never changed. The supersede and the update must
+// commit or roll back together.
+func TestRejectedUpdateDoesNotCommitQuotaSupersede(t *testing.T) {
 	for name, edit := range map[string]func(*Client){
 		"quota cleared":  func(c *Client) { c.QuotaBytes = nil },
 		"policy changed": func(c *Client) { c.QuotaResetPolicy = ResetMonthly },
