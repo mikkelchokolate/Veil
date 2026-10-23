@@ -49,7 +49,7 @@ import * as zod from 'zod';
 export const GetApiRoutingRulesResponseItem = zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 })
 export const GetApiRoutingRulesResponse = zod.array(GetApiRoutingRulesResponseItem)
@@ -70,14 +70,14 @@ export const PostApiRoutingRulesHeader = zod.object({
 export const PostApiRoutingRulesBody = zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 })
 
 export const PostApiRoutingRulesResponse = zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 }).and(zod.object({
   "success": zod.boolean(),
@@ -122,7 +122,7 @@ export const GetApiRoutingRulesNameParams = zod.object({
 export const GetApiRoutingRulesNameResponse = zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 })
 
@@ -149,14 +149,14 @@ export const PutApiRoutingRulesNameHeader = zod.object({
 export const PutApiRoutingRulesNameBody = zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 })
 
 export const PutApiRoutingRulesNameResponse = zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 }).and(zod.object({
   "success": zod.boolean(),
@@ -284,7 +284,7 @@ export const GetApiRoutingPresetsResponse = zod.object({
   "rules": zod.array(zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 })),
   "presets": zod.array(zod.object({
@@ -321,7 +321,7 @@ export const GetApiRoutingPresetsResponse = zod.object({
   "rules": zod.array(zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 }))
 })).optional()
@@ -388,7 +388,7 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "rules": zod.array(zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 })),
   "presets": zod.array(zod.object({
@@ -425,7 +425,7 @@ export const PostApiRoutingPresetsNameResponse = zod.object({
   "rules": zod.array(zod.object({
   "name": zod.string(),
   "match": zod.string(),
-  "outbound": zod.string(),
+  "outbound": zod.string().describe('Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.'),
   "enabled": zod.boolean()
 }))
 })).optional()

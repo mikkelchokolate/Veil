@@ -44,6 +44,7 @@
 export interface RoutingRule {
   name: string;
   match: string;
+  /** Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time. */
   outbound: string;
   enabled: boolean;
 }
