@@ -6,6 +6,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Revisions committed through the CLI state path (`veil admin set`, install
+  apply, repair, key rotation) now keep each client's `ipLimit` in their
+  immutable snapshot. That path previously dropped it, so rolling back to such
+  a revision restored every client as IP-unlimited while `deviceLimit`
+  survived. Revisions committed before this fix still lack `ipLimit`, and a
+  missing value there reads as "unlimited". After rolling back to one of them,
+  re-check client IP limits.
 - `veil admin set --username NAME` now applies the Panel username policy
   (3-64 characters, at most 64 UTF-8 bytes, letters, digits, `.`, `_`, `-`)
   when NAME would create a new account, the same policy first-run setup and
