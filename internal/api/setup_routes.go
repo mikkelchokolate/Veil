@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -66,7 +67,7 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if !validSetupUsername(req.Username) {
-		writeError(w, "username must be 3-64 characters and at most 64 UTF-8 bytes, using letters, digits, dot, underscore, or hyphen", http.StatusBadRequest)
+		writeError(w, errPanelUsernameInvalid.Error(), http.StatusBadRequest)
 		return
 	}
 	if err := validatePanelPassword(req.Password); err != nil {
@@ -160,6 +161,22 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 		"role":      "admin",
 		"locale":    req.Locale,
 	})
+}
+
+// errPanelUsernameInvalid is the single username-policy message shared by
+// first-run setup, POST /api/users and `veil admin set` (#1266).
+var errPanelUsernameInvalid = errors.New("username must be 3-64 characters and at most 64 UTF-8 bytes, using letters, digits, dot, underscore, or hyphen")
+
+// ValidatePanelUsername applies the Panel username policy to a name that is
+// about to become a NEW account. Callers outside the API (the admin CLI) use
+// it so every account-creating path admits exactly the same names; the
+// 3-character minimum is what keeps the "me" self-service alias of
+// /api/v1/users/me/* unrepresentable.
+func ValidatePanelUsername(username string) error {
+	if !validSetupUsername(username) {
+		return errPanelUsernameInvalid
+	}
+	return nil
 }
 
 func validSetupUsername(username string) bool {

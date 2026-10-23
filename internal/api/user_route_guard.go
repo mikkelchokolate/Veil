@@ -79,7 +79,7 @@ func validateUserMutationBody(w http.ResponseWriter, r *http.Request, requireUse
 		return true
 	}
 	if requireUsername && request.Username != "" && !validSetupUsername(request.Username) {
-		writeError(w, "username must be 3-64 characters and at most 64 UTF-8 bytes, using letters, digits, dot, underscore, or hyphen", http.StatusBadRequest)
+		writeError(w, errPanelUsernameInvalid.Error(), http.StatusBadRequest)
 		return false
 	}
 	if request.Password != "" {
