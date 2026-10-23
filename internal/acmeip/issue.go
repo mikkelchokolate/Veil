@@ -401,10 +401,17 @@ func IssueIPCert(ctx context.Context, opts IssueOptions) (IssuedCert, error) {
 		// behind, which can differ from the operator-managed predecessor
 		// (#1208). A failed restore surfaces — a panel left running on
 		// mis-owned material must not look like a clean failure.
+		//
+		// Every rejection path also drops the ACME enrollment this run
+		// created, exactly like an issue or installcert exec failure: a cert
+		// that was read back missing, failed validation or did not replace the
+		// predecessor must not stay registered with acme.sh, whose renewal
+		// would later run the reloadcmd against the rolled-back destination
+		// (#1246 item 3). Pre-existing ACME state is preserved as before.
+		cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
 		var primary error
 		switch {
 		case installErr != nil:
-			cleanupAcmeState(sys, acmeSh, opts.PublicIPv4, opts.PublicIPv6, preexistingACME)
 			primary = fmt.Errorf("install certificate: %w (output: %s)", installErr, string(out))
 		case certErr != nil:
 			primary = fmt.Errorf("install certificate: read %s: %w", certPath, certErr)

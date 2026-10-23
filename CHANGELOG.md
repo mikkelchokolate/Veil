@@ -6,6 +6,12 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- A panel IP certificate issuance whose `--installcert` step exits 0 but
+  installs rejected material (missing, failing validation, or not replacing
+  the previous cert) now drops the ACME enrollment it created, exactly like an
+  `--issue` or `--installcert` exec failure (#1246 item 3). Before, acme.sh
+  kept the enrollment and its reloadcmd for a cert Veil had rolled back.
+  Enrollments that existed before the run are still preserved.
 - The Caddy forward_auth user list for naive inbounds, including the
   revoked-client sentinel (#1098), is now derived in one place
   (`caddyassembly.NaiveUsers`). Before, the naiveproxy plugin re-derived the
