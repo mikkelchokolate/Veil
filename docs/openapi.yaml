@@ -3479,6 +3479,16 @@ paths:
 
         here. Wrong passwords share the login backoff family.
 
+        When TOTP is already enabled, enrolling replaces the active factor
+
+        and its recovery codes at confirm, so the request must also carry
+
+        `code`: a live, unused code from the current authenticator (#1413).
+
+        The code is spent by this call. Wrong codes share the login backoff
+
+        family; recovery codes are not accepted here.
+
         '
       security:
       - sessionCookie: []
@@ -5682,6 +5692,10 @@ components:
           type: string
           format: password
           description: Required when the session does not carry the second-factor mark.
+        code:
+          type: string
+          description: Live code from the currently active authenticator. Required
+            when TOTP is already enabled (re-enrollment replaces that factor).
     PasskeyRegisterBeginRequest:
       type: object
       additionalProperties: false

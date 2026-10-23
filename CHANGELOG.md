@@ -11,6 +11,14 @@ All notable changes to Veil will be documented in this file.
   it ran `mita -version || mita --version`, flags mita does not have, so the
   step aborted under `set -e` and none of the latest-runtime compatibility
   tests had run since 2026-09-21 (#1415).
+- `POST /api/v1/users/me/totp/enroll` on an account that already has TOTP
+  enabled now also requires `code`, a live and unused code from the current
+  authenticator, which the call spends. Before, a session that had passed
+  2FA could mint a new seed with no password and no code, confirm it, and so
+  replace the owner's authenticator and recovery codes and revoke the
+  owner's sessions, a stronger action than disabling TOTP, which already
+  needs a live code. First-time enrollment is unchanged. A wrong code is
+  throttled like other factor checks (#1413).
 - Routing rule create/update (`POST /api/routing/rules`,
   `PUT /api/routing/rules/{name}`) and state import/rollback/`veil config
   validate` now reject an `outbound` other than exactly `direct`, `proxy` or

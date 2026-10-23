@@ -214,7 +214,10 @@ func TestFactorEndpointsMarkSecretIdempotentResponses(t *testing.T) {
 
 	// TOTP enroll (seed + otpauth URI) through the middleware.
 	enroll := store.Middleware(http.HandlerFunc(state.handleMyTOTPEnroll))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/totp/enroll", strings.NewReader(`{"password":"correct-password-123"}`))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/users/me/totp/enroll", strings.NewReader(
+		// Re-enrolling over the active factor needs a live code from it (#1413);
+		// take the previous step so the login verify below keeps the current one.
+		`{"password":"correct-password-123","code":"`+totpCode(t, "JBSWY3DPEHPK3PXP", now.Add(-totpPeriod*time.Second))+`"}`))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Idempotency-Key", "enroll-secret")
 	req.AddCookie(&http.Cookie{Name: "veil_session", Value: session.Token})
