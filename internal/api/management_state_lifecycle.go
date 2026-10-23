@@ -16,6 +16,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/audit"
+	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/livevalidation"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	veilmodel "github.com/mikkelchokolate/Veil/internal/model"
@@ -397,7 +398,7 @@ func (l ManagementStateLifecycle) SnapshotLocked() (managementSnapshot, error) {
 		if err != nil {
 			return managementSnapshot{}, fmt.Errorf("snapshot: read credentials: %w", err)
 		}
-		input.Clients, input.Bindings, input.Credentials = clientSnapshotRows(clients, bindings, creds)
+		input.Clients, input.Bindings, input.Credentials = client.SnapshotRows(clients, bindings, creds)
 	}
 	return managementstate.BuildSnapshot(input), nil
 }

@@ -495,35 +495,7 @@ func earlierExpiry(snapshot, live *int64) *int64 {
 }
 
 func clientRowsFromImmutableSnapshot(snapshot managementSnapshot) ([]client.Client, []client.Binding, []client.Credential) {
-	clients := make([]client.Client, 0, len(snapshot.Clients))
-	for _, item := range snapshot.Clients {
-		clients = append(clients, client.Client{
-			ID: item.ID, Name: item.Name, Email: item.Email, Enabled: item.Enabled,
-			GroupID: item.GroupID, QuotaBytes: item.QuotaBytes, QuotaResetPolicy: item.QuotaResetPolicy,
-			QuotaResetAt: item.QuotaResetAt, ExpiresAt: item.ExpiresAt, DeviceLimit: item.DeviceLimit,
-			IPLimit: item.IPLimit, Notes: item.Notes, Depleted: item.Depleted, CreatedAt: item.CreatedAt,
-			UpdatedAt: item.UpdatedAt, Version: item.Version,
-		})
-	}
-	bindings := make([]client.Binding, 0, len(snapshot.Bindings))
-	for _, item := range snapshot.Bindings {
-		bindings = append(bindings, client.Binding{
-			ID: item.ID, ClientID: item.ClientID, InboundID: item.InboundID,
-			RuntimeIdentity: item.RuntimeIdentity,
-			Enabled:         item.Enabled, ProtocolSettings: item.ProtocolSettings,
-			CreatedAt: item.CreatedAt, UpdatedAt: item.UpdatedAt, Version: item.Version,
-		})
-	}
-	credentials := make([]client.Credential, 0, len(snapshot.Credentials))
-	for _, item := range snapshot.Credentials {
-		credentials = append(credentials, client.Credential{
-			ID: item.ID, BindingID: item.BindingID, Kind: item.Kind,
-			EncryptedValue: append([]byte(nil), item.EncryptedValue...), KeyVersion: item.KeyVersion,
-			CredentialVersion: item.CredentialVersion, CreatedAt: item.CreatedAt,
-			RotatedAt: item.RotatedAt,
-		})
-	}
-	return clients, bindings, credentials
+	return client.RowsFromSnapshot(snapshot.Clients, snapshot.Bindings, snapshot.Credentials)
 }
 
 func applyManagementSnapshotExact(state *managementState, snapshot managementSnapshot) {
