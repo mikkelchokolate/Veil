@@ -14,8 +14,9 @@ All notable changes to Veil will be documented in this file.
   meant one core at 100% and about 11k `client expiry …` log lines per second
   for as long as the block lasted. Now a client in retry backoff wakes the
   loop at its retry time. While enforcement is paused, the loop logs on
-  entering the pause and every 5 min after that, and re-checks every 30 s. Restore convergence wakes it as soon as the pause
-  clears. A past boundary is floored at 1 s (#1423).
+  entering the pause and every 5 min after that, and re-checks every 30 s.
+  Restore convergence wakes it as soon as the pause clears. A past boundary
+  is floored at 1 s (#1423).
 - The weekly `upstream-compat` workflow now probes mita with
   `mita version`, the same subcommand the runtime catalog uses. Since #738
   it ran `mita -version || mita --version`, flags mita does not have, so the
