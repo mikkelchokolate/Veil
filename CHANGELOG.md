@@ -6,6 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Routing rule create/update (`POST /api/routing/rules`,
+  `PUT /api/routing/rules/{name}`) and state import/rollback/`veil config
+  validate` now reject an `outbound` other than exactly `direct`, `proxy` or
+  `warp` with 400 / a validation error. Before, any non-empty value
+  (`Direct`, ` warp`, `block`, typos) was saved and the next apply failed
+  with `unsupported routing outbound`, blocking every later apply until the
+  rule was fixed. Matching is case-sensitive, like the apply planner. Stored
+  state that already holds such a rule still loads; fix or delete the rule
+  through the API (#1410).
 - The SFTP backup destination now persists and uses the same trimmed
   host, user, remote directory, key path and pinned host key that
   validation checks. Before, a destination saved through the API with

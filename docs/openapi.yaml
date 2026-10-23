@@ -6610,6 +6610,9 @@ components:
           type: string
         outbound:
           type: string
+          description: Exactly one of `direct`, `proxy` or `warp` (case-sensitive).
+            Create, update, import and rollback reject any other value with
+            400; `warp` additionally requires WARP to be enabled at apply time.
           examples:
           - direct
           - warp

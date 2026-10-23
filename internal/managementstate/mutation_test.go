@@ -241,18 +241,18 @@ func TestMutationUpdateAndDeleteRoutingRule(t *testing.T) {
 		t.Fatalf("RoutingRule = %+v ok=%v", got, ok)
 	}
 
-	updated, err := m.UpdateRoutingRule("direct", RoutingRule{Match: "geoip:cn", Outbound: "block"})
+	updated, err := m.UpdateRoutingRule("direct", RoutingRule{Match: "geoip:cn", Outbound: "proxy"})
 	if err != nil {
 		t.Fatalf("UpdateRoutingRule: %v", err)
 	}
-	if updated.Name != "direct" || updated.Outbound != "block" || rules[0].Outbound != "block" {
+	if updated.Name != "direct" || updated.Outbound != "proxy" || rules[0].Outbound != "proxy" {
 		t.Fatalf("update not applied: updated=%+v rules=%+v", updated, rules)
 	}
 
-	if _, err := m.UpdateRoutingRule("missing", RoutingRule{Match: "x", Outbound: "y"}); err == nil {
+	if _, err := m.UpdateRoutingRule("missing", RoutingRule{Match: "x", Outbound: "direct"}); err == nil {
 		t.Fatal("expected not found error")
 	}
-	if _, err := m.UpdateRoutingRule("direct", RoutingRule{Match: "", Outbound: "y"}); err == nil {
+	if _, err := m.UpdateRoutingRule("direct", RoutingRule{Match: "", Outbound: "direct"}); err == nil {
 		t.Fatal("expected invalid rule error")
 	}
 
@@ -271,10 +271,10 @@ func TestMutationCreateRoutingRuleRejectsInvalidAndDuplicate(t *testing.T) {
 	rules := []RoutingRule{{Name: "direct", Match: "geoip:private", Outbound: "direct"}}
 	m := NewManagementStateMutation(ManagementStateMutationTarget{Rules: &rules}, func() error { return nil })
 
-	if _, err := m.CreateRoutingRule(RoutingRule{Name: "direct", Match: "x", Outbound: "y"}); err == nil {
+	if _, err := m.CreateRoutingRule(RoutingRule{Name: "direct", Match: "x", Outbound: "direct"}); err == nil {
 		t.Fatal("expected duplicate name error")
 	}
-	if _, err := m.CreateRoutingRule(RoutingRule{Name: "invalid", Match: "", Outbound: "y"}); err == nil {
+	if _, err := m.CreateRoutingRule(RoutingRule{Name: "invalid", Match: "", Outbound: "direct"}); err == nil {
 		t.Fatal("expected invalid rule error")
 	}
 }
@@ -429,7 +429,7 @@ func TestMutationSaveErrorPropagates(t *testing.T) {
 		t.Fatalf("CreateInbound err = %v", err)
 	}
 	m = NewManagementStateMutation(ManagementStateMutationTarget{Rules: &rules}, func() error { return saveErr })
-	if _, err := m.CreateRoutingRule(RoutingRule{Name: "r", Match: "x", Outbound: "y"}); err != saveErr {
+	if _, err := m.CreateRoutingRule(RoutingRule{Name: "r", Match: "x", Outbound: "direct"}); err != saveErr {
 		t.Fatalf("CreateRoutingRule err = %v", err)
 	}
 	m = NewManagementStateMutation(ManagementStateMutationTarget{Warp: &warp}, func() error { return saveErr })
@@ -467,7 +467,7 @@ func TestMutationUpdateRoutingRuleSaveError(t *testing.T) {
 	rules := []RoutingRule{{Name: "direct", Match: "geoip:private", Outbound: "direct"}}
 	saveErr := errors.New("save failed")
 	m := NewManagementStateMutation(ManagementStateMutationTarget{Rules: &rules}, func() error { return saveErr })
-	if _, err := m.UpdateRoutingRule("direct", RoutingRule{Match: "geoip:cn", Outbound: "block"}); err != saveErr {
+	if _, err := m.UpdateRoutingRule("direct", RoutingRule{Match: "geoip:cn", Outbound: "proxy"}); err != saveErr {
 		t.Fatalf("UpdateRoutingRule err = %v", err)
 	}
 }

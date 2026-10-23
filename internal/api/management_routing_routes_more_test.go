@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -107,5 +108,49 @@ func TestHandleRoutingRules(t *testing.T) {
 		state.routingSource.Files[0].Name != "geoip.dat" ||
 		state.routingSource.Files[1].Name != "geosite.dat" {
 		t.Fatalf("geosite rule did not materialize dat source files: %+v", state.routingSource.Files)
+	}
+}
+
+// #1410: create and update must reject an outbound the apply planner can
+// never accept with 400 and leave desired state untouched, instead of
+// returning 201/200 and blocking every later apply.
+func TestHandleRoutingRulesRejectsUnknownOutbound(t *testing.T) {
+	origAutoApply := autoApplyAfterMutation
+	autoApplyAfterMutation = false
+	t.Cleanup(func() { autoApplyAfterMutation = origAutoApply })
+	state := newManagementState(ServerInfo{Mode: "dev"})
+	admin := func(req *http.Request) *http.Request {
+		req.Header.Set("Content-Type", "application/json")
+		return req.WithContext(context.WithValue(req.Context(), contextKeyRole, "admin"))
+	}
+	before := len(state.rules)
+
+	for _, outbound := range []string{"Direct", " warp", "block", "evil"} {
+		body := `{"name":"r1","match":"geoip:private","outbound":` + strconv.Quote(outbound) + `,"enabled":true}`
+		rec := httptest.NewRecorder()
+		state.handleRoutingRules(rec, admin(httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(body))))
+		if rec.Code != http.StatusBadRequest {
+			t.Fatalf("POST outbound=%q status=%d body=%s", outbound, rec.Code, rec.Body.String())
+		}
+		if !strings.Contains(rec.Body.String(), "outbound must be one of direct, proxy, warp") {
+			t.Fatalf("POST outbound=%q body=%s", outbound, rec.Body.String())
+		}
+		if len(state.rules) != before {
+			t.Fatalf("POST outbound=%q persisted a rule: %+v", outbound, state.rules)
+		}
+	}
+
+	rec := httptest.NewRecorder()
+	state.handleRoutingRules(rec, admin(httptest.NewRequest(http.MethodPost, "/api/routing/rules", strings.NewReader(`{"name":"r1","match":"geoip:private","outbound":"direct","enabled":true}`))))
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("POST valid status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	rec = httptest.NewRecorder()
+	state.handleRoutingRuleByName(rec, admin(httptest.NewRequest(http.MethodPut, "/api/routing/rules/r1", strings.NewReader(`{"match":"geoip:private","outbound":"evilx","enabled":true}`))))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("PUT status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(state.rules) != before+1 || state.rules[len(state.rules)-1].Outbound != "direct" {
+		t.Fatalf("PUT with invalid outbound changed the rule: %+v", state.rules)
 	}
 }
