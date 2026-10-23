@@ -3,6 +3,8 @@
 package backup
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -143,5 +145,17 @@ func TestBackupCallersRejectFIFOLeafWithoutBlocking(t *testing.T) {
 				t.Fatalf("%s accepted a FIFO leaf", name)
 			}
 		})
+	}
+}
+
+func TestOpenBackupRegularNoFollowOpenErrorCarriesPath(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing.veilbak")
+	file, err := openBackupRegularNoFollow(missing)
+	if file != nil {
+		_ = file.Close()
+	}
+	var pathErr *fs.PathError
+	if !errors.As(err, &pathErr) || pathErr.Path != missing || !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("open missing err = %#v, want *fs.PathError for %s wrapping ErrNotExist", err, missing)
 	}
 }

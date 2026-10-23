@@ -22,7 +22,9 @@ import (
 func openBackupRegularNoFollow(path string) (*os.File, error) {
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, err
+		// Same shape as os.Open: the path stays in helper logs and
+		// errors.Is(err, fs.ErrNotExist) keeps working for callers.
+		return nil, &os.PathError{Op: "open", Path: path, Err: err}
 	}
 	var st unix.Stat_t
 	if err := unix.Fstat(fd, &st); err != nil {
