@@ -116,15 +116,17 @@ func writeApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 // <applyRoot>/generated (#1273). The path must be canonical (filepath.Clean
 // leaves it unchanged), strictly beneath <applyRoot>/generated, and outside
 // generated/veil. That directory holds this writer's own plan and state
-// files, which a rendered artifact must not overwrite.
+// files, which a rendered artifact must not overwrite. The check is lexical
+// only. It is not a symlink defence: a link already planted under the
+// veil-writable generated tree would still redirect a write, and promotion's
+// own path checks remain the boundary for that.
 func validateStagedRenderedPath(applyRoot, path string) error {
 	if filepath.Clean(path) != path {
 		return fmt.Errorf("rendered config path %q is not canonical", path)
 	}
 	generatedRoot := filepath.Join(applyRoot, "generated")
-	if filepath.IsAbs(generatedRoot) != filepath.IsAbs(path) {
-		return fmt.Errorf("rendered config path %q is outside the staging root %q", path, generatedRoot)
-	}
+	// filepath.Rel errors when exactly one side is absolute, so a relative
+	// path under an absolute root (or the reverse) is rejected by err below.
 	rel, err := filepath.Rel(generatedRoot, path)
 	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) ||
 		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
