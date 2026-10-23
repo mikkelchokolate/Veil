@@ -294,12 +294,12 @@ func validateCore(c Client) error {
 
 // ValidateRestoredClient applies the runtime-relevant domain rules every API
 // and migration writer enforces (validateCore, not the full validate) to a
-// client row restored from an immutable revision snapshot. A rollback must not commit values the live
-// write path would refuse: some (deviceLimit=0, quotaBytes<0, an unknown
-// reset policy) would only be caught by the storage triggers as an opaque
-// failure, and others (a non-positive expiresAt, an over-range quota, a
-// malformed name, depletion without a quota) are not caught by storage at
-// all (#1270).
+// client row restored from an immutable revision snapshot. A rollback must
+// not commit values the live write path would refuse: some (deviceLimit=0,
+// quotaBytes<0, an unknown reset policy) would only be caught by the storage
+// triggers as an opaque failure, and others (a non-positive expiresAt, an
+// over-range quota, a malformed name, depletion without a quota) are not
+// caught by storage at all (#1270).
 //
 // The free-text limits on email/groupId/notes (#1272 item 7) are not applied
 // here. Those fields have no runtime effect, revision snapshots are written

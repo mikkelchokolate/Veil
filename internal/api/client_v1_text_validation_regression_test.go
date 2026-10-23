@@ -27,8 +27,10 @@ func TestV1ClientTextFieldsValidatedAndLegacyValuesGrandfathered(t *testing.T) {
 	version := int(created["version"].(float64))
 	legacyNotes := "legacy \x1b[31m notes"
 	legacyEmail := "legacy\x01@example.test"
+	legacyGroup := "legacy\x7fgroup"
 	// Raw write stands in for a row persisted before the limits existed.
-	if _, err := state.db.Exec(`UPDATE clients SET notes=?, email=? WHERE id=?`, legacyNotes, legacyEmail, id); err != nil {
+	if _, err := state.db.Exec(`UPDATE clients SET notes=?, email=?, group_id=? WHERE id=?`,
+		legacyNotes, legacyEmail, legacyGroup, id); err != nil {
 		t.Fatal(err)
 	}
 
@@ -38,14 +40,16 @@ func TestV1ClientTextFieldsValidatedAndLegacyValuesGrandfathered(t *testing.T) {
 		t.Fatalf("PATCH leaving legacy text untouched: status=%d body=%s", res.Code, res.Body.String())
 	}
 	updated := decodeJSONMap(t, res.Body.Bytes())
-	if updated["notes"] != legacyNotes || updated["email"] != legacyEmail {
-		t.Fatalf("legacy text not preserved: notes=%q email=%q", updated["notes"], updated["email"])
+	if updated["notes"] != legacyNotes || updated["email"] != legacyEmail || updated["groupId"] != legacyGroup {
+		t.Fatalf("legacy text not preserved: notes=%q email=%q groupId=%q",
+			updated["notes"], updated["email"], updated["groupId"])
 	}
 	version = int(updated["version"].(float64))
 
 	for name, patch := range map[string]string{
-		"notes": `"notes":"new \u0000 notes"`,
-		"email": `"email":"other\u0002@example.test"`,
+		"notes":   `"notes":"new \u0000 notes"`,
+		"email":   `"email":"other\u0002@example.test"`,
+		"groupId": `"groupId":"other\u0003group"`,
 	} {
 		res := v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+id, `{"version":`+strconv.Itoa(version)+`,`+patch+`}`)
 		if res.Code != http.StatusBadRequest {
@@ -54,7 +58,7 @@ func TestV1ClientTextFieldsValidatedAndLegacyValuesGrandfathered(t *testing.T) {
 	}
 
 	res = v1Request(t, r, http.MethodPatch, "/api/v1/clients/"+id,
-		`{"version":`+strconv.Itoa(version)+`,"notes":"fixed\nnotes","email":"fixed@example.test"}`)
+		`{"version":`+strconv.Itoa(version)+`,"notes":"fixed\nnotes","email":"fixed@example.test","groupId":"fixed-group"}`)
 	if res.Code != http.StatusOK {
 		t.Fatalf("PATCH fixing legacy text: status=%d body=%s", res.Code, res.Body.String())
 	}
