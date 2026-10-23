@@ -30,9 +30,11 @@ import (
 //   - Credential rows are never deleted or re-activated here. Retained
 //     bindings keep their live rows — active values and revoked tombstones
 //     alike — so a rollback cannot resurrect a revoked or superseded
-//     credential. A snapshot credential is only inserted when its binding is
-//     retained AND the row is genuinely absent (no tombstone, no other active
-//     credential of the same kind).
+//     credential. That includes a binding the snapshot moves back to another
+//     client: its row is re-inserted, and its live credential rows are put
+//     back unchanged. A snapshot credential is only inserted when its binding
+//     is retained AND the row is genuinely absent (no tombstone, no other
+//     active credential of the same kind).
 //
 // Retained clients and bindings receive a new monotonic version strictly
 // greater than both the live row and the archived snapshot, so pre-rollback
@@ -158,12 +160,23 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 		// never fires traffic_binding_cleanup, so counters/samples keyed
 		// (old client, binding) would survive and trip the next
 		// foreign-key/domain integrity check at storage.Open (#1140).
+		//
+		// The delete also cascades into client_credentials. Those rows are
+		// security state, not counters: a post-snapshot rotation and its
+		// revoked tombstones must survive (#1099), or the snapshot credential
+		// below would become the only active one again (#1272 item 6). Keep
+		// them aside and put them back verbatim once the binding row exists.
 		var existingClient string
+		var keptCredentials []credentialRow
 		switch err := tx.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, item.ID).Scan(&existingClient); {
 		case errors.Is(err, sql.ErrNoRows):
 		case err != nil:
 			return fmt.Errorf("client: read existing binding %s: %w", item.ID, err)
 		case existingClient != item.ClientID:
+			keptCredentials, err = bindingCredentialRows(tx, item.ID)
+			if err != nil {
+				return fmt.Errorf("client: read credentials of reparented binding %s: %w", item.ID, err)
+			}
 			if _, err := tx.Exec(`DELETE FROM client_bindings WHERE id=?`, item.ID); err != nil {
 				return fmt.Errorf("client: reparent snapshot binding %s: %w", item.ID, err)
 			}
@@ -180,9 +193,59 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 			item.Version); err != nil {
 			return fmt.Errorf("client: restore snapshot binding %s: %w", item.ID, err)
 		}
+		if err := reinsertCredentialRows(tx, keptCredentials); err != nil {
+			return fmt.Errorf("client: keep credentials of reparented binding %s: %w", item.ID, err)
+		}
 	}
 
 	return restoreSnapshotCredentials(tx, credentials)
+}
+
+// credentialRow is a client_credentials row copied byte-for-byte, so a
+// binding that is deleted and re-inserted keeps its credential history.
+type credentialRow struct {
+	ID                string
+	BindingID         string
+	Kind              string
+	EncryptedValue    []byte
+	KeyVersion        int
+	CredentialVersion int
+	CreatedAt         int64
+	RotatedAt         *int64
+	RevokedAt         *int64
+}
+
+func bindingCredentialRows(tx *Tx, bindingID string) ([]credentialRow, error) {
+	rows, err := tx.Query(`SELECT id, binding_id, kind, encrypted_value, key_version,
+  credential_version, created_at, rotated_at, revoked_at
+  FROM client_credentials WHERE binding_id=? ORDER BY credential_version, id`, bindingID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []credentialRow
+	for rows.Next() {
+		var r credentialRow
+		if err := rows.Scan(&r.ID, &r.BindingID, &r.Kind, &r.EncryptedValue, &r.KeyVersion,
+			&r.CredentialVersion, &r.CreatedAt, &r.RotatedAt, &r.RevokedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func reinsertCredentialRows(tx *Tx, rows []credentialRow) error {
+	for _, r := range rows {
+		if _, err := tx.Exec(`INSERT INTO client_credentials
+  (id, binding_id, kind, encrypted_value, key_version, credential_version, created_at, rotated_at, revoked_at)
+  VALUES(?,?,?,?,?,?,?,?,?)`,
+			r.ID, r.BindingID, r.Kind, r.EncryptedValue, r.KeyVersion, r.CredentialVersion,
+			r.CreatedAt, r.RotatedAt, r.RevokedAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type liveClientSecurity struct {

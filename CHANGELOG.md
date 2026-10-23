@@ -6,6 +6,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- A rollback that moves a client binding back to the client it had in the
+  revision no longer replaces the binding's live credentials with the older
+  revision credential (#1272 item 6). The binding row is still re-created,
+  which drops its traffic counters as before, but its credential rows, including
+  a rotation made after the revision and its revoked tombstones, are kept as
+  they are. Bindings only change client through direct database edits, so this
+  path was not reachable through the API or CLI.
 - Client `email`, `groupId` and `notes` are now validated like the display
   name instead of being stored verbatim (#1272 item 7). `email` must be at most
   254 bytes and `groupId` at most 128 characters, both without control or format
