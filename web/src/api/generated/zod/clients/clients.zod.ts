@@ -1236,7 +1236,7 @@ export const PostApiV1ClientsIdTokensTokenIdRotateHeader = zod.object({
 })
 
 export const PostApiV1ClientsIdTokensTokenIdRotateBody = zod.object({
-  "expiresAt": zod.int().nullish().describe('Replacement expiry. A future value is required when rotating an expired token.')
+  "expiresAt": zod.int().nullish().describe('Replacement expiry. Omit the field (or send no body) to keep the current expiry. An explicit null makes the replacement token non-expiring. A future value is required when rotating an expired token. The replacement always keeps the old token\'s label, issuer and enabled flag.')
 })
 
 export const PostApiV1ClientsIdTokensTokenIdRotateResponse = zod.object({

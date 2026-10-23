@@ -270,6 +270,56 @@ describe("SubscriptionTokensPanel errors", () => {
 		expect(screen.queryByText(/veil_di_secret/)).not.toBeInTheDocument();
 	});
 
+	// #1272: rotation keeps a disabled token disabled, so the one-time panel
+	// must not offer the replacement URL (it does not authenticate either).
+	it("does not offer the rotated URL of a disabled token as copyable", async () => {
+		const user = userEvent.setup();
+		const rotates: unknown[] = [];
+		const listed = {
+			id: "tok-dis",
+			prefix: "veil_di",
+			label: "paused",
+			enabled: false,
+			createdAt: 1700000000,
+		};
+		server.use(
+			http.get("/api/v1/clients/c1/tokens", () =>
+				HttpResponse.json({ items: [listed] }),
+			),
+			http.post("/api/v1/clients/c1/tokens/tok-dis/rotate", () => {
+				rotates.push("rotate");
+				return HttpResponse.json({
+					token: { ...listed, id: "tok-new", prefix: "veil_nw" },
+					plaintext: "veil_nw_secret",
+					url: "/s/veil_nw_secret",
+				});
+			}),
+		);
+		const qc = new QueryClient({
+			defaultOptions: { queries: { retry: false } },
+		});
+		render(
+			<QueryClientProvider client={qc}>
+				<I18nProvider>
+					<SubscriptionTokensPanel clientId="c1" />
+				</I18nProvider>
+			</QueryClientProvider>,
+		);
+		await user.click(await screen.findByRole("button", { name: /^rotate$/i }));
+		await user.click(
+			await screen.findByRole("button", { name: /confirm rotate/i }),
+		);
+		await waitFor(() => expect(rotates).toHaveLength(1));
+		const panel = await screen.findByTestId("issued-subscription-token");
+		expect(
+			within(panel).getByText(/rotated, but the token is disabled/i),
+		).toBeInTheDocument();
+		expect(
+			within(panel).queryByRole("button", { name: /copy url/i }),
+		).not.toBeInTheDocument();
+		expect(screen.queryByText(/veil_nw_secret/)).not.toBeInTheDocument();
+	});
+
 	it("shows an expired token as expired and requires a future expiry to rotate", async () => {
 		const user = userEvent.setup();
 		const rotateBodies: unknown[] = [];
