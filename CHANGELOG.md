@@ -12,6 +12,13 @@ All notable changes to Veil will be documented in this file.
   `--issue` or `--installcert` exec failure (#1246 item 3). Before, acme.sh
   kept the enrollment and its reloadcmd for a cert Veil had rolled back.
   Enrollments that existed before the run are still preserved.
+- The Caddy forward_auth user list for naive inbounds, including the
+  revoked-client sentinel (#1098), is now derived in one place
+  (`caddyassembly.NaiveUsers`). Before, the naiveproxy plugin re-derived the
+  users over the render plan's copy, so the plan-level copy that install,
+  repair, panel access and the apply-plan validator render from had no test
+  of its own and could drift from the plugin (#1404 review follow-up). The
+  rendered users are unchanged.
 - The Caddy render plan now fails with a `panelListen` error when Caddy panel
   access has an unparseable or out-of-range `panelListen` port, and with a
   `panelPublicPort` error when the public port is outside 1-65535 (#1292

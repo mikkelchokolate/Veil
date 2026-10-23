@@ -141,7 +141,7 @@ func BuildRenderPlanForEtcDir(
 		}
 		port := naivePublicPort(settings, inb)
 		domain := naiveDomain(inb, settings)
-		users := naiveUsers(inb, settings)
+		users := NaiveUsers(inb, settings)
 		fallbackRoot := naiveFallbackRoot(inb, settings, fallbackBase)
 		if err := addNaiveBinds(transport, port, domain, inb.Name, users, fallbackRoot, owners, servers); err != nil {
 			return CaddyRenderPlan{}, nil, err
@@ -294,11 +294,17 @@ func naiveFallbackRoot(inbound model.Inbound, settings model.Settings, base stri
 	return base
 }
 
-// naiveUsers builds the Caddy forward_auth user list. Stored credential bytes
-// are emitted as-is so the server authenticates exactly what client export
-// advertises; usernames match on trimmed bytes so a normalized credential
-// overrides a legacy profile with the same effective name (audit #331/#334).
-func naiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser {
+// NaiveUsers builds the Caddy forward_auth user list for a naiveproxy inbound.
+// Stored credential bytes are emitted as-is so the server authenticates
+// exactly what client export advertises; usernames match on trimmed bytes so a
+// normalized credential overrides a legacy profile with the same effective
+// name (audit #331/#334).
+//
+// This is the single derivation of the naive user list: every render path
+// (the naiveproxy plugin, install, repair, panel access and the apply-plan
+// validator) reads it from the plan's CaddyBindOwner.NaiveUsers, so the
+// revoked-client sentinel cannot drift between paths.
+func NaiveUsers(inbound model.Inbound, settings model.Settings) []CaddyNaiveUser {
 	var users []CaddyNaiveUser
 	runtimeUsers := make(map[string]CaddyNaiveUser, len(inbound.RuntimeCredentials))
 	for _, credential := range inbound.RuntimeCredentials {
