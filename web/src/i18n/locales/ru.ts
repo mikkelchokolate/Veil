@@ -707,6 +707,8 @@ export const ru: Record<string, string> = {
 	"subTokens.urlExpired":
 		"Истёк — сохранённая ссылка больше не работает. Ротируйте токен с новым сроком, чтобы выдать новую ссылку.",
 	"subTokens.urlDisabled": "Отключён — сохранённая ссылка не работает.",
+	"subTokens.rotatedDisabled":
+		"Токен ротирован, но отключён — новая ссылка не работает.",
 	"subTokens.urlUnavailable":
 		"Этот токен создан до сохранения ссылок. Нажмите «Ротировать», чтобы получить URL и QR.",
 	"subTokens.issuedTitle": "URL подписки",

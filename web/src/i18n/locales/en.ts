@@ -761,6 +761,8 @@ export const en: Record<string, string> = {
 	"subTokens.urlExpired":
 		"Expired — the saved URL no longer authenticates. Rotate the token with a new expiry to issue a fresh link.",
 	"subTokens.urlDisabled": "Disabled — the saved URL does not authenticate.",
+	"subTokens.rotatedDisabled":
+		"Rotated, but the token is disabled — the new URL does not authenticate.",
 	"subTokens.urlUnavailable":
 		"This token was issued before links could be stored. Rotate it to get a URL and QR.",
 	"subTokens.issuedTitle": "Subscription URL",

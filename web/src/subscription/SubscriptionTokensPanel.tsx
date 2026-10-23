@@ -229,7 +229,7 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 					 * copyable. */}
 					{issued.token?.enabled === false ? (
 						<p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-							{t("subTokens.urlDisabled")}
+							{t("subTokens.rotatedDisabled")}
 						</p>
 					) : issued.url ? (
 						<>

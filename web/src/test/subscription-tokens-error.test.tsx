@@ -312,7 +312,7 @@ describe("SubscriptionTokensPanel errors", () => {
 		await waitFor(() => expect(rotates).toHaveLength(1));
 		const panel = await screen.findByTestId("issued-subscription-token");
 		expect(
-			within(panel).getByText(/does not authenticate/i),
+			within(panel).getByText(/rotated, but the token is disabled/i),
 		).toBeInTheDocument();
 		expect(
 			within(panel).queryByRole("button", { name: /copy url/i }),
