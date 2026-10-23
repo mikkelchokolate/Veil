@@ -3501,11 +3501,13 @@ type PostApiV1ClientsParams struct {
 
 // PostApiV1ClientsBulkJSONBody defines parameters for PostApiV1ClientsBulk.
 type PostApiV1ClientsBulkJSONBody struct {
-	Action     PostApiV1ClientsBulkJSONBodyAction `json:"action"`
-	ClientIds  []string                           `json:"clientIds"`
-	Days       *int                               `json:"days,omitempty"`
-	InboundId  *string                            `json:"inboundId,omitempty"`
-	QuotaBytes *int64                             `json:"quotaBytes,omitempty"`
+	Action PostApiV1ClientsBulkJSONBodyAction `json:"action"`
+
+	// ClientIds At most 500 client ids (one full client list page) per request; more is rejected with 400 before anything is applied.
+	ClientIds  []string `json:"clientIds"`
+	Days       *int     `json:"days,omitempty"`
+	InboundId  *string  `json:"inboundId,omitempty"`
+	QuotaBytes *int64   `json:"quotaBytes,omitempty"`
 }
 
 // PostApiV1ClientsBulkParams defines parameters for PostApiV1ClientsBulk.
@@ -21648,6 +21650,8 @@ type PostApiV1ClientsBulkResponse struct {
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *ClientBulkResponse
+	// JSON400 the response for an HTTP 400 `application/json` response
+	JSON400 *BadRequest
 	// JSON409 the response for an HTTP 409 `application/json` response
 	JSON409 *Conflict
 	// JSON422 the response for an HTTP 422 `application/json` response
@@ -21661,6 +21665,11 @@ type PostApiV1ClientsBulkResponse struct {
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
 func (r PostApiV1ClientsBulkResponse) GetJSON200() *ClientBulkResponse {
 	return r.JSON200
+}
+
+// GetJSON400 returns the response for an HTTP 400 `application/json` response
+func (r PostApiV1ClientsBulkResponse) GetJSON400() *BadRequest {
+	return r.JSON400
 }
 
 // GetJSON409 returns the response for an HTTP 409 `application/json` response
@@ -32124,6 +32133,13 @@ func ParsePostApiV1ClientsBulkResponse(rsp *http.Response) (*PostApiV1ClientsBul
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest BadRequest
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
 		var dest Conflict

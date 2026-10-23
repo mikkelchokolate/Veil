@@ -348,7 +348,7 @@ return apiFetch<ClientBulkResponse>(getPostApiV1ClientsBulkUrl(),
 
 export const getPostApiV1ClientsBulkMutationKey = () => ['postApiV1ClientsBulk'] as const;
 
-export const getPostApiV1ClientsBulkMutationOptions = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+export const getPostApiV1ClientsBulkMutationOptions = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,PostApiV1ClientsBulkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,PostApiV1ClientsBulkMutationVariables, TContext> => {
 
@@ -377,13 +377,13 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type PostApiV1ClientsBulkMutationResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsBulk>>>
     export type PostApiV1ClientsBulkMutationBody = PostApiV1ClientsBulkBody
-    export type PostApiV1ClientsBulkMutationError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+    export type PostApiV1ClientsBulkMutationError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
     export type PostApiV1ClientsBulkMutationVariables = {data: PostApiV1ClientsBulkBody}
 
     /**
  * @summary Bulk action across clients; per-client results
  */
-export const usePostApiV1ClientsBulk = <TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
+export const usePostApiV1ClientsBulk = <TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError,PostApiV1ClientsBulkMutationVariables, TContext>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof postApiV1ClientsBulk>>,

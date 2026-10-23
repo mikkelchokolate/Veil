@@ -261,6 +261,8 @@ export const PostApiV1ClientsBulkHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsBulkHeaderIdempotencyKeyMax).regex(postApiV1ClientsBulkHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
+export const postApiV1ClientsBulkBodyClientIdsMax = 500;
+
 export const postApiV1ClientsBulkBodyQuotaBytesMin = 0;
 export const postApiV1ClientsBulkBodyQuotaBytesMax = 9007199254740991;
 
@@ -268,7 +270,7 @@ export const postApiV1ClientsBulkBodyQuotaBytesMax = 9007199254740991;
 
 export const PostApiV1ClientsBulkBody = zod.object({
   "action": zod.enum(['enable', 'disable', 'delete', 'extend_expiry', 'set_quota', 'reset_traffic', 'attach_inbound', 'detach_inbound']),
-  "clientIds": zod.array(zod.string()),
+  "clientIds": zod.array(zod.string()).max(postApiV1ClientsBulkBodyClientIdsMax).describe('At most 500 client ids (one full client list page) per request; more is rejected with 400 before anything is applied.'),
   "days": zod.int().optional(),
   "quotaBytes": zod.int().min(postApiV1ClientsBulkBodyQuotaBytesMin).max(postApiV1ClientsBulkBodyQuotaBytesMax).optional(),
   "inboundId": zod.string().optional()

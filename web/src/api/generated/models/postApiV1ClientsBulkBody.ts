@@ -44,6 +44,10 @@ import type { PostApiV1ClientsBulkBodyAction } from './postApiV1ClientsBulkBodyA
 
 export type PostApiV1ClientsBulkBody = {
   action: PostApiV1ClientsBulkBodyAction;
+  /**
+     * At most 500 client ids (one full client list page) per request; more is rejected with 400 before anything is applied.
+     * @maxItems 500
+     */
   clientIds: string[];
   days?: number;
   /**
