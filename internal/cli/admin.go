@@ -221,6 +221,13 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				// route can address. Updating an EXISTING account is left
 				// unrestricted so a legacy name stays recoverable here.
 				if existingIndex < 0 {
+					if clearSecondFactors {
+						// --clear-2fa is lost-authenticator recovery for an
+						// account that exists. A mistyped --username must
+						// not mint a fresh account and look like success
+						// for the intended user (#1447).
+						return fmt.Errorf("%w: user %q does not exist", errClear2FANewUser, username)
+					}
 					if err := api.ValidatePanelUsername(username); err != nil {
 						return fmt.Errorf("refusing to create user %q: %w", username, err)
 					}
@@ -277,7 +284,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				managementstate.CompleteSetupForAdmins(snapshot, time.Now())
 				return nil
 			}); err != nil {
-				if errors.Is(err, api.ErrPanelUsernameInvalid) {
+				if errors.Is(err, api.ErrPanelUsernameInvalid) || errors.Is(err, errClear2FANewUser) {
 					// Nothing was saved: report the policy refusal as-is
 					// rather than as a "save state" failure.
 					return err
@@ -391,14 +398,18 @@ func generateRandomHex(n int) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
+// errClear2FANewUser refuses `admin set --clear-2fa` for a username that is
+// not in state; nothing is saved.
+var errClear2FANewUser = errors.New("--clear-2fa only applies to an existing user")
+
 // describeSecondFactors names the second factors armed on user for the
 // `admin set` report, or "" when there are none (#1447).
 func describeSecondFactors(user model.User) string {
 	var parts []string
-	switch {
-	case user.TOTPEnabled:
+	if user.TOTPEnabled {
 		parts = append(parts, "TOTP")
-	case user.TOTPPendingSecret != "":
+	}
+	if user.TOTPPendingSecret != "" {
 		parts = append(parts, "pending TOTP enrollment")
 	}
 	if n := len(user.TOTPRecoveryHashes); n > 0 {

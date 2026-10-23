@@ -67,7 +67,7 @@ func TestAdminSetPasswordChangeKeepsSecondFactors(t *testing.T) {
 		t.Fatalf("role/locale changed: %+v", after)
 	}
 	requireSecondFactorsKept(t, after, before)
-	if !strings.Contains(out, "Second factors: kept") {
+	if !strings.Contains(out, "Second factors: kept (TOTP, pending TOTP enrollment, 2 recovery code(s), 1 passkey(s)); pass --clear-2fa to remove them\n") {
 		t.Errorf("output does not say the second factors were kept:\n%s", out)
 	}
 }
@@ -111,8 +111,55 @@ func TestAdminSetClear2FARemovesFactorsButKeepsWatermark(t *testing.T) {
 	if after.TOTPLastStep != before.TOTPLastStep {
 		t.Errorf("--clear-2fa rewound the replay watermark: %d, want %d", after.TOTPLastStep, before.TOTPLastStep)
 	}
-	if !strings.Contains(out, "Second factors: cleared") {
+	if !strings.Contains(out, "Second factors: cleared (TOTP, pending TOTP enrollment, 2 recovery code(s), 1 passkey(s));") {
 		t.Errorf("output does not say the second factors were cleared:\n%s", out)
+	}
+}
+
+func TestAdminSetClear2FARefusesUnknownUser(t *testing.T) {
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	keyPath := filepath.Join(t.TempDir(), "state.key")
+	writeAdminState(t, statePath, keyPath, []model.User{enrolledAdmin("admin", "admin")})
+
+	_, err := runAdminSet(t, statePath, keyPath, "--username", "admni", "--clear-2fa")
+	if err == nil || !strings.Contains(err.Error(), "--clear-2fa only applies to an existing user") {
+		t.Fatalf("expected --clear-2fa refusal for an unknown user, got %v", err)
+	}
+	if strings.Contains(err.Error(), "save state") {
+		t.Errorf("refusal reported as a save failure: %v", err)
+	}
+	users := loadAdminUsers(t, statePath, keyPath)
+	if len(users) != 1 || users[0].PasswordHash != "old" || !users[0].TOTPEnabled {
+		t.Fatalf("state changed by a refused --clear-2fa: %+v", users)
+	}
+}
+
+func TestAdminSetExistingUserWithoutFactorsReport(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		extra []string
+		want  string
+	}{
+		{name: "no flag prints no factor line", want: ""},
+		{name: "clear-2fa reports none to clear", extra: []string{"--clear-2fa"}, want: "Second factors: none to clear\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			statePath := filepath.Join(t.TempDir(), "state.json")
+			keyPath := filepath.Join(t.TempDir(), "state.key")
+			writeAdminState(t, statePath, keyPath, []model.User{{Username: "admin", PasswordHash: "old", Role: "admin"}})
+
+			out, err := runAdminSet(t, statePath, keyPath, append([]string{"--username", "admin"}, tc.extra...)...)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.want == "" {
+				if strings.Contains(out, "Second factors:") {
+					t.Errorf("unexpected factor line:\n%s", out)
+				}
+			} else if !strings.Contains(out, tc.want) {
+				t.Errorf("output lacks %q:\n%s", tc.want, out)
+			}
+		})
 	}
 }
 
@@ -121,7 +168,7 @@ func TestAdminSetNewUserOutputHasNoSecondFactorLine(t *testing.T) {
 	keyPath := filepath.Join(t.TempDir(), "state.key")
 	writeAdminState(t, statePath, keyPath, []model.User{{Username: "admin", PasswordHash: "x", Role: "admin"}})
 
-	out, err := runAdminSet(t, statePath, keyPath, "--username", "newbie", "--role", "viewer", "--clear-2fa")
+	out, err := runAdminSet(t, statePath, keyPath, "--username", "newbie", "--role", "viewer")
 	if err != nil {
 		t.Fatal(err)
 	}

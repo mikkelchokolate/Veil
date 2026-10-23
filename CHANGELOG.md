@@ -15,7 +15,8 @@ All notable changes to Veil will be documented in this file.
   which factors were kept. The new `--clear-2fa` flag removes the TOTP
   factor, recovery codes and passkeys on purpose for lost-authenticator
   recovery, keeps the replay watermark like the admin 2FA reset API, and
-  reports what it cleared (#1447).
+  reports what it cleared. It refuses an unknown `--username` instead of creating
+  a new account (#1447).
 - The client-expiry reconciler no longer busy-loops when an already-due
   expiry can't be enforced yet. If an expiry apply had failed and was in retry
   backoff (up to 5 min), or enforcement was paused because runtime
