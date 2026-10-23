@@ -398,7 +398,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Same stable-semver test as docker-publish (#1148). install.sh,
+          # install-privileged.sh and veil/panel update all resolve
+          # /releases/latest, so a prerelease tag (v1.2.3-rc.1) must be
+          # published as a prerelease and never become the Latest release;
+          # gh's default (--latest automatic) would promote it (#1414).
+          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            channel=(--latest)
+          else
+            channel=(--prerelease --latest=false)
+          fi
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Veil ${GITHUB_REF_NAME}" \
-            --notes-file dist/release-notes.md
+            --notes-file dist/release-notes.md \
+            "${channel[@]}"

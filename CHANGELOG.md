@@ -6,6 +6,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The release workflow now publishes a prerelease tag (for example
+  `v1.2.3-rc.1`) as a GitHub prerelease with `--latest=false`, and a stable
+  `vX.Y.Z` tag with `--latest`, using the same stable-semver test as the
+  Docker `:latest` tag (#1148). Before, `gh release create` ran with no
+  prerelease handling, so an RC became the Latest release and was what
+  `releases/latest/download/install.sh`, `install.sh` without `--version`
+  and `veil update` / panel Update installed on stable hosts (#1414).
 - `POST /api/v1/users/me/totp/enroll` on an account that already has TOTP
   enabled now also requires `code`, a live and unused code from the current
   authenticator, which the call spends. Before, a session that had passed
