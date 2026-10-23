@@ -6,6 +6,16 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The client-expiry reconciler no longer busy-loops when an already-due
+  expiry can't be enforced yet. If an expiry apply had failed and was in retry
+  backoff (up to 5 min), or enforcement was paused because runtime
+  verification was unknown (for example after every backup restore), the next
+  boundary was the past `expires_at`, so the loop re-ran with no sleep. That
+  meant one core at 100% and about 11k `client expiry …` log lines per second
+  for as long as the block lasted. Now a client in retry backoff wakes the
+  loop at its retry time. While enforcement is paused, the loop logs once and
+  re-checks every 30 s, and restore convergence wakes it as soon as the pause
+  clears. A past boundary is floored at 1 s (#1423).
 - The weekly `upstream-compat` workflow now probes mita with
   `mita version`, the same subcommand the runtime catalog uses. Since #738
   it ran `mita -version || mita --version`, flags mita does not have, so the

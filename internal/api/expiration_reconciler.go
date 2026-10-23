@@ -18,6 +18,20 @@ import (
 
 const expirationSafetySweepInterval = 5 * time.Minute
 
+// expirationMinLoopWait floors the reconciler's sleep when the next boundary
+// is already in the past. ReconcileOnce has just walked every due client, so
+// a past boundary means the remaining work could not make progress this pass;
+// re-polling with no sleep spun a core and flooded the journal (#1423).
+const expirationMinLoopWait = time.Second
+
+// expirationPausedRetryInterval is how long the reconciler sleeps while
+// enforcement is paused (runtime verification unknown, e.g. after a backup
+// restore, or the client subsystem stopping). Clearing the pause signals the
+// reconciler, so this only bounds the re-check when no signal arrives (#1423).
+const expirationPausedRetryInterval = 30 * time.Second
+
+var errExpirationEnforcementPaused = errors.New("expiration enforcement paused while runtime verification is unknown")
+
 type expirationReconciler struct {
 	state  *managementState
 	cancel context.CancelFunc
@@ -34,20 +48,26 @@ func (r *expirationReconciler) Start() {
 	r.cancel = cancel
 	go func() {
 		defer close(r.done)
+		paused := false
 		for {
-			if err := r.ReconcileOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				log.Printf("client expiry reconciliation: %v", err)
-			}
 			wait := expirationSafetySweepInterval
-			if boundary, ok, err := r.nextBoundary(ctx); err != nil {
-				log.Printf("client expiry next boundary: %v", err)
-			} else if ok {
-				wait = time.Until(time.Unix(boundary, 0))
-				if wait < 0 {
-					wait = 0
+			if r.state.expirationEnforcementPaused() {
+				// Nothing can be enforced until the pause clears; polling the
+				// due set would only log the same refusal per client per pass.
+				if !paused {
+					log.Printf("client expiry reconciliation: %v", errExpirationEnforcementPaused)
 				}
-				if wait > expirationSafetySweepInterval {
-					wait = expirationSafetySweepInterval
+				paused = true
+				wait = expirationPausedRetryInterval
+			} else {
+				paused = false
+				if err := r.ReconcileOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
+					log.Printf("client expiry reconciliation: %v", err)
+				}
+				if boundary, ok, err := r.nextBoundary(ctx); err != nil {
+					log.Printf("client expiry next boundary: %v", err)
+				} else if ok {
+					wait = expirationLoopWait(time.Until(time.Unix(boundary, 0)))
 				}
 			}
 			timer := time.NewTimer(wait)
@@ -65,6 +85,25 @@ func (r *expirationReconciler) Start() {
 			}
 		}
 	}()
+}
+
+// expirationLoopWait clamps the time until the next boundary to
+// [expirationMinLoopWait, expirationSafetySweepInterval] once the boundary is
+// due, so blocked due work cannot turn the loop into a busy spin (#1423).
+func expirationLoopWait(untilBoundary time.Duration) time.Duration {
+	if untilBoundary <= 0 {
+		return expirationMinLoopWait
+	}
+	if untilBoundary > expirationSafetySweepInterval {
+		return expirationSafetySweepInterval
+	}
+	return untilBoundary
+}
+
+func (s *managementState) expirationEnforcementPaused() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.runtimeVerificationUnknown || s.clientSubsystemStopping
 }
 
 func (r *expirationReconciler) Signal() {
@@ -86,17 +125,23 @@ func (r *expirationReconciler) nextBoundary(ctx context.Context) (int64, bool, e
 		return 0, false, nil
 	}
 	var boundary sql.NullInt64
+	// A due client whose current target is a failed enforcement still in
+	// retry backoff is not work until next_retry_at, which the second branch
+	// already yields; counting its past expires_at as the boundary pinned the
+	// wait at zero for the whole backoff window (#1423).
+	now := time.Now().UTC().Unix()
 	err := db.QueryRowContext(ctx, `
 SELECT MIN(boundary) FROM (
   SELECT MIN(c.expires_at) AS boundary
   FROM clients c
   LEFT JOIN expiration_enforcement e ON e.client_id=c.id AND e.state<>'superseded'
   WHERE c.enabled=1 AND c.expires_at IS NOT NULL AND
-        (e.id IS NULL OR NOT (e.state='enforced' AND e.target_generation=c.version AND e.target_expires_at=c.expires_at))
+        (e.id IS NULL OR NOT (e.state='enforced' AND e.target_generation=c.version AND e.target_expires_at=c.expires_at)) AND
+        (e.id IS NULL OR NOT (e.state='failed' AND e.next_retry_at>? AND e.target_generation=c.version AND e.target_expires_at=c.expires_at))
   UNION ALL
   SELECT MIN(next_retry_at) AS boundary FROM expiration_enforcement
   WHERE state='failed' AND next_retry_at>0
-)`).Scan(&boundary)
+)`, now).Scan(&boundary)
 	if err != nil {
 		return 0, false, err
 	}
@@ -183,7 +228,7 @@ func (s *managementState) enforceExpiration(ctx context.Context, candidate expir
 	s.mu.Lock()
 	if s.runtimeVerificationUnknown || s.clientSubsystemStopping {
 		s.mu.Unlock()
-		return errors.New("expiration enforcement paused while runtime verification is unknown")
+		return errExpirationEnforcementPaused
 	}
 	runner := s.applyRunner
 	revision, done, err := s.reserveExpirationRevisionLocked(candidate, effectiveAt)

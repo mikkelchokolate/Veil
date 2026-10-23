@@ -1,0 +1,134 @@
+package api
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"log"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/client"
+)
+
+// Issue #1423: a due client whose enforcement failed and is in retry backoff
+// must not pin nextBoundary to its past expires_at; the boundary is the retry
+// time. A stale failed row for an older target must not hide the due client.
+func TestExpirationNextBoundarySkipsDueClientInRetryBackoff(t *testing.T) {
+	_, state := newApplyTrackedRouterWithState(t)
+	state.expirationReconciler.Stop()
+	now := time.Now().UTC().Unix()
+	due := now - 5
+	row, err := state.clientRepo.Create(client.Client{
+		Name: "due-backoff", Enabled: true, QuotaResetPolicy: client.ResetNever, ExpiresAt: &due,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256([]byte(fmt.Sprintf("client=%s;generation=%d;expires=%d;depleted=true", row.ID, row.Version, due)))
+	retryAt := now + 128
+	if _, err := state.db.Exec(`INSERT INTO expiration_enforcement(
+		client_id,target_generation,target_payload_hash,target_expires_at,state,
+		desired_revision,applied_revision,effective_at,next_retry_at,last_error,attempts,updated_at)
+		VALUES(?,?,?,?,'failed',1,0,?,?,'apply failed',1,?)`,
+		row.ID, row.Version, hex.EncodeToString(digest[:]), due, due, retryAt, now); err != nil {
+		t.Fatal(err)
+	}
+	boundary, ok, err := state.expirationReconciler.nextBoundary(context.Background())
+	if err != nil || !ok {
+		t.Fatalf("nextBoundary: ok=%v err=%v", ok, err)
+	}
+	if boundary != retryAt {
+		t.Fatalf("nextBoundary=%d, want the retry time %d (now=%d); a past boundary spins the loop for the whole backoff", boundary, retryAt, now)
+	}
+
+	// The failed row targets an older expiry: the client's current target is
+	// unenforced and due, so the boundary must be its expires_at again.
+	moved := now - 2
+	if _, err := state.db.Exec(`UPDATE clients SET expires_at=? WHERE id=?`, moved, row.ID); err != nil {
+		t.Fatal(err)
+	}
+	boundary, ok, err = state.expirationReconciler.nextBoundary(context.Background())
+	if err != nil || !ok {
+		t.Fatalf("nextBoundary stale failed row: ok=%v err=%v", ok, err)
+	}
+	if boundary != moved {
+		t.Fatalf("nextBoundary=%d, want the re-targeted due expiry %d", boundary, moved)
+	}
+}
+
+func TestExpirationLoopWaitFloorsPastBoundaries(t *testing.T) {
+	for _, tc := range []struct {
+		in, want time.Duration
+	}{
+		{-time.Hour, expirationMinLoopWait},
+		{0, expirationMinLoopWait},
+		{250 * time.Millisecond, 250 * time.Millisecond},
+		{time.Minute, time.Minute},
+		{time.Hour, expirationSafetySweepInterval},
+	} {
+		if got := expirationLoopWait(tc.in); got != tc.want {
+			t.Errorf("expirationLoopWait(%v)=%v, want %v", tc.in, got, tc.want)
+		}
+	}
+}
+
+// Issue #1423: while enforcement is paused (runtime verification unknown,
+// e.g. right after a restore) the reconciler must back off instead of
+// re-listing the due set with no sleep, and must resume promptly once the
+// pause clears and it is signalled.
+func TestExpirationReconcilerBacksOffWhileEnforcementPaused(t *testing.T) {
+	_, state := newApplyTrackedRouterWithState(t)
+	state.expirationReconciler.Stop()
+	due := time.Now().UTC().Unix() - 5
+	row, err := state.clientRepo.Create(client.Client{
+		Name: "due-paused", Enabled: true, QuotaResetPolicy: client.ResetNever, ExpiresAt: &due,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	state.mu.Lock()
+	state.runtimeVerificationUnknown = true
+	state.mu.Unlock()
+
+	logs := &lockedLogBuffer{}
+	previousWriter := log.Writer()
+	log.SetOutput(logs)
+	defer log.SetOutput(previousWriter)
+
+	reconciler := newExpirationReconciler(state)
+	state.mu.Lock()
+	state.expirationReconciler = reconciler
+	state.mu.Unlock()
+	reconciler.Start()
+	defer reconciler.Stop()
+	time.Sleep(500 * time.Millisecond)
+	if n := strings.Count(logs.String(), "client expiry"); n > 2 {
+		t.Fatalf("reconciler logged %d expiry lines in 500ms while paused; want a backoff, not a hot loop", n)
+	}
+	var rows int
+	if err := state.db.QueryRow(`SELECT COUNT(*) FROM expiration_enforcement WHERE client_id=?`, row.ID).Scan(&rows); err != nil {
+		t.Fatal(err)
+	}
+	if rows != 0 {
+		t.Fatalf("enforcement reserved %d rows while paused", rows)
+	}
+
+	state.mu.Lock()
+	state.runtimeVerificationUnknown = false
+	state.mu.Unlock()
+	reconciler.Signal()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := state.db.QueryRow(`SELECT COUNT(*) FROM expiration_enforcement WHERE client_id=?`, row.ID).Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		if rows > 0 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("reconciler did not resume enforcement after the pause cleared and it was signalled")
+}

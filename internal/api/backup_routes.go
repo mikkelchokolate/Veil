@@ -609,7 +609,12 @@ func (s *managementState) runPanelBackupRestore(id, name, ownerSessionToken, act
 		if convergenceErr == nil {
 			s.mu.Lock()
 			s.runtimeVerificationUnknown = false
+			reconciler := s.expirationReconciler
 			s.mu.Unlock()
+			// The reconciler backs off while enforcement is paused; wake it
+			// so expiries that came due during the restore are enforced now
+			// rather than after the paused retry interval (#1423).
+			reconciler.Signal()
 		}
 	}
 	helperErr := err
