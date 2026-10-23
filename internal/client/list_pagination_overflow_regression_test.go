@@ -23,11 +23,13 @@ func TestListHugePageDoesNotWrapToFirstPage(t *testing.T) {
 		name       string
 		page, size int
 	}{
-		// (MaxInt/2+2-1)*2 wraps to a negative int64 (math.MinInt64).
+		// Overflow arithmetic below is spelled out for 64-bit int; on 32-bit
+		// the same cases overflow too and the assertions are unchanged.
+		// 64-bit: (MaxInt/2+2-1)*2 = 2^63 wraps to math.MinInt64.
 		{"wraps-negative", math.MaxInt/2 + 2, 2},
-		// (MaxInt-1)*500 wraps to a small negative offset.
+		// (MaxInt-1)*500 overflows and wraps.
 		{"max-page", math.MaxInt, 500},
-		// On 64-bit (MaxInt/2+1)*4 = 2^64 wraps to exactly 0 — the first page.
+		// (MaxInt/2+1)*4 = 2^(bits) wraps to exactly 0 — the first page.
 		{"wraps-to-zero", math.MaxInt/2 + 2, 4},
 		// Plain past-the-end page with no overflow at all.
 		{"past-end", 3, 2},
