@@ -28,29 +28,34 @@ type ConfigurationValidator interface {
 }
 
 type ServerInfo struct {
-	Version                 string
-	Mode                    string
-	AuthToken               string
-	PublicListen            bool
-	MetricsAuthRequired     bool
-	StatePath               string
-	ApplyRoot               string
-	LiveRoot                string
-	SystemdWantsDir         string
-	KeyPath                 string
-	PanelListen             string
-	PanelAccess             string
-	Domain                  string
-	Email                   string
-	WebBasePath             string
-	SetupAllowed            bool
-	ConfigurationValidator  ConfigurationValidator
-	Privileged              privileged.Client
-	RequirePrivilegedHelper bool
-	UpdateStager            func(context.Context, bool) (string, error)
-	TrustedProxyCIDRs       []string
-	PasswordHasher          PasswordHasher
-	DatabaseOpener          func(string) (*sql.DB, error)
+	Version             string
+	Mode                string
+	AuthToken           string
+	PublicListen        bool
+	MetricsAuthRequired bool
+	// MetricsAuthWhenUsersConfigured implements the live half of
+	// --metrics-access auto: once any Panel user exists (or ever existed),
+	// /metrics requires a viewer session even if MetricsAuthRequired was
+	// resolved false at startup (#1433).
+	MetricsAuthWhenUsersConfigured bool
+	StatePath                      string
+	ApplyRoot                      string
+	LiveRoot                       string
+	SystemdWantsDir                string
+	KeyPath                        string
+	PanelListen                    string
+	PanelAccess                    string
+	Domain                         string
+	Email                          string
+	WebBasePath                    string
+	SetupAllowed                   bool
+	ConfigurationValidator         ConfigurationValidator
+	Privileged                     privileged.Client
+	RequirePrivilegedHelper        bool
+	UpdateStager                   func(context.Context, bool) (string, error)
+	TrustedProxyCIDRs              []string
+	PasswordHasher                 PasswordHasher
+	DatabaseOpener                 func(string) (*sql.DB, error)
 }
 
 func NewRouter(info ServerInfo) (http.Handler, Reloader) {

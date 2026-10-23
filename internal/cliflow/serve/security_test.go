@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
@@ -330,5 +331,103 @@ func TestServeSecurityEnvPathSources(t *testing.T) {
 	}
 	if cfg.WebBasePath != "/panel/" {
 		t.Fatalf("web base path = %q", cfg.WebBasePath)
+	}
+}
+
+// #1433: the auto metrics rule's sessionAuthConfigured term was only
+// evaluated for exposed Panels, so a loopback Panel with users reported
+// "Session auth: not configured" and served /metrics anonymously.
+func TestServeSecurityLoopbackAutoMetricsRequiresAuthWithSessionUsers(t *testing.T) {
+	t.Setenv("VEIL_PANEL_ACCESS", "local")
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := managementstate.NewStore(statePath, nil).Save(model.ManagementSnapshot{
+		Settings: model.Settings{PanelListen: "127.0.0.1:2096", Mode: "server"},
+		Users:    []model.User{{Username: "admin", PasswordHash: "hash", Role: "admin"}},
+	}); err != nil {
+		t.Fatalf("save state: %v", err)
+	}
+	cfg, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath}).Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.PublicListen || cfg.TokenSource != "disabled" {
+		t.Fatalf("expected loopback, token-less config: %+v", cfg)
+	}
+	if !cfg.SessionAuthConfigured {
+		t.Fatalf("SessionAuthConfigured = false on a loopback Panel with users")
+	}
+	if !cfg.MetricsAuthRequired {
+		t.Fatalf("MetricsAuthRequired = false under auto with session users configured")
+	}
+	if !cfg.MetricsAuthWhenUsersConfigured {
+		t.Fatalf("MetricsAuthWhenUsersConfigured = false under auto")
+	}
+}
+
+func TestServeSecurityLoopbackAutoMetricsPublicWithoutUsers(t *testing.T) {
+	t.Setenv("VEIL_PANEL_ACCESS", "local")
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	cfg, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath}).Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.SessionAuthConfigured || cfg.MetricsAuthRequired {
+		t.Fatalf("fresh loopback Panel: session=%v metricsAuth=%v, want both false", cfg.SessionAuthConfigured, cfg.MetricsAuthRequired)
+	}
+	if !cfg.MetricsAuthWhenUsersConfigured {
+		t.Fatalf("auto must still arm the live users-configured metrics check")
+	}
+	explicit, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath, MetricsAccess: "public"}).Resolve()
+	if err != nil {
+		t.Fatalf("Resolve public: %v", err)
+	}
+	if explicit.MetricsAuthWhenUsersConfigured {
+		t.Fatalf("explicit public must not arm the live users-configured metrics check")
+	}
+}
+
+// A loopback Panel must keep starting when the state file is unreadable: the
+// router reports the load failure itself (503 on /api), so the session-auth
+// probe is advisory there and only fatal for exposed Panels.
+func TestServeSecurityLoopbackToleratesUnreadableStateForSessionProbe(t *testing.T) {
+	t.Setenv("VEIL_PANEL_ACCESS", "local")
+	statePath := filepath.Join(t.TempDir(), "state.json")
+	if err := os.WriteFile(statePath, []byte("not valid json"), 0600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if _, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath}).Resolve(); err != nil {
+		t.Fatalf("loopback Resolve with unreadable state: %v", err)
+	}
+}
+
+// The provisioned latch (#1100) with zero users resolves auto to
+// authenticated up front, so the banner matches the router's live check.
+func TestServeSecurityLoopbackAutoMetricsAuthenticatedWhenProvisionedWithoutUsers(t *testing.T) {
+	t.Setenv("VEIL_PANEL_ACCESS", "local")
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	if err := os.WriteFile(filepath.Join(dir, "users-provisioned.marker"), []byte("1\n"), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	// Guard against a renamed marker constant silently bypassing the latch.
+	if !api.UsersProvisionedMarkerExists(statePath) {
+		t.Fatalf("test marker name no longer matches the api provisioned latch")
+	}
+	cfg, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath}).Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.SessionAuthConfigured {
+		t.Fatalf("SessionAuthConfigured must still reflect current users only")
+	}
+	if !cfg.MetricsAuthRequired {
+		t.Fatalf("MetricsAuthRequired = false under auto on a provisioned zero-user state")
+	}
+	explicit, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath, MetricsAccess: "public"}).Resolve()
+	if err != nil {
+		t.Fatalf("Resolve public: %v", err)
+	}
+	if explicit.MetricsAuthRequired {
+		t.Fatalf("explicit public must stay public on loopback")
 	}
 }

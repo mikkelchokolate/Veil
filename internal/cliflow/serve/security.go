@@ -3,6 +3,7 @@ package serve
 import (
 	"fmt"
 
+	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
@@ -33,29 +34,34 @@ type Config struct {
 	MetricsAccess         string
 	MetricsAccessSource   string
 	MetricsAuthRequired   bool
-	StatePath             string
-	StateSource           string
-	ApplyRoot             string
-	ApplyRootSource       string
-	LiveRoot              string
-	LiveRootSource        string
-	KeyPath               string
-	KeySource             string
-	HelperSocket          string
-	HelperSocketSource    string
-	PanelAccess           string
-	Domain                string
-	Email                 string
-	WebBasePath           string
-	TLSEnabled            bool
-	TLSSource             string
-	TLSCert               string
-	TLSKey                string
-	AutoTLSDomain         string
-	AutoTLSEmail          string
-	AutoTLSCacheDir       string
-	AllowUnsafePublicHTTP bool
-	SetupAllowed          bool
+	// MetricsAuthWhenUsersConfigured is set for --metrics-access auto: the
+	// router re-evaluates the "authenticate whenever auth is configured"
+	// term against the live user set, so a Panel user created by first-run
+	// setup after startup also protects /metrics (#1433).
+	MetricsAuthWhenUsersConfigured bool
+	StatePath                      string
+	StateSource                    string
+	ApplyRoot                      string
+	ApplyRootSource                string
+	LiveRoot                       string
+	LiveRootSource                 string
+	KeyPath                        string
+	KeySource                      string
+	HelperSocket                   string
+	HelperSocketSource             string
+	PanelAccess                    string
+	Domain                         string
+	Email                          string
+	WebBasePath                    string
+	TLSEnabled                     bool
+	TLSSource                      string
+	TLSCert                        string
+	TLSKey                         string
+	AutoTLSDomain                  string
+	AutoTLSEmail                   string
+	AutoTLSCacheDir                string
+	AllowUnsafePublicHTTP          bool
+	SetupAllowed                   bool
 }
 
 type Security struct {
@@ -85,18 +91,28 @@ func (s Security) Resolve() (Config, error) {
 	helperSocket, helperSocketSource := env.HelperSocket(opts.HelperSocket)
 	panelAccess := env.PanelAccess()
 	exposed := publicListen || panelAccess == "direct" || panelAccess == "caddy"
-	sessionAuthConfigured := false
-	if exposed {
-		var sessionErr error
-		sessionAuthConfigured, sessionErr = env.SessionAuthConfigured(statePath)
-		if sessionErr != nil {
+	// Probe session auth for every Panel, not only exposed ones: the auto
+	// metrics rule and the startup banner both depend on it (#1433). An
+	// unreadable state file stays fatal only for exposed Panels, where the
+	// exposure policy needs a definite answer; a loopback Panel keeps
+	// starting and the router reports the state load failure itself.
+	sessionAuthConfigured, sessionErr := env.SessionAuthConfigured(statePath)
+	if sessionErr != nil {
+		if exposed {
 			return Config{}, fmt.Errorf("session auth check: %w", sessionErr)
 		}
+		sessionAuthConfigured = false
 	}
 	metricsAccess, metricsAccessSource := env.MetricsAccess(opts.MetricsAccess)
 	metricsAuthRequired, err := env.MetricsAuthRequired(metricsAccess, exposed, tokenSource, sessionAuthConfigured)
 	if err != nil {
 		return Config{}, err
+	}
+	// A zero-user state on a provisioned instance (rollback/restore, #1100)
+	// fails closed in the router; resolve auto the same way up front so the
+	// banner and the static policy agree with the live check (#1433).
+	if metricsAccess == "auto" && !metricsAuthRequired && api.UsersProvisionedMarkerExists(statePath) {
+		metricsAuthRequired = true
 	}
 	webBasePath, _ := env.WebBasePath(opts.WebBasePath)
 	webBasePath, err = webbasepath.Normalize(webBasePath)
@@ -134,37 +150,38 @@ func (s Security) Resolve() (Config, error) {
 	}
 	setupAllowed := !exposed && (panelAccess == "" || panelAccess == "local")
 	return Config{
-		Listen:                listen,
-		ListenSource:          listenSource,
-		Token:                 token,
-		TokenSource:           tokenSource,
-		PublicListen:          publicListen,
-		SessionAuthConfigured: sessionAuthConfigured,
-		MetricsAccess:         metricsAccess,
-		MetricsAccessSource:   metricsAccessSource,
-		MetricsAuthRequired:   metricsAuthRequired,
-		StatePath:             statePath,
-		StateSource:           stateSource,
-		ApplyRoot:             applyRoot,
-		ApplyRootSource:       applyRootSource,
-		LiveRoot:              liveRoot,
-		LiveRootSource:        liveRootSource,
-		KeyPath:               keyPath,
-		KeySource:             keySource,
-		HelperSocket:          helperSocket,
-		HelperSocketSource:    helperSocketSource,
-		PanelAccess:           panelAccess,
-		Domain:                env.Domain(),
-		Email:                 env.Email(),
-		WebBasePath:           webBasePath,
-		TLSEnabled:            tlsEnabled,
-		TLSSource:             tlsSource,
-		TLSCert:               tlsCert,
-		TLSKey:                tlsKey,
-		AutoTLSDomain:         autoTLSConfig.Domain,
-		AutoTLSEmail:          autoTLSConfig.Email,
-		AutoTLSCacheDir:       autoTLSConfig.CacheDir,
-		AllowUnsafePublicHTTP: allowUnsafePublicHTTP,
-		SetupAllowed:          setupAllowed,
+		Listen:                         listen,
+		ListenSource:                   listenSource,
+		Token:                          token,
+		TokenSource:                    tokenSource,
+		PublicListen:                   publicListen,
+		SessionAuthConfigured:          sessionAuthConfigured,
+		MetricsAccess:                  metricsAccess,
+		MetricsAccessSource:            metricsAccessSource,
+		MetricsAuthRequired:            metricsAuthRequired,
+		MetricsAuthWhenUsersConfigured: metricsAccess == "auto",
+		StatePath:                      statePath,
+		StateSource:                    stateSource,
+		ApplyRoot:                      applyRoot,
+		ApplyRootSource:                applyRootSource,
+		LiveRoot:                       liveRoot,
+		LiveRootSource:                 liveRootSource,
+		KeyPath:                        keyPath,
+		KeySource:                      keySource,
+		HelperSocket:                   helperSocket,
+		HelperSocketSource:             helperSocketSource,
+		PanelAccess:                    panelAccess,
+		Domain:                         env.Domain(),
+		Email:                          env.Email(),
+		WebBasePath:                    webBasePath,
+		TLSEnabled:                     tlsEnabled,
+		TLSSource:                      tlsSource,
+		TLSCert:                        tlsCert,
+		TLSKey:                         tlsKey,
+		AutoTLSDomain:                  autoTLSConfig.Domain,
+		AutoTLSEmail:                   autoTLSConfig.Email,
+		AutoTLSCacheDir:                autoTLSConfig.CacheDir,
+		AllowUnsafePublicHTTP:          allowUnsafePublicHTTP,
+		SetupAllowed:                   setupAllowed,
 	}, nil
 }

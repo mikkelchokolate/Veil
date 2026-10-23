@@ -69,11 +69,12 @@ func (c RouterComposition) Build() (http.Handler, Reloader) {
 	rateLimited, limiter := newRateLimitMiddleware(metrics, trustedProxies, gated)
 	state.httpRateLimiter = limiter
 	authenticated := authMiddlewareWithOptions(state, authMiddlewareOptions{
-		Token:             info.AuthToken,
-		ProtectHealthz:    info.PublicListen,
-		ProtectMetrics:    info.MetricsAuthRequired || info.PublicListen,
-		AllowDevAnonymous: !info.PublicListen,
-		AllowSetup:        info.SetupAllowed,
+		Token:                             info.AuthToken,
+		ProtectHealthz:                    info.PublicListen,
+		ProtectMetrics:                    info.MetricsAuthRequired || info.PublicListen,
+		ProtectMetricsWhenUsersConfigured: info.MetricsAuthWhenUsersConfigured,
+		AllowDevAnonymous:                 !info.PublicListen,
+		AllowSetup:                        info.SetupAllowed,
 	}, rateLimited)
 	// Strip WebBasePath before auth. capabilityForEndpoint treats anything
 	// outside /api and /s as a public SPA route; classifying /<base>/api/*

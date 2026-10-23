@@ -19,22 +19,24 @@ type HTTPServerOptions struct {
 	AuthToken           string
 	PublicListen        bool
 	MetricsAuthRequired bool
-	StatePath           string
-	ApplyRoot           string
-	LiveRoot            string
-	KeyPath             string
-	HelperSocket        string
-	TLSEnabled          bool
-	TLSCert             string
-	TLSKey              string
-	AutoTLSDomain       string
-	AutoTLSEmail        string
-	AutoTLSCacheDir     string
-	PanelAccess         string
-	Domain              string
-	Email               string
-	WebBasePath         string
-	SetupAllowed        bool
+	// MetricsAuthWhenUsersConfigured arms the live auto-policy check (#1433).
+	MetricsAuthWhenUsersConfigured bool
+	StatePath                      string
+	ApplyRoot                      string
+	LiveRoot                       string
+	KeyPath                        string
+	HelperSocket                   string
+	TLSEnabled                     bool
+	TLSCert                        string
+	TLSKey                         string
+	AutoTLSDomain                  string
+	AutoTLSEmail                   string
+	AutoTLSCacheDir                string
+	PanelAccess                    string
+	Domain                         string
+	Email                          string
+	WebBasePath                    string
+	SetupAllowed                   bool
 }
 
 type HTTPServer struct {
@@ -64,26 +66,27 @@ func (s HTTPServer) Build() (*http.Server, api.Reloader) {
 		Units:    livevalidation.SystemdUnitInspector{},
 	}
 	handler, reloader := api.NewRouter(api.ServerInfo{
-		Version:                 opts.Version,
-		Mode:                    "server",
-		AuthToken:               opts.AuthToken,
-		PublicListen:            opts.PublicListen,
-		MetricsAuthRequired:     opts.MetricsAuthRequired,
-		StatePath:               opts.StatePath,
-		ApplyRoot:               opts.ApplyRoot,
-		LiveRoot:                opts.LiveRoot,
-		SystemdWantsDir:         api.DefaultSystemdWantsDir,
-		KeyPath:                 opts.KeyPath,
-		PanelListen:             opts.Listen,
-		PanelAccess:             opts.PanelAccess,
-		Domain:                  opts.Domain,
-		Email:                   opts.Email,
-		WebBasePath:             opts.WebBasePath,
-		SetupAllowed:            opts.SetupAllowed,
-		TrustedProxyCIDRs:       clientaddr.DefaultTrustedProxyCIDRs(opts.PanelAccess),
-		ConfigurationValidator:  validator,
-		Privileged:              privileged.NewSocketClient(helperSocket),
-		RequirePrivilegedHelper: true,
+		Version:                        opts.Version,
+		Mode:                           "server",
+		AuthToken:                      opts.AuthToken,
+		PublicListen:                   opts.PublicListen,
+		MetricsAuthRequired:            opts.MetricsAuthRequired,
+		MetricsAuthWhenUsersConfigured: opts.MetricsAuthWhenUsersConfigured,
+		StatePath:                      opts.StatePath,
+		ApplyRoot:                      opts.ApplyRoot,
+		LiveRoot:                       opts.LiveRoot,
+		SystemdWantsDir:                api.DefaultSystemdWantsDir,
+		KeyPath:                        opts.KeyPath,
+		PanelListen:                    opts.Listen,
+		PanelAccess:                    opts.PanelAccess,
+		Domain:                         opts.Domain,
+		Email:                          opts.Email,
+		WebBasePath:                    opts.WebBasePath,
+		SetupAllowed:                   opts.SetupAllowed,
+		TrustedProxyCIDRs:              clientaddr.DefaultTrustedProxyCIDRs(opts.PanelAccess),
+		ConfigurationValidator:         validator,
+		Privileged:                     privileged.NewSocketClient(helperSocket),
+		RequirePrivilegedHelper:        true,
 	})
 	srv := &http.Server{
 		Addr:              opts.Listen,
