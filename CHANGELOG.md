@@ -72,6 +72,21 @@ All notable changes to Veil will be documented in this file.
   Values are quoted, and a `VEIL_BACKUP_PASSPHRASE` value that is not an
   absolute path, or that contains blanks, is redacted.
 
+### Removed
+
+- #1273 item 2: the unused `generatedconfig.InboundRenderer`
+  (`NewInboundRenderer`, `RenderHysteria2Inbound`, `RenderOlcrtcInbound`) is
+  gone. Production renders hysteria2 and olcRTC through the protocol plugins.
+  The dead olcRTC path still made up a random key when the inbound had none,
+  which the plugin refuses because the server key would then differ from the
+  client export. Its hysteria2 path still rendered a revoked-sentinel account
+  for an inbound whose clients were all disabled, while the plugin drops that
+  inbound. One API test exercised that dead path and so passed for behaviour
+  production never had. It now renders through the real management renderer:
+  the hysteria2 inbound produces no config, and the naive Caddy config carries
+  only the install-secret-keyed sentinel. The olcRTC resolver/transport
+  regression test (#823) now runs against the plugin.
+
 ## [v0.7.3] - 2026-10-22
 
 Faster panel-first installation, recovery controls that work without the web
