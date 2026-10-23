@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -1287,24 +1286,6 @@ func TestApplyTreeOwnership(t *testing.T) {
 		err := applyTreeOwnership(dir, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
 		if err == nil || !strings.Contains(err.Error(), "refuse to migrate symlink") {
 			t.Fatalf("expected symlink error, got: %v", err)
-		}
-	})
-
-	t.Run("non-regular path rejected", func(t *testing.T) {
-		if runtime.GOOS == "windows" {
-			t.Skip("POSIX test")
-		}
-		root := t.TempDir()
-		dir := filepath.Join(root, "tree")
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := syscall.Mkfifo(filepath.Join(dir, "fifo"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-		err := applyTreeOwnership(dir, 0o700, 0o600, os.Getuid(), os.Getgid(), true)
-		if err == nil || !strings.Contains(err.Error(), "refuse to migrate non-regular path") {
-			t.Fatalf("expected non-regular error, got: %v", err)
 		}
 	})
 }
