@@ -6,6 +6,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The release workflow now publishes a prerelease tag (for example
+  `v1.2.3-rc.1`) as a GitHub prerelease with `--latest=false`, and a stable
+  `vX.Y.Z` tag with `--latest`, using the same stable-semver test as the
+  Docker `:latest` tag (#1148). Before, `gh release create` ran with no
+  prerelease handling, so an RC became the Latest release and was what
+  `releases/latest/download/install.sh`, `install.sh` without `--version`
+  and `veil update` / panel Update installed on stable hosts (#1414).
 - The weekly `upstream-compat` workflow now probes mita with
   `mita version`, the same subcommand the runtime catalog uses. Since #738
   it ran `mita -version || mita --version`, flags mita does not have, so the
