@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -759,18 +760,22 @@ func TestTOTPEnrollWrongPasswordIsThrottled(t *testing.T) {
 }
 
 // A session that already completed a second factor keeps the passwordless
-// (re-)enroll path, matching passkeyCredentialGate (#1250).
+// enroll path on an account with no active TOTP factor, matching
+// passkeyCredentialGate (#1250). Replacing an ACTIVE factor additionally needs
+// a live code from it (#1413), after which the old factor still stays live
+// until the new secret proves itself at confirm.
 func TestTOTPEnrollAllowsSecondFactorMarkedSessionWithoutPassword(t *testing.T) {
 	user := totpTestUser(t, "correct-password-123")
 	user.TOTPEnabled = true
 	user.TOTPSecret = "JBSWY3DPEHPK3PXP"
-	state, _ := totpTestState(t, user)
+	state, now := totpTestState(t, user)
 	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
 	if marked, err := state.sessionRegistry().MarkSecondFactorPersisted(session.Token); err != nil || !marked {
 		t.Fatalf("mark second factor: marked=%v err=%v", marked, err)
 	}
 
-	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	code := totpCode(t, "JBSWY3DPEHPK3PXP", *now)
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"code":"`+code+`"}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("marked-session enroll status=%d body=%s", rec.Code, rec.Body.String())
 	}
@@ -779,5 +784,194 @@ func TestTOTPEnrollAllowsSecondFactorMarkedSessionWithoutPassword(t *testing.T) 
 	}
 	if state.users[0].TOTPSecret != "JBSWY3DPEHPK3PXP" || !state.users[0].TOTPEnabled {
 		t.Fatal("re-enroll replaced the active factor before confirm")
+	}
+	if want := (*now).Unix() / totpPeriod; state.users[0].TOTPLastStep != want {
+		t.Fatalf("re-enroll did not spend the proving code: watermark=%d, want %d", state.users[0].TOTPLastStep, want)
+	}
+}
+
+// A marked session on an account without an active TOTP factor (for example
+// a passkey-only account) still enrolls with no password and no code:
+// adding a first TOTP factor replaces nothing (#1250 contract kept by #1413).
+func TestTOTPFirstEnrollOnMarkedSessionNeedsNoCode(t *testing.T) {
+	user := totpTestUser(t, "correct-password-123")
+	state, _ := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if marked, err := state.sessionRegistry().MarkSecondFactorPersisted(session.Token); err != nil || !marked {
+		t.Fatalf("mark second factor: marked=%v err=%v", marked, err)
+	}
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", "")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("first enroll status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	if state.users[0].TOTPPendingSecret == "" {
+		t.Fatal("first enroll stored no pending secret")
+	}
+}
+
+// A stolen second-factor-marked session (with or without the password) must
+// not be able to replace an active TOTP factor and its recovery codes: that is
+// a stronger action than disable, which already demands a live code (#1413).
+// Without a valid, unspent code from the current authenticator the enroll
+// mints no seed, so confirm has nothing to activate, the owner's factor,
+// recovery codes and sessions all survive.
+func TestTOTPReenrollOverActiveFactorRequiresCurrentCode(t *testing.T) {
+	const activeSecret = "JBSWY3DPEHPK3PXP"
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = activeSecret
+	user.TOTPRecoveryHashes = []string{hashRecoveryCode("AAAA-BBBB")}
+	state, now := totpTestState(t, user)
+	stolen := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(stolen.Token); err != nil {
+		t.Fatal(err)
+	}
+	owner := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(owner.Token); err != nil {
+		t.Fatal(err)
+	}
+
+	// The current step is spent already (e.g. by the owner's last login):
+	// replaying it is refused like a wrong code.
+	spent := totpCode(t, activeSecret, *now)
+	state.users[0].TOTPLastStep = (*now).Unix() / totpPeriod
+
+	for name, body := range map[string]string{
+		"no body":             "",
+		"password only":       `{"password":"correct-password-123"}`,
+		"blank code":          `{"code":"   "}`,
+		"recovery code":       `{"code":"AAAA-BBBB"}`,
+		"spent code replayed": `{"code":"` + spent + `"}`,
+	} {
+		rec := authedTOTPRequest(t, state, stolen, http.MethodPost, "/api/v1/users/me/totp/enroll", body)
+		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusTooManyRequests {
+			t.Fatalf("%s: enroll status=%d body=%s, want 400/429", name, rec.Code, rec.Body.String())
+		}
+		if strings.Contains(rec.Body.String(), "otpauth") || strings.Contains(rec.Body.String(), `"secret"`) {
+			t.Fatalf("%s: gated re-enroll leaked a seed: %s", name, rec.Body.String())
+		}
+		if state.users[0].TOTPPendingSecret != "" {
+			t.Fatalf("%s: gated re-enroll stored a pending secret", name)
+		}
+	}
+
+	// Confirm has no attacker-controlled pending secret to activate.
+	rec := authedTOTPRequest(t, state, stolen, http.MethodPost, "/api/v1/users/me/totp/confirm", `{"code":"123456"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("confirm without enrollment status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	got := state.users[0]
+	if !got.TOTPEnabled || got.TOTPSecret != activeSecret {
+		t.Fatalf("active factor replaced: %+v", got)
+	}
+	if _, ok := consumeRecoveryCodeHash(got.TOTPRecoveryHashes, "AAAA-BBBB"); !ok {
+		t.Fatal("owner's recovery code no longer valid")
+	}
+	if _, ok := state.sessionRegistry().Get(owner.Token); !ok {
+		t.Fatal("owner session revoked by a gated re-enroll attempt")
+	}
+}
+
+// Wrong codes at the re-enroll gate are throttled through the login backoff
+// family, so the enroll form is not a code oracle for the active factor
+// (#1413). Even a correct code is refused inside the backoff window.
+func TestTOTPReenrollWrongCodeIsThrottled(t *testing.T) {
+	const activeSecret = "JBSWY3DPEHPK3PXP"
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = activeSecret
+	state, now := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(session.Token); err != nil {
+		t.Fatal(err)
+	}
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"code":"000000"}`)
+	if rec.Code != http.StatusBadRequest || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("wrong code status=%d retry-after=%q body=%s", rec.Code, rec.Header().Get("Retry-After"), rec.Body.String())
+	}
+	rec = authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"code":"`+totpCode(t, activeSecret, *now)+`"}`)
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("enroll inside backoff status=%d body=%s, want 429", rec.Code, rec.Body.String())
+	}
+	if state.users[0].TOTPPendingSecret != "" {
+		t.Fatal("throttled re-enroll stored a pending secret")
+	}
+}
+
+// The owner who holds the current authenticator can still rotate it: a live
+// code at enroll, then a code from the new seed at confirm. The proving code
+// is spent, so it can neither complete a login nor disable the new factor.
+func TestTOTPReenrollWithCurrentCodeRotatesFactor(t *testing.T) {
+	const activeSecret = "JBSWY3DPEHPK3PXP"
+	user := totpTestUser(t, "correct-password-123")
+	user.TOTPEnabled = true
+	user.TOTPSecret = activeSecret
+	user.TOTPRecoveryHashes = []string{hashRecoveryCode("AAAA-BBBB")}
+	state, now := totpTestState(t, user)
+	session := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(session.Token); err != nil {
+		t.Fatal(err)
+	}
+
+	proof := totpCode(t, activeSecret, *now)
+	rec := authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"code":"`+proof+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("enroll status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	newSecret, _ := decodeBody(t, rec)["secret"].(string)
+	if newSecret == "" || newSecret == activeSecret {
+		t.Fatalf("enroll returned secret %q", newSecret)
+	}
+
+	// The same proving code cannot be reused for a second seed.
+	rec = authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/enroll", `{"code":"`+proof+`"}`)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("replayed proof status=%d body=%s, want 400", rec.Code, rec.Body.String())
+	}
+	if state.users[0].TOTPPendingSecret != newSecret {
+		t.Fatal("replayed proof replaced the pending secret")
+	}
+
+	*now = now.Add(totpPeriod * time.Second)
+	rec = authedTOTPRequest(t, state, session, http.MethodPost, "/api/v1/users/me/totp/confirm", `{"code":"`+totpCode(t, newSecret, *now)+`"}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("confirm status=%d body=%s", rec.Code, rec.Body.String())
+	}
+	got := state.users[0]
+	if !got.TOTPEnabled || got.TOTPSecret != newSecret || got.TOTPPendingSecret != "" {
+		t.Fatalf("rotation did not activate the new secret: %+v", got)
+	}
+	if _, ok := consumeRecoveryCodeHash(got.TOTPRecoveryHashes, "AAAA-BBBB"); ok {
+		t.Fatal("old recovery code survived rotation")
+	}
+}
+
+// The enroll proof is checked against a snapshot; if the active factor is
+// swapped, armed or disarmed before the mutation commits (a concurrent
+// confirm, disable or admin reset), or the proving code got spent, the stale
+// proof must not mint a seed against the new state (#1413).
+func TestCheckEnrollProofCurrent(t *testing.T) {
+	active := User{Username: "alice", TOTPEnabled: true, TOTPSecret: "JBSWY3DPEHPK3PXP", TOTPLastStep: 10}
+	factorless := User{Username: "alice"}
+	swapped := active
+	swapped.TOTPSecret = "KRSXG5CTMVRXEZLU"
+	spent := active
+	spent.TOTPLastStep = 11
+	for _, tc := range []struct {
+		name              string
+		snapshot, current User
+		step              int64
+		want              error
+	}{
+		{"first enroll unchanged", factorless, factorless, 0, nil},
+		{"re-enroll unchanged", active, active, 11, nil},
+		{"factor armed concurrently", factorless, active, 0, errTOTPFactorChanged},
+		{"factor disarmed concurrently", active, factorless, 11, errTOTPFactorChanged},
+		{"factor swapped concurrently", active, swapped, 11, errTOTPFactorChanged},
+		{"proving code spent concurrently", active, spent, 11, errTOTPCodeConsumed},
+	} {
+		if got := checkEnrollProofCurrent(tc.snapshot, tc.current, tc.step); !errors.Is(got, tc.want) || (tc.want == nil && got != nil) {
+			t.Errorf("%s: got %v, want %v", tc.name, got, tc.want)
+		}
 	}
 }

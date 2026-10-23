@@ -2877,6 +2877,9 @@ type TOTPDisableRequest struct {
 
 // TOTPEnrollRequest defines model for TOTPEnrollRequest.
 type TOTPEnrollRequest struct {
+	// Code Live code from the currently active authenticator. Required when TOTP is already enabled (re-enrollment replaces that factor).
+	Code *string `json:"code,omitempty"`
+
 	// Password Required when the session does not carry the second-factor mark.
 	Password *string `json:"password,omitempty"`
 }
@@ -5447,6 +5450,11 @@ type ClientInterface interface {
 	// Credential-grade gate (#1250): the session must already carry the
 	// second-factor mark, or the account password must be re-presented
 	// here. Wrong passwords share the login backoff family.
+	// When TOTP is already enabled, enrolling replaces the active factor
+	// and its recovery codes at confirm, so the request must also carry
+	// `code`: a live, unused code from the current authenticator (#1413).
+	// The code is spent by this call. Wrong codes share the login backoff
+	// family; recovery codes are not accepted here.
 	//
 	// Takes any type of body and a specified content type.
 	//
@@ -5462,6 +5470,11 @@ type ClientInterface interface {
 	// Credential-grade gate (#1250): the session must already carry the
 	// second-factor mark, or the account password must be re-presented
 	// here. Wrong passwords share the login backoff family.
+	// When TOTP is already enabled, enrolling replaces the active factor
+	// and its recovery codes at confirm, so the request must also carry
+	// `code`: a live, unused code from the current authenticator (#1413).
+	// The code is spent by this call. Wrong codes share the login backoff
+	// family; recovery codes are not accepted here.
 	//
 	// Takes a body of the `application/json` content type.
 	//
@@ -8332,6 +8345,11 @@ func (c *Client) PostApiV1UsersMeTotpConfirm(ctx context.Context, params *PostAp
 // Credential-grade gate (#1250): the session must already carry the
 // second-factor mark, or the account password must be re-presented
 // here. Wrong passwords share the login backoff family.
+// When TOTP is already enabled, enrolling replaces the active factor
+// and its recovery codes at confirm, so the request must also carry
+// `code`: a live, unused code from the current authenticator (#1413).
+// The code is spent by this call. Wrong codes share the login backoff
+// family; recovery codes are not accepted here.
 //
 // Takes any type of body and a specified content type.
 //
@@ -8357,6 +8375,11 @@ func (c *Client) PostApiV1UsersMeTotpEnrollWithBody(ctx context.Context, params 
 // Credential-grade gate (#1250): the session must already carry the
 // second-factor mark, or the account password must be re-presented
 // here. Wrong passwords share the login backoff family.
+// When TOTP is already enabled, enrolling replaces the active factor
+// and its recovery codes at confirm, so the request must also carry
+// `code`: a live, unused code from the current authenticator (#1413).
+// The code is spent by this call. Wrong codes share the login backoff
+// family; recovery codes are not accepted here.
 //
 // Takes a body of the `application/json` content type.
 //
@@ -15792,6 +15815,11 @@ type ClientWithResponsesInterface interface {
 	// Credential-grade gate (#1250): the session must already carry the
 	// second-factor mark, or the account password must be re-presented
 	// here. Wrong passwords share the login backoff family.
+	// When TOTP is already enabled, enrolling replaces the active factor
+	// and its recovery codes at confirm, so the request must also carry
+	// `code`: a live, unused code from the current authenticator (#1413).
+	// The code is spent by this call. Wrong codes share the login backoff
+	// family; recovery codes are not accepted here.
 	//
 	// Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -15807,6 +15835,11 @@ type ClientWithResponsesInterface interface {
 	// Credential-grade gate (#1250): the session must already carry the
 	// second-factor mark, or the account password must be re-presented
 	// here. Wrong passwords share the login backoff family.
+	// When TOTP is already enabled, enrolling replaces the active factor
+	// and its recovery codes at confirm, so the request must also carry
+	// `code`: a live, unused code from the current authenticator (#1413).
+	// The code is spent by this call. Wrong codes share the login backoff
+	// family; recovery codes are not accepted here.
 	//
 	// Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 	//
@@ -27254,6 +27287,11 @@ func (c *ClientWithResponses) PostApiV1UsersMeTotpConfirmWithResponse(ctx contex
 // Credential-grade gate (#1250): the session must already carry the
 // second-factor mark, or the account password must be re-presented
 // here. Wrong passwords share the login backoff family.
+// When TOTP is already enabled, enrolling replaces the active factor
+// and its recovery codes at confirm, so the request must also carry
+// `code`: a live, unused code from the current authenticator (#1413).
+// The code is spent by this call. Wrong codes share the login backoff
+// family; recovery codes are not accepted here.
 //
 // Takes any type of body and a specified content type, and returns a wrapper object for the known response body format(s).
 //
@@ -27275,6 +27313,11 @@ func (c *ClientWithResponses) PostApiV1UsersMeTotpEnrollWithBodyWithResponse(ctx
 // Credential-grade gate (#1250): the session must already carry the
 // second-factor mark, or the account password must be re-presented
 // here. Wrong passwords share the login backoff family.
+// When TOTP is already enabled, enrolling replaces the active factor
+// and its recovery codes at confirm, so the request must also carry
+// `code`: a live, unused code from the current authenticator (#1413).
+// The code is spent by this call. Wrong codes share the login backoff
+// family; recovery codes are not accepted here.
 //
 // Takes a body of the `application/json` content type, and returns a wrapper object for the known response body format(s).
 //
