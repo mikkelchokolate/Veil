@@ -224,16 +224,29 @@ export function SubscriptionTokensPanel({ clientId }: { clientId: string }) {
 
 			{issued?.url || issued?.plaintext ? (
 				<div className="form-stack" data-testid="issued-subscription-token">
-					<p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
-						{t("subTokens.oneTime")}
-					</p>
-					{issued.url ? (
-						<TokenLink
-							url={issued.url}
-							copied={copied === absoluteSubURL(issued.url)}
-							onCopy={(text) => void copy(text)}
-						/>
-					) : null}
+					{/* #1272: rotation keeps a disabled token disabled, so its fresh
+					 * URL does not authenticate either (#725) — never offer it as
+					 * copyable. */}
+					{issued.token?.enabled === false ? (
+						<p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+							{t("subTokens.urlDisabled")}
+						</p>
+					) : issued.url ? (
+						<>
+							<p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+								{t("subTokens.oneTime")}
+							</p>
+							<TokenLink
+								url={issued.url}
+								copied={copied === absoluteSubURL(issued.url)}
+								onCopy={(text) => void copy(text)}
+							/>
+						</>
+					) : (
+						<p className="muted" style={{ fontSize: 13, marginTop: 0 }}>
+							{t("subTokens.oneTime")}
+						</p>
+					)}
 				</div>
 			) : null}
 

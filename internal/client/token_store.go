@@ -818,9 +818,11 @@ func (s *TokenStore) Reveal(id string) (string, error) {
 // the desired-revision bump and the immutable snapshot.
 
 // issueTokenTx creates a token row inside the transaction, returning plaintext
-// once. createdBy and enabled are carried from the row being replaced. The row has no sealed issuance binding yet and does not authenticate
-// until TokenStore seals it (RotateWithExpiry does so in the same
-// transaction, #1281). Unexported so no caller can hand out an unsealed row.
+// once. createdBy and enabled are stored as given (rotation passes the
+// replaced row's values). The row has no sealed issuance binding yet and does
+// not authenticate until TokenStore seals it (RotateWithExpiry does so in the
+// same transaction, #1281). Unexported so no caller can hand out an unsealed
+// row.
 func (t *Tx) issueTokenTx(clientID, label, createdBy string, enabled bool, expiresAt *int64) (IssuedToken, error) {
 	if err := validateTokenMetadata(label, expiresAt); err != nil {
 		return IssuedToken{}, err
