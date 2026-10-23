@@ -101,8 +101,8 @@ func TestInstallCertRejectionPreservesExistingACMEEnrollment(t *testing.T) {
 }
 
 // requireInstallCertRejection fails unless issuance failed in the
-// post-installcert rejection branch, so a test cannot pass vacuously by
-// failing at an earlier precondition.
+// post-installcert rejection branch (installcert exited 0), so a test cannot
+// pass vacuously by failing at an earlier precondition or at the exec.
 func requireInstallCertRejection(t *testing.T, err error) {
 	t.Helper()
 	if err == nil {
@@ -110,6 +110,12 @@ func requireInstallCertRejection(t *testing.T, err error) {
 	}
 	if !strings.HasPrefix(err.Error(), "install certificate:") {
 		t.Fatalf("issuance failed outside the installcert rejection branch: %v", err)
+	}
+	// The installcert exec-failure path shares the prefix but appends the
+	// command output; requiring its absence pins "exit 0, material rejected"
+	// so a drifted fake installcert key cannot pass via installErr.
+	if strings.Contains(err.Error(), "(output:") {
+		t.Fatalf("installcert exec failed instead of exiting 0 with rejected material: %v", err)
 	}
 }
 
