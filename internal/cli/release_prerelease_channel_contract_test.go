@@ -88,51 +88,152 @@ func TestReleasePublishKeepsPrereleasesOffLatest(t *testing.T) {
 		{"v1.2.3+build.5", []string{"--prerelease", "--latest=false"}, []string{"--latest\n"}},
 	} {
 		t.Run(tc.tag, func(t *testing.T) {
-			dir := t.TempDir()
-			bin := filepath.Join(dir, "bin")
-			if err := os.MkdirAll(filepath.Join(dir, "dist"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.MkdirAll(bin, 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(dir, "dist", "release-notes.md"), []byte("notes\n"), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			argsFile := filepath.Join(dir, "gh-args")
-			fakeGH := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > \"" + argsFile + "\"\n"
-			if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(fakeGH), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			cmd := exec.Command(bash, "-e", "-c", publish)
-			cmd.Dir = dir
-			cmd.Env = append(os.Environ(),
-				"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
-				"GITHUB_REF_NAME="+tc.tag,
-				"GITHUB_REPOSITORY=mikkelchokolate/Veil",
-			)
-			if out, err := cmd.CombinedOutput(); err != nil {
+			args, out, err := runPublishStep(t, bash, publish, tc.tag, "", false)
+			if err != nil {
 				t.Fatalf("publish step failed: %v\n%s", err, out)
 			}
-			raw, err := os.ReadFile(argsFile)
-			if err != nil {
-				t.Fatalf("gh was not invoked: %v", err)
-			}
-			args := string(raw)
-			if !strings.HasPrefix(args, "release\ncreate\n"+tc.tag+"\n") {
-				t.Fatalf("unexpected gh invocation:\n%s", args)
-			}
-			lines := "\n" + args
-			for _, want := range tc.want {
-				if !strings.Contains(lines, "\n"+want+"\n") {
-					t.Fatalf("gh args for %s missing %q:\n%s", tc.tag, want, args)
-				}
-			}
-			for _, absent := range tc.wantAbsent {
-				if strings.Contains(lines, "\n"+absent) {
-					t.Fatalf("gh args for %s must not contain %q:\n%s", tc.tag, strings.TrimSpace(absent), args)
-				}
-			}
+			assertPublishArgs(t, tc.tag, args, tc.want, tc.wantAbsent)
 		})
+	}
+}
+
+// Follow-up to the #1422 review: a stable tag is only promoted to Latest when
+// it is not older than the release that is Latest right now. A backport cut
+// after a newer stable line (v0.7.4 after v0.8.0) used to get an explicit
+// --latest and repoint /releases/latest — and so install.sh and veil/panel
+// update — at the older line. The publish step must compare against the
+// current Latest with version ordering (not string ordering) and fall back to
+// --latest=false, and must fail closed (publish nothing) when it cannot learn
+// the current Latest.
+func TestReleasePublishNeverDemotesLatestToABackport(t *testing.T) {
+	publish := loadPublishStep(t)
+	if runtime.GOOS == "windows" {
+		t.Skip("executing the publish step needs bash")
+	}
+	bash, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skipf("bash not found: %v", err)
+	}
+	promote := []string{"--latest"}
+	keep := []string{"--latest=false"}
+	for _, tc := range []struct {
+		name, tag, latest string
+		want              []string
+		wantAbsent        []string
+	}{
+		{"first stable release", "v0.1.0", "", promote, []string{"--latest=false", "--prerelease"}},
+		{"newer patch", "v0.7.4", "v0.7.3", promote, []string{"--latest=false", "--prerelease"}},
+		{"newer minor", "v0.8.0", "v0.7.3", promote, []string{"--latest=false", "--prerelease"}},
+		{"numeric not lexical ordering", "v0.10.0", "v0.9.9", promote, []string{"--latest=false", "--prerelease"}},
+		{"backport patch after newer minor", "v0.7.4", "v0.8.0", keep, []string{"--latest\n", "--prerelease"}},
+		{"backport lexically larger", "v0.9.9", "v0.10.0", keep, []string{"--latest\n", "--prerelease"}},
+		{"backport after newer major", "v1.9.0", "v2.0.0", keep, []string{"--latest\n", "--prerelease"}},
+		// A Latest that is not stable semver (e.g. an RC promoted before
+		// #1414) is no ordering anchor: the stable tag reclaims Latest.
+		{"non-stable latest is ignored", "v0.8.0", "v0.9.0-rc.1", promote, []string{"--latest=false", "--prerelease"}},
+		{"prerelease stays off latest", "v0.9.0-rc.1", "v0.8.0", []string{"--prerelease", "--latest=false"}, []string{"--latest\n"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args, out, err := runPublishStep(t, bash, publish, tc.tag, tc.latest, false)
+			if err != nil {
+				t.Fatalf("publish step failed: %v\n%s", err, out)
+			}
+			assertPublishArgs(t, tc.tag, args, tc.want, tc.wantAbsent)
+		})
+	}
+
+	t.Run("latest lookup failure publishes nothing", func(t *testing.T) {
+		args, out, err := runPublishStep(t, bash, publish, "v0.8.1", "v0.8.0", true)
+		if err == nil {
+			t.Fatalf("publish step succeeded although the Latest lookup failed:\n%s", out)
+		}
+		if args != "" {
+			t.Fatalf("gh release create ran although the Latest lookup failed:\n%s", args)
+		}
+	})
+}
+
+func loadPublishStep(t *testing.T) string {
+	t.Helper()
+	body, err := os.ReadFile("../../.github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wf publishChannelWorkflow
+	if err := yaml.Unmarshal(body, &wf); err != nil {
+		t.Fatal(err)
+	}
+	return publishChannelStepRun(t, wf, "Publish GitHub release")
+}
+
+// runPublishStep executes the publish step under bash with a fake gh. The fake
+// answers `gh release list` with latest (as the tag that isLatest), or fails
+// it when listFails is set, and records the argv of `gh release create`.
+func runPublishStep(t *testing.T, bash, publish, tag, latest string, listFails bool) (createArgs string, out []byte, err error) {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(filepath.Join(dir, "dist"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "dist", "release-notes.md"), []byte("notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	argsFile := filepath.Join(dir, "gh-args")
+	fakeGH := `#!/bin/sh
+if [ "$1" = release ] && [ "$2" = list ]; then
+  if [ -n "$FAKE_GH_LIST_FAIL" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
+  if [ -n "$FAKE_GH_LATEST" ]; then printf '%s\n' "$FAKE_GH_LATEST"; fi
+  exit 0
+fi
+if [ "$1" = release ] && [ "$2" = create ]; then
+  for a in "$@"; do printf '%s\n' "$a"; done > "` + argsFile + `"
+  exit 0
+fi
+echo "unexpected gh call: $*" >&2
+exit 2
+`
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(fakeGH), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fail := ""
+	if listFails {
+		fail = "1"
+	}
+	cmd := exec.Command(bash, "-e", "-c", publish)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"GITHUB_REF_NAME="+tag,
+		"GITHUB_REPOSITORY=mikkelchokolate/Veil",
+		"FAKE_GH_LATEST="+latest,
+		"FAKE_GH_LIST_FAIL="+fail,
+	)
+	out, err = cmd.CombinedOutput()
+	raw, readErr := os.ReadFile(argsFile)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		t.Fatal(readErr)
+	}
+	return string(raw), out, err
+}
+
+func assertPublishArgs(t *testing.T, tag, args string, want, wantAbsent []string) {
+	t.Helper()
+	if !strings.HasPrefix(args, "release\ncreate\n"+tag+"\n") {
+		t.Fatalf("unexpected gh invocation:\n%s", args)
+	}
+	lines := "\n" + args
+	for _, w := range want {
+		if !strings.Contains(lines, "\n"+w+"\n") {
+			t.Fatalf("gh args for %s missing %q:\n%s", tag, w, args)
+		}
+	}
+	for _, absent := range wantAbsent {
+		if strings.Contains(lines, "\n"+absent) {
+			t.Fatalf("gh args for %s must not contain %q:\n%s", tag, strings.TrimSpace(absent), args)
+		}
 	}
 }
