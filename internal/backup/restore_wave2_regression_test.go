@@ -172,10 +172,6 @@ func TestRecoverCommittedTwoMemberJournalLeavesLiveDatabase(t *testing.T) {
 	}
 }
 
-// TestPreflightChargesDecryptedInspectionWorkspace covers #1119: an encrypted
-// archive's inspect workspace holds the decrypted tarball (≤maxBytes) AND the
-// extracted members (≤maxBytes aggregate) at once, so the archive directory
-// must be charged archiveSize + 2*maxBytes — not archiveSize + maxBytes.
 // TestRestorePublishWaitsForCrossProcessSnapshotBarrier covers #1123: the
 // capture→publish window (previous-digest capture through member replacement)
 // must hold .veil-snapshot.lock — the same flock backup create takes — so a

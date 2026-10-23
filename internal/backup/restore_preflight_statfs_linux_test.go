@@ -15,6 +15,10 @@ import (
 // reports "unsupported" and there is nothing to inject. Keeping them in a
 // _linux_test file lets the package's test binary compile for darwin/freebsd.
 
+// TestPreflightChargesDecryptedInspectionWorkspace covers #1119: an encrypted
+// archive's inspect workspace holds the decrypted tarball (≤maxBytes) AND the
+// extracted members (≤maxBytes aggregate) at once, so the archive directory
+// must be charged archiveSize + 2*maxBytes — not archiveSize + maxBytes.
 func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 	root := t.TempDir()
 	archive := filepath.Join(root, "backup.tar.gz.enc")
