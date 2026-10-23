@@ -211,6 +211,17 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 						break
 					}
 				}
+				// A NEW account must satisfy the same username policy as
+				// first-run setup and POST /api/users (#1266); otherwise the
+				// CLI could mint names like "me" (shadowed by the
+				// /api/v1/users/me/* self-service routes) or "a/b" that no API
+				// route can address. Updating an EXISTING account is left
+				// unrestricted so a legacy name stays recoverable here.
+				if existingIndex < 0 {
+					if err := api.ValidatePanelUsername(username); err != nil {
+						return fmt.Errorf("refusing to create user %q: %w", username, err)
+					}
+				}
 				role := targetRole
 				locale := ""
 				if existingIndex >= 0 {
@@ -238,6 +249,11 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				managementstate.CompleteSetupForAdmins(snapshot, time.Now())
 				return nil
 			}); err != nil {
+				if errors.Is(err, api.ErrPanelUsernameInvalid) {
+					// Nothing was saved: report the policy refusal as-is
+					// rather than as a "save state" failure.
+					return err
+				}
 				return fmt.Errorf("save state: %w", err)
 			}
 

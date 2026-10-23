@@ -6,6 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil admin set --username NAME` now applies the Panel username policy
+  (3-64 characters, at most 64 UTF-8 bytes, letters, digits, `.`, `_`, `-`)
+  when NAME would create a new account, the same policy first-run setup and
+  `POST /api/users` already enforce. The CLI could previously create users
+  such as `me`, which the `/api/v1/users/me/*` self-service routes shadow so an
+  admin could never reset its second factor over the API, as well as names
+  with `/`, spaces or newlines that no `/api/users/{username}` route can
+  address. Updating an existing account by its exact name still works, so a
+  legacy name stays recoverable from the CLI (#1266).
 - Root-helper backup reads (archive inspection, decrypt, metadata digests,
   `state.json` schema probes, restore staging) no longer hang if a file under
   the backups tree is swapped for a FIFO between the check and the open. The

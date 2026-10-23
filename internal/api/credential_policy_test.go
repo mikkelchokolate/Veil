@@ -150,3 +150,18 @@ func TestUserRouteGuardRejectsCredentialOutsidePolicy(t *testing.T) {
 		})
 	}
 }
+
+// ValidatePanelUsername is the exported gate the admin CLI uses for new
+// accounts (#1266); it must agree with validSetupUsername and carry the same
+// message the API returns.
+func TestValidatePanelUsernameMatchesSetupPolicy(t *testing.T) {
+	for _, name := range []string{"me", "ME", "ab", "a/b", "a b", "a\nb", strings.Repeat("a", 65), "admin", "абв", "ops.admin_1-x"} {
+		err := ValidatePanelUsername(name)
+		if (err == nil) != validSetupUsername(name) {
+			t.Fatalf("ValidatePanelUsername(%q) = %v, validSetupUsername = %v", name, err, validSetupUsername(name))
+		}
+		if err != nil && !errors.Is(err, ErrPanelUsernameInvalid) {
+			t.Fatalf("ValidatePanelUsername(%q) = %v, want ErrPanelUsernameInvalid", name, err)
+		}
+	}
+}
