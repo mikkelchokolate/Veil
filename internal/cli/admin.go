@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/api"
@@ -148,6 +149,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 	var customRole string
 	var customPasswordStdin bool
 	var customPasswordFile string
+	var clearSecondFactors bool
 
 	setCmd := &cobra.Command{
 		Use:   "set",
@@ -187,6 +189,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			}
 
 			username := customUsername
+			secondFactorReport := ""
 			if _, err := statecommit.Update(statecommit.UpdateOptions{
 				StatePath: resolvedState, KeyPath: resolvedKey, AllowCreate: true,
 			}, func(snapshot *model.ManagementSnapshot) error {
@@ -241,6 +244,31 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 					Locale:       locale,
 				}
 				if existingIndex >= 0 {
+					// Updating an existing account changes only the password
+					// (and the role when --role is passed). Every
+					// second-factor field and the TOTP replay watermark are
+					// carried over through the same helpers UpdateUser uses,
+					// so a password rotation never silently downgrades the
+					// account to password-only login (#1447).
+					existing := snapshot.Users[existingIndex]
+					updatedUser.PreserveTOTP(existing)
+					updatedUser.PreservePasskeys(existing)
+					factors := describeSecondFactors(existing)
+					if clearSecondFactors {
+						// Explicit lost-authenticator recovery: the same
+						// teardown as the admin 2FA reset API. ClearTOTP
+						// keeps TOTPLastStep, so replay protection is never
+						// rewound (#1220).
+						updatedUser.ClearTOTP()
+						updatedUser.ClearPasskeys()
+						if factors == "" {
+							secondFactorReport = "none to clear"
+						} else {
+							secondFactorReport = "cleared (" + factors + "); the user signs in with the password alone until they enroll again"
+						}
+					} else if factors != "" {
+						secondFactorReport = "kept (" + factors + "); pass --clear-2fa to remove them"
+					}
 					snapshot.Users[existingIndex] = updatedUser
 				} else {
 					snapshot.Users = append(snapshot.Users, updatedUser)
@@ -264,6 +292,9 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			fmt.Fprintf(cmd.OutOrStdout(), "User credentials successfully set.\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "Username: %s\n", username)
 			fmt.Fprintf(cmd.OutOrStdout(), "Role: %s\n", targetRole)
+			if secondFactorReport != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "Second factors: %s\n", secondFactorReport)
+			}
 			return nil
 		},
 	}
@@ -273,6 +304,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 	setCmd.Flags().BoolVar(&customPasswordStdin, "password-stdin", false, "read the password from standard input (one line)")
 	setCmd.Flags().StringVar(&customPasswordFile, "password-file", "", "read the password from a regular file (one line; symlinks are refused)")
 	setCmd.Flags().StringVar(&customRole, "role", "admin", "role of the user (admin or viewer)")
+	setCmd.Flags().BoolVar(&clearSecondFactors, "clear-2fa", false, "also remove the existing user's TOTP factor, recovery codes and passkeys (lost-authenticator recovery); without it they are kept")
 
 	showCmd := &cobra.Command{
 		Use:   "show",
@@ -357,4 +389,23 @@ func generateRandomHex(n int) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+// describeSecondFactors names the second factors armed on user for the
+// `admin set` report, or "" when there are none (#1447).
+func describeSecondFactors(user model.User) string {
+	var parts []string
+	switch {
+	case user.TOTPEnabled:
+		parts = append(parts, "TOTP")
+	case user.TOTPPendingSecret != "":
+		parts = append(parts, "pending TOTP enrollment")
+	}
+	if n := len(user.TOTPRecoveryHashes); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d recovery code(s)", n))
+	}
+	if n := len(user.Passkeys); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d passkey(s)", n))
+	}
+	return strings.Join(parts, ", ")
 }

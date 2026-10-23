@@ -125,7 +125,7 @@ web Panel is unavailable. Changes require confirmation in the menu.
 | `veil status` | Show managed service status (`--json` for machine output). |
 | `veil doctor` | Run host readiness checks (required/optional commands, protocol DNS reachability). |
 | `veil admin reset` | Reset the administrator with new random credentials. |
-| `veil admin set` | Set or update a user (`--username`, `--role admin\|viewer`; password via interactive prompt, `--password-stdin` or `--password-file`; legacy `--password` is visible in the process list). |
+| `veil admin set` | Set or update a user (`--username`, `--role admin\|viewer`; password via interactive prompt, `--password-stdin` or `--password-file`; legacy `--password` is visible in the process list). An existing user keeps their TOTP factor, recovery codes and passkeys; add `--clear-2fa` to remove them when the authenticator is lost. |
 | `veil admin show` | List registered users and roles. |
 | `veil admin rotate-key` | Rotate the AES state key and re-encrypt state. |
 | `veil config validate` | Validate a Management state file without starting a server. |
