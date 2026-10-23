@@ -1,12 +1,16 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
+	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/client"
-	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -211,24 +215,51 @@ func TestClientBindingsFallbackReturnsOnlyAfterAllBindingsRemoved(t *testing.T) 
 // sentinel must still be unguessable — keyed by the per-install derivation
 // secret the state layer injects, not publicly computable from the inbound
 // name alone.
+//
+// The sentinel is only rendered for naiveproxy: an empty forward_proxy
+// auth_credentials list would be an open relay, so the Caddy config carries
+// one account that can never authenticate. The production hysteria2 plugin
+// drops the inbound instead (no artifact, the instance is stopped). This test
+// used to render hysteria2 through the dead generatedconfig.InboundRenderer,
+// which still emitted a sentinel, so it passed against a code path that no
+// production caller used (#1273 item 2). It now drives the real management
+// renderer for both protocols.
 func TestRevokedSentinelKeyedByInstallSecret(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake caddy probe binary is a POSIX shell script")
+	}
+	// The naive renderer probes `caddy list-modules` for forward_proxy; a fake
+	// binary on PATH keeps the test hermetic on hosts with and without caddy.
+	fakeBin := t.TempDir()
+	fakeCaddy := filepath.Join(fakeBin, "caddy")
+	if err := os.WriteFile(fakeCaddy, []byte("#!/bin/sh\nprintf '%s' '[{\"module_name\":\"http\"},{\"module_name\":\"http.handlers.forward_proxy\"}]'\n"), 0o755); err != nil {
+		t.Fatalf("write fake caddy: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
 	s, svc := newBindingTestState(t)
 	// Strip all credential material so only the injected secret can key the
 	// sentinel — the exact hole CodeQL/#1098 flagged.
 	s.inbounds[0].Password = ""
+	s.inbounds = append(s.inbounds, Inbound{
+		Name: "naive", Protocol: "naiveproxy", Transport: "tcp", Port: 443,
+		Enabled: true,
+	})
 	view, err := svc.Create(client.Client{Name: "alice", Enabled: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := svc.AddBinding(view.ID, "hy2")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.SetCredential(b.ID, "password", "client-pass"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := svc.SetBindingEnabled(b.ID, false, b.Version); err != nil {
-		t.Fatal(err)
+	for _, inbound := range []string{"hy2", "naive"} {
+		b, err := svc.AddBinding(view.ID, inbound)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.SetCredential(b.ID, "password", "client-pass"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := svc.SetBindingEnabled(b.ID, false, b.Version); err != nil {
+			t.Fatal(err)
+		}
 	}
 	// SnapshotLocked back-fills live settings with the derived per-install
 	// secret, matching what Store.decryptSnapshot injects on every load.
@@ -240,28 +271,86 @@ func TestRevokedSentinelKeyedByInstallSecret(t *testing.T) {
 	if secret == "" {
 		t.Fatal("snapshot settings did not carry the credential derivation secret")
 	}
-	inbounds, err := s.inboundsWithRuntimeCredentialsLocked()
+	s.settings = snap.Settings
+	s.settings.DefaultAcmeEmail = "ops@x.example" // the naive Caddy site needs an ACME email
+	configs, err := s.renderManagementConfigsLocked()
 	if err != nil {
-		t.Fatalf("resolve runtime credentials: %v", err)
+		t.Fatalf("render management configs: %v", err)
 	}
-	body, err := generatedconfig.NewInboundRenderer(
-		snap.Settings,
-		generatedconfig.NewPathsWithLiveRoot(s.applyRoot, s.liveRoot),
-		s.warp,
-	).RenderHysteria2(inbounds[0])
-	if err != nil {
-		t.Fatalf("render hy2: %v", err)
-	}
-	_, wantPass := model.RevokedClientCredential(
+	wantUser, wantPass := model.RevokedClientCredential(
 		model.Settings{CredentialDerivationSecret: secret},
-		model.Inbound{Name: "hy2"},
+		model.Inbound{Name: "naive"},
 	)
-	if !strings.Contains(body, "veil-revoked-hy2") {
-		t.Fatalf("rendered config missing the revoked sentinel account:\n%s", body)
+	// The sentinel must actually depend on the install secret: a different
+	// secret must derive a different password.
+	if _, otherPass := model.RevokedClientCredential(
+		model.Settings{CredentialDerivationSecret: secret + "-other"},
+		model.Inbound{Name: "naive"},
+	); otherPass == wantPass {
+		t.Fatal("sentinel password does not depend on the install secret")
 	}
-	if !strings.Contains(body, wantPass) {
-		t.Fatalf("sentinel password not keyed by the install secret:\n%s", body)
+	var caddyBody string
+	for name, body := range configs {
+		if strings.Contains(name, "hysteria2") {
+			t.Fatalf("revoked hysteria2 inbound still rendered %s:\n%s", name, body)
+		}
+		if strings.HasSuffix(name, "caddy/config.json") {
+			caddyBody = body
+		}
 	}
+	if caddyBody == "" {
+		t.Fatalf("no consolidated Caddy config rendered; rendered: %v", configKeys(configs))
+	}
+	// The naive listener must authenticate exactly the sentinel: the disabled
+	// client's credential must be gone and the list must not be empty (an
+	// empty auth_credentials list is an open relay).
+	var doc any
+	if err := json.Unmarshal([]byte(caddyBody), &doc); err != nil {
+		t.Fatalf("parse Caddy JSON: %v", err)
+	}
+	lists := collectAuthCredentials(doc)
+	if len(lists) != 1 {
+		t.Fatalf("auth_credentials lists = %v, want exactly one (the naive listener):\n%s", lists, caddyBody)
+	}
+	want := []string{forwardProxyJSONCredential(wantUser, wantPass)}
+	if !reflect.DeepEqual(lists[0], want) {
+		t.Fatalf("naive auth_credentials = %v, want only the install-secret-keyed sentinel %s %v", lists[0], wantUser, want)
+	}
+}
+
+// collectAuthCredentials returns every forward_proxy auth_credentials list in
+// a decoded Caddy JSON document.
+func collectAuthCredentials(node any) [][]string {
+	var out [][]string
+	switch v := node.(type) {
+	case map[string]any:
+		for key, child := range v {
+			if key == "auth_credentials" {
+				items, _ := child.([]any)
+				list := make([]string, 0, len(items))
+				for _, item := range items {
+					str, _ := item.(string)
+					list = append(list, str)
+				}
+				out = append(out, list)
+				continue
+			}
+			out = append(out, collectAuthCredentials(child)...)
+		}
+	case []any:
+		for _, child := range v {
+			out = append(out, collectAuthCredentials(child)...)
+		}
+	}
+	return out
+}
+
+func configKeys(configs map[string]string) []string {
+	keys := make([]string, 0, len(configs))
+	for name := range configs {
+		keys = append(keys, name)
+	}
+	return keys
 }
 
 var _ = model.Inbound{}
