@@ -147,6 +147,9 @@ func ReplaceSnapshotTx(tx *Tx, clients []Client, bindings []Binding, credentials
 		if live.RuntimeIdentity != "" {
 			item.RuntimeIdentity = live.RuntimeIdentity
 		}
+		// Identities are canonical lowercase (#1111); a restore never writes
+		// a mixed-case one that hysteria2 traffic would not match (#1273).
+		item.RuntimeIdentity = strings.ToLower(item.RuntimeIdentity)
 		item.Enabled = item.Enabled && live.Enabled
 		item.CreatedAt = live.CreatedAt
 		item.UpdatedAt = now
