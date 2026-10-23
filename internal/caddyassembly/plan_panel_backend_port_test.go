@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/bindregistry"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -40,15 +41,27 @@ func TestBuildRenderPlanRejectsOutOfRangePanelPublicPort(t *testing.T) {
 }
 
 func TestBuildRenderPlanKeepsValidPanelBackendPort(t *testing.T) {
-	settings := model.Settings{PanelAccess: "caddy", PanelDomain: "panel.example.com", PanelEmail: "a@example.com", WebBasePath: "/p/", PanelListen: "127.0.0.1:2096"}
-	plan, _, err := BuildRenderPlan(settings, nil, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, server := range plan.Servers {
-		if server.Kind == CaddyOwnerPanel && server.BackendPort == 2096 {
-			return
+	// Both ends of the port range stay valid for the backend (PanelListen)
+	// and the public bind (PanelPublicPort), pinning the inclusive bounds.
+	for _, tc := range []struct {
+		listen     string
+		backend    int
+		publicPort int
+		wantPublic int
+	}{
+		{"127.0.0.1:2096", 2096, 0, 443},
+		{"127.0.0.1:1", 1, 1, 1},
+		{"127.0.0.1:65535", 65535, 65535, 65535},
+	} {
+		settings := model.Settings{PanelAccess: "caddy", PanelDomain: "panel.example.com", PanelEmail: "a@example.com", WebBasePath: "/p/", PanelListen: tc.listen, PanelPublicPort: tc.publicPort}
+		plan, _, err := BuildRenderPlan(settings, nil, nil)
+		if err != nil {
+			t.Fatalf("BuildRenderPlan(PanelListen=%q, PanelPublicPort=%d) = %v, want success", tc.listen, tc.publicPort, err)
+		}
+		key := bindregistry.BindKey{Address: "0.0.0.0", Port: tc.wantPublic, Network: bindregistry.ListenTCP}
+		server, ok := plan.Servers[key]
+		if !ok || server.Kind != CaddyOwnerPanel || server.BackendPort != tc.backend {
+			t.Fatalf("PanelListen=%q PanelPublicPort=%d: server on %v = %+v (present=%v), want panel with BackendPort %d", tc.listen, tc.publicPort, key, server, ok, tc.backend)
 		}
 	}
-	t.Fatalf("no panel server with BackendPort 2096: %+v", plan.Servers)
 }

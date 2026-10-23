@@ -6,6 +6,14 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The Caddy render plan now fails with a `panelListen` error when Caddy panel
+  access has an unparseable or out-of-range `panelListen` port, and with a
+  `panelPublicPort` error when the public port is outside 1-65535 (#1292
+  finding 6). Before, the backend port became 0: a panel-only bind proxied to
+  `127.0.0.1:0`, and a bind shared with naive silently dropped every panel
+  route. `RenderHysteria2` also rejects listen ports above 65535. Settings
+  validation already rejected these values, so valid installs are unaffected.
+
 - A rollback no longer restores a mixed-case client binding `runtimeIdentity`
   (#1273 item 1). Identities are lowercase-only since #1111, and hysteria2
   reports lowercased usernames, so a mixed-case identity sent that binding's
