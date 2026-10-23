@@ -44,6 +44,13 @@ func TestReplaceSnapshotTxReparentKeepsLiveCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	liveTomb, err := store.Get(old.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if liveTomb.RevokedAt == nil || rotated.RotatedAt == nil {
+		t.Fatalf("setup: revoked_at=%v rotated_at=%v, want both set", liveTomb.RevokedAt, rotated.RotatedAt)
+	}
 
 	tx, err := repo.BeginTx()
 	if err != nil {
@@ -75,6 +82,9 @@ func TestReplaceSnapshotTxReparentKeepsLiveCredentials(t *testing.T) {
 		t.Fatalf("active credential metadata changed: version=%d created=%d, want %d/%d",
 			active.CredentialVersion, active.CreatedAt, rotated.CredentialVersion, rotated.CreatedAt)
 	}
+	if active.RotatedAt == nil || *active.RotatedAt != *rotated.RotatedAt {
+		t.Fatalf("active rotated_at=%v, want %d", active.RotatedAt, *rotated.RotatedAt)
+	}
 	plain, err := store.Reveal(active.ID)
 	if err != nil || plain != "rotated-secret" {
 		t.Fatalf("active plaintext=%q err=%v, want rotated-secret", plain, err)
@@ -85,5 +95,8 @@ func TestReplaceSnapshotTxReparentKeepsLiveCredentials(t *testing.T) {
 	}
 	if tomb.RevokedAt == nil {
 		t.Fatal("rollback re-activated the rotated-out snapshot credential")
+	}
+	if *tomb.RevokedAt != *liveTomb.RevokedAt {
+		t.Fatalf("tombstone revoked_at=%d, want unchanged %d", *tomb.RevokedAt, *liveTomb.RevokedAt)
 	}
 }
