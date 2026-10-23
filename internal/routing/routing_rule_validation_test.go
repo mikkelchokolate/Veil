@@ -53,3 +53,45 @@ func TestRoutingRuleValidationRejectsInvalidMatchOnCreateAndUpdate(t *testing.T)
 		}
 	}
 }
+
+// #1410: outbound is a closed enum. The apply planner only accepts exactly
+// direct, proxy and warp (case-sensitive), so the write path must reject
+// anything else with ErrRoutingOutboundInvalid instead of persisting a rule
+// that blocks every later apply.
+func TestRoutingRuleValidationRejectsUnknownOutboundOnCreateAndUpdate(t *testing.T) {
+	validator := NewRoutingRuleValidation()
+	for _, outbound := range []string{"direct", "proxy", "warp"} {
+		rule := RoutingRule{Name: "n", Match: "geoip:private", Outbound: outbound}
+		if err := validator.ValidateCreate(rule); err != nil {
+			t.Fatalf("ValidateCreate(outbound=%q) = %v, want nil", outbound, err)
+		}
+		if err := validator.ValidateUpdate(rule); err != nil {
+			t.Fatalf("ValidateUpdate(outbound=%q) = %v, want nil", outbound, err)
+		}
+	}
+	for _, outbound := range []string{"Direct", "WARP", " warp", "proxy ", "block", "evil", "blackhole"} {
+		rule := RoutingRule{Name: "n", Match: "geoip:private", Outbound: outbound}
+		if err := validator.ValidateCreate(rule); !errors.Is(err, ErrRoutingOutboundInvalid) {
+			t.Fatalf("ValidateCreate(outbound=%q) = %v, want ErrRoutingOutboundInvalid", outbound, err)
+		}
+		if err := validator.ValidateUpdate(rule); !errors.Is(err, ErrRoutingOutboundInvalid) {
+			t.Fatalf("ValidateUpdate(outbound=%q) = %v, want ErrRoutingOutboundInvalid", outbound, err)
+		}
+		if IsValidOutbound(outbound) {
+			t.Fatalf("IsValidOutbound(%q) = true", outbound)
+		}
+	}
+	// An empty outbound is still the generic required-field error.
+	if err := validator.ValidateCreate(RoutingRule{Name: "n", Match: "geoip:private"}); err != ErrRoutingRuleInvalid {
+		t.Fatalf("ValidateCreate(empty outbound) = %v, want ErrRoutingRuleInvalid", err)
+	}
+}
+
+// Outbounds() hands out a copy: mutating it must not widen the allowlist.
+func TestOutboundsReturnsCopy(t *testing.T) {
+	got := Outbounds()
+	got[0] = "evil"
+	if IsValidOutbound("evil") || Outbounds()[0] != "direct" {
+		t.Fatalf("mutating Outbounds() changed the allowlist: %v", Outbounds())
+	}
+}

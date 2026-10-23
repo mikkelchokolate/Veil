@@ -11,6 +11,8 @@ var (
 	ErrRuleNotFound        = errors.New("routing rule not found")
 	ErrRuleDuplicateName   = errors.New("routing rule name already exists")
 	ErrRoutingMatchInvalid = errors.New("routing match is invalid")
+	// ErrRoutingOutboundInvalid reports an outbound outside Outbounds (#1410).
+	ErrRoutingOutboundInvalid = errors.New("routing outbound must be one of direct, proxy, warp")
 )
 
 var (

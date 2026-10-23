@@ -108,6 +108,8 @@ func writeRoutingRuleManagementError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, routing.ErrRoutingMatchInvalid):
 		writeError(w, err.Error(), http.StatusBadRequest)
+	case errors.Is(err, routing.ErrRoutingOutboundInvalid):
+		writeError(w, "outbound must be one of direct, proxy, warp", http.StatusBadRequest)
 	case errors.Is(err, routing.ErrRoutingRuleInvalid):
 		writeError(w, "name, match, and outbound are required", http.StatusBadRequest)
 	case errors.Is(err, routing.ErrRoutingRuleDuplicateName):

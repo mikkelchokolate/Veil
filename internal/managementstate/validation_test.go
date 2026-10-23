@@ -297,6 +297,47 @@ func TestValidationRejectsUnparseableRoutingRuleMatch(t *testing.T) {
 	}
 }
 
+// #1410: stored/imported/rolled-back rules bypass RoutingRuleValidation, so
+// an outbound the planner can never accept must be a snapshot validation
+// error too — for disabled rules as well, since enabling one later would
+// otherwise poison every apply.
+func TestValidationRejectsUnknownRoutingRuleOutbound(t *testing.T) {
+	body := []byte(`{
+		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev"},
+		"inbounds":[],
+		"routingRules":[
+			{"name":"ok-direct","match":"geoip:private","outbound":"direct","enabled":true},
+			{"name":"ok-proxy","match":"geoip:ru","outbound":"proxy","enabled":true},
+			{"name":"case","match":"geoip:cn","outbound":"Direct","enabled":true},
+			{"name":"block","match":"geoip:us","outbound":"block","enabled":true},
+			{"name":"disabled","match":"geoip:de","outbound":"evil","enabled":false}
+		],
+		"warp":{"enabled":false}
+	}`)
+	result, err := NewValidation().ValidateBytes(body)
+	if err != nil {
+		t.Fatalf("ValidateBytes: %v", err)
+	}
+	expected := []string{
+		`routingRules[2].outbound "Direct" is invalid: must be one of direct, proxy, warp`,
+		`routingRules[3].outbound "block" is invalid: must be one of direct, proxy, warp`,
+		`routingRules[4].outbound "evil" is invalid: must be one of direct, proxy, warp`,
+	}
+	if result.Valid {
+		t.Fatalf("expected invalid result: %+v", result)
+	}
+	for _, want := range expected {
+		if !containsError(result.Errors, want) {
+			t.Fatalf("missing error %q in %+v", want, result)
+		}
+	}
+	for _, e := range result.Errors {
+		if strings.Contains(e, "routingRules[0]") || strings.Contains(e, "routingRules[1]") {
+			t.Fatalf("valid outbound flagged: %q", e)
+		}
+	}
+}
+
 func TestValidateSnapshotPortsAndWarpDefault(t *testing.T) {
 	v := NewValidation()
 	snapshot := model.ManagementSnapshot{

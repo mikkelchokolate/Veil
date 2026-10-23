@@ -226,6 +226,11 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 			}
 			if rule.Outbound == "" {
 				errs = append(errs, "routingRules["+itoa(i)+"].outbound is required")
+			} else if !routing.IsValidOutbound(rule.Outbound) {
+				// The planner rejects anything but direct/proxy/warp at apply
+				// time; a stored rule (enabled or not) must not validate as
+				// fine and then block every apply (#1410).
+				errs = append(errs, fmt.Sprintf("routingRules[%d].outbound %q is invalid: must be one of %s", i, rule.Outbound, strings.Join(routing.Outbounds(), ", ")))
 			}
 		}
 	}

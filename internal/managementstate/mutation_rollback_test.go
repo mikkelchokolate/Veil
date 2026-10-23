@@ -47,7 +47,7 @@ func TestMutationRollsBackRoutingRulesWhenSaveFails(t *testing.T) {
 	rules := append([]RoutingRule(nil), before...)
 	mutation := NewManagementStateMutation(ManagementStateMutationTarget{Rules: &rules}, failingMutationSave)
 
-	_, err := mutation.UpdateRoutingRule("private", RoutingRule{Match: "geoip:private", Outbound: "block", Enabled: true})
+	_, err := mutation.UpdateRoutingRule("private", RoutingRule{Match: "geoip:private", Outbound: "proxy", Enabled: true})
 	if !errors.Is(err, errMutationSaveFailed) {
 		t.Fatalf("UpdateRoutingRule error = %v", err)
 	}
