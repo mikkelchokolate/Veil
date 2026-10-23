@@ -45,11 +45,16 @@ func authMiddleware(state *managementState, token string, next http.Handler) htt
 }
 
 type authMiddlewareOptions struct {
-	Token             string
-	ProtectHealthz    bool
-	ProtectMetrics    bool
-	AllowDevAnonymous bool
-	AllowSetup        bool
+	Token          string
+	ProtectHealthz bool
+	ProtectMetrics bool
+	// ProtectMetricsWhenUsersConfigured elevates /metrics to viewer as soon
+	// as the live state holds a Panel user or has ever been provisioned —
+	// the auto policy's "whenever auth is configured" term, evaluated per
+	// request so first-run setup at runtime takes effect immediately (#1433).
+	ProtectMetricsWhenUsersConfigured bool
+	AllowDevAnonymous                 bool
+	AllowSetup                        bool
 }
 
 func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOptions, next http.Handler) http.Handler {
@@ -94,6 +99,14 @@ func authMiddlewareWithOptions(state *managementState, opts authMiddlewareOption
 		}
 		if path == "/metrics" && opts.ProtectMetrics {
 			capability = capabilityViewer
+		}
+		if path == "/metrics" && capability == capabilityPublic && opts.ProtectMetricsWhenUsersConfigured {
+			state.mu.Lock()
+			usersConfigured := len(state.users) > 0 || state.usersProvisionedLocked()
+			state.mu.Unlock()
+			if usersConfigured {
+				capability = capabilityViewer
+			}
 		}
 		if path == "/api/setup/complete" && !opts.AllowSetup {
 			capability = capabilityAdminMutation

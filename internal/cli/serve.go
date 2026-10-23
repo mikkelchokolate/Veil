@@ -93,27 +93,28 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 		return err
 	}
 	server, stateReloader := serveflow.NewHTTPServer(serveflow.HTTPServerOptions{
-		Listen:              cfg.Listen,
-		Version:             opts.Version,
-		AuthToken:           cfg.Token,
-		PublicListen:        cfg.PublicListen,
-		MetricsAuthRequired: cfg.MetricsAuthRequired,
-		StatePath:           cfg.StatePath,
-		ApplyRoot:           cfg.ApplyRoot,
-		LiveRoot:            cfg.LiveRoot,
-		KeyPath:             cfg.KeyPath,
-		HelperSocket:        cfg.HelperSocket,
-		TLSEnabled:          cfg.TLSEnabled,
-		TLSCert:             cfg.TLSCert,
-		TLSKey:              cfg.TLSKey,
-		AutoTLSDomain:       cfg.AutoTLSDomain,
-		AutoTLSEmail:        cfg.AutoTLSEmail,
-		AutoTLSCacheDir:     cfg.AutoTLSCacheDir,
-		PanelAccess:         cfg.PanelAccess,
-		Domain:              cfg.Domain,
-		Email:               cfg.Email,
-		WebBasePath:         cfg.WebBasePath,
-		SetupAllowed:        cfg.SetupAllowed,
+		Listen:                         cfg.Listen,
+		Version:                        opts.Version,
+		AuthToken:                      cfg.Token,
+		PublicListen:                   cfg.PublicListen,
+		MetricsAuthRequired:            cfg.MetricsAuthRequired,
+		MetricsAuthWhenUsersConfigured: cfg.MetricsAuthWhenUsersConfigured,
+		StatePath:                      cfg.StatePath,
+		ApplyRoot:                      cfg.ApplyRoot,
+		LiveRoot:                       cfg.LiveRoot,
+		KeyPath:                        cfg.KeyPath,
+		HelperSocket:                   cfg.HelperSocket,
+		TLSEnabled:                     cfg.TLSEnabled,
+		TLSCert:                        cfg.TLSCert,
+		TLSKey:                         cfg.TLSKey,
+		AutoTLSDomain:                  cfg.AutoTLSDomain,
+		AutoTLSEmail:                   cfg.AutoTLSEmail,
+		AutoTLSCacheDir:                cfg.AutoTLSCacheDir,
+		PanelAccess:                    cfg.PanelAccess,
+		Domain:                         cfg.Domain,
+		Email:                          cfg.Email,
+		WebBasePath:                    cfg.WebBasePath,
+		SetupAllowed:                   cfg.SetupAllowed,
 	}).Build()
 	tlsLabel := "http"
 	if cfg.TLSEnabled {
@@ -145,6 +146,10 @@ func runServeWorkflow(cmd *cobra.Command, opts serveWorkflowOptions) error {
 	}
 	if cfg.MetricsAuthRequired {
 		fmt.Fprintf(cmd.OutOrStdout(), "Metrics access: authenticated (%s)\n", cfg.MetricsAccessSource)
+	} else if cfg.MetricsAuthWhenUsersConfigured {
+		// auto on a never-configured loopback Panel: /metrics turns
+		// authenticated as soon as first-run setup creates a user (#1433).
+		fmt.Fprintf(cmd.OutOrStdout(), "Metrics access: public until a Panel user exists (%s)\n", cfg.MetricsAccessSource)
 	} else {
 		fmt.Fprintf(cmd.OutOrStdout(), "Metrics access: public (%s)\n", cfg.MetricsAccessSource)
 	}
