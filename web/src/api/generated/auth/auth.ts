@@ -1455,6 +1455,11 @@ export const getPostApiV1UsersMeTotpEnrollUrl = () => {
  * Credential-grade gate (#1250): the session must already carry the
  * second-factor mark, or the account password must be re-presented
  * here. Wrong passwords share the login backoff family.
+ * When TOTP is already enabled, enrolling replaces the active factor
+ * and its recovery codes at confirm, so the request must also carry
+ * `code`: a live, unused code from the current authenticator (#1413).
+ * The code is spent by this call. Wrong codes share the login backoff
+ * family; recovery codes are not accepted here.
  * @summary Start TOTP second-factor enrollment
  */
 export const postApiV1UsersMeTotpEnroll = async (tOTPEnrollRequest?: TOTPEnrollRequest, options?: Parameters<typeof apiFetch>[1]): Promise<TOTPEnrollResponse> => {

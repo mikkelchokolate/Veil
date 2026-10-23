@@ -24,6 +24,12 @@ var errTOTPCodeConsumed = errors.New("verification code already used")
 // confirm rolls back and the operator re-enrolls from a fresh session.
 var errEnrollingSessionGone = errors.New("enrolling session expired")
 
+// errTOTPFactorChanged means the active factor changed between the
+// re-enrollment proof check and the enroll mutation (a concurrent confirm,
+// disable or admin reset): the proof was for a different factor state, so
+// the enrollment is refused and the caller starts over (#1413).
+var errTOTPFactorChanged = errors.New("active TOTP factor changed")
+
 // sessionUserForFactor resolves the cookie-session identity the self-service
 // factor endpoints (TOTP, passkeys) are scoped to. Managing a second factor
 // requires a live browser session bound to a real user row: static API
@@ -102,6 +108,7 @@ func (s *managementState) handleMyTOTPEnroll(w http.ResponseWriter, r *http.Requ
 	}
 	var req struct {
 		Password string `json:"password"`
+		Code     string `json:"code"`
 	}
 	if !decodeOptionalJSONRequest(w, r, &req) {
 		return
@@ -114,6 +121,21 @@ func (s *managementState) handleMyTOTPEnroll(w http.ResponseWriter, r *http.Requ
 	// transitively: it only activates a pending secret this gate minted.
 	if allowed, _ := s.factorCredentialGate(w, r, session, user, req.Password, false, "totp-enroll", "user.totp.enroll"); !allowed {
 		return
+	}
+	// Re-enrolling over an ACTIVE factor is replacement: confirm swaps the
+	// secret, regenerates the recovery codes and revokes every other
+	// session. That is removal plus attacker persistence, so it needs at
+	// least the proof disable needs — a live code from the current
+	// authenticator — not just a marked session or the password (#1413).
+	// The code's step is spent in the same write that stores the pending
+	// secret, so it cannot be replayed into a login or a disable.
+	var reenrollStep int64
+	if user.TOTPEnabled {
+		step, proved := s.reenrollFactorGate(w, r, user, req.Code)
+		if !proved {
+			return
+		}
+		reenrollStep = step
 	}
 	secret, uri, err := generateTOTPSecret(user.Username)
 	if err != nil {
@@ -129,10 +151,20 @@ func (s *managementState) handleMyTOTPEnroll(w http.ResponseWriter, r *http.Requ
 		if !found {
 			return errUserNotFound
 		}
+		// The proof above was checked against a snapshot: the active factor
+		// must still be exactly the one it proved (or still be absent), and
+		// the code must still be unspent under the mutation lock.
+		if proofErr := checkEnrollProofCurrent(user, current, reenrollStep); proofErr != nil {
+			return proofErr
+		}
+		reenroll := current.TOTPEnabled
 		// Re-enrollment only replaces the PENDING secret: the active factor
 		// stays live until the new secret proves itself at confirm.
 		update := current
 		update.TOTPPendingSecret = secret
+		if reenroll {
+			update.TOTPLastStep = reenrollStep
+		}
 		_, mErr := mutation.SetUserTOTP(user.Username, update)
 		return mErr
 	})
@@ -141,11 +173,16 @@ func (s *managementState) handleMyTOTPEnroll(w http.ResponseWriter, r *http.Requ
 			Actor: user.Username, Action: "user.totp.enroll", Target: user.Username,
 			Success: false, Error: err.Error(),
 		})
-		if errors.Is(err, errUserNotFound) {
+		switch {
+		case errors.Is(err, errUserNotFound):
 			writeNotFound(w)
-			return
+		case errors.Is(err, errTOTPCodeConsumed):
+			writeError(w, "invalid authenticator code", http.StatusBadRequest)
+		case errors.Is(err, errTOTPFactorChanged):
+			writeError(w, "TOTP factor changed; reload and try again", http.StatusConflict)
+		default:
+			writeError(w, "failed to persist TOTP enrollment", http.StatusInternalServerError)
 		}
-		writeError(w, "failed to persist TOTP enrollment", http.StatusInternalServerError)
 		return
 	}
 	s.recordRequestAudit(r, audit.Record{
@@ -160,6 +197,57 @@ func (s *managementState) handleMyTOTPEnroll(w http.ResponseWriter, r *http.Requ
 		"otpauthUri": uri,
 		"issuer":     totpIssuer,
 	})
+}
+
+// checkEnrollProofCurrent re-validates, under the mutation lock, the enroll
+// proof that was checked against the snapshot user: the active factor must
+// still be exactly the one the code proved (or still be absent), and the
+// proving code must still be unspent (#1413). A concurrent confirm, disable
+// or admin reset in between makes the proof stale.
+func checkEnrollProofCurrent(snapshot, current model.User, proofStep int64) error {
+	if current.TOTPEnabled != snapshot.TOTPEnabled {
+		return errTOTPFactorChanged
+	}
+	if !current.TOTPEnabled {
+		return nil
+	}
+	if current.TOTPSecret != snapshot.TOTPSecret {
+		return errTOTPFactorChanged
+	}
+	if proofStep <= current.TOTPLastStep {
+		return errTOTPCodeConsumed
+	}
+	return nil
+}
+
+// reenrollFactorGate requires a live, unspent code from the account's
+// ACTIVE authenticator before a new seed may replace it (#1413). It mirrors
+// handleMyTOTPDisable's factor-grade check: same skew window, same replay
+// watermark, its own login-backoff family so the enroll form cannot be used
+// as a code oracle. It returns the matched step for the caller to persist.
+func (s *managementState) reenrollFactorGate(w http.ResponseWriter, r *http.Request, user model.User, code string) (int64, bool) {
+	if strings.TrimSpace(code) == "" {
+		writeError(w, "authenticator code is required to replace an active TOTP factor", http.StatusBadRequest)
+		return 0, false
+	}
+	throttleKey := "totp-reenroll:" + loginThrottleKey(r, user.Username)
+	if retryAfter := s.loginBackoffRemaining(throttleKey); retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(int(retryAfter.Seconds())+1))
+		writeError(w, "too many attempts", http.StatusTooManyRequests)
+		return 0, false
+	}
+	matchedStep, valid := validateTOTPCode(s.loginBackoffTime(), user.TOTPSecret, code)
+	if !valid || matchedStep <= user.TOTPLastStep {
+		delay := s.recordLoginFailure(throttleKey)
+		w.Header().Set("Retry-After", strconv.Itoa(int(delay.Seconds())+1))
+		s.recordRequestAudit(r, audit.Record{
+			Actor: user.Username, Action: "user.totp.enroll", Target: user.Username,
+			Success: false, Error: "invalid authenticator code",
+		})
+		writeError(w, "invalid authenticator code", http.StatusBadRequest)
+		return 0, false
+	}
+	return matchedStep, true
 }
 
 func (s *managementState) handleMyTOTPConfirm(w http.ResponseWriter, r *http.Request) {

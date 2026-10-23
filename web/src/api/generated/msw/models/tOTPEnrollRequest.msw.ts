@@ -44,4 +44,6 @@
 export interface TOTPEnrollRequest {
   /** Required when the session does not carry the second-factor mark. */
   password?: string;
+  /** Live code from the currently active authenticator. Required when TOTP is already enabled (re-enrollment replaces that factor). */
+  code?: string;
 }

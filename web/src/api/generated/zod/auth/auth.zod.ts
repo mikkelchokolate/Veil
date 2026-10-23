@@ -340,6 +340,11 @@ export const DeleteApiV1UsersMeTotpResponse = zod.object({
  * Credential-grade gate (#1250): the session must already carry the
  * second-factor mark, or the account password must be re-presented
  * here. Wrong passwords share the login backoff family.
+ * When TOTP is already enabled, enrolling replaces the active factor
+ * and its recovery codes at confirm, so the request must also carry
+ * `code`: a live, unused code from the current authenticator (#1413).
+ * The code is spent by this call. Wrong codes share the login backoff
+ * family; recovery codes are not accepted here.
  * @summary Start TOTP second-factor enrollment
  */
 export const postApiV1UsersMeTotpEnrollHeaderIdempotencyKeyMax = 128;
@@ -353,7 +358,8 @@ export const PostApiV1UsersMeTotpEnrollHeader = zod.object({
 })
 
 export const PostApiV1UsersMeTotpEnrollBody = zod.object({
-  "password": zod.string().optional().describe('Required when the session does not carry the second-factor mark.')
+  "password": zod.string().optional().describe('Required when the session does not carry the second-factor mark.'),
+  "code": zod.string().optional().describe('Live code from the currently active authenticator. Required when TOTP is already enabled (re-enrollment replaces that factor).')
 })
 
 export const PostApiV1UsersMeTotpEnrollResponse = zod.object({
