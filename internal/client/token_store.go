@@ -818,10 +818,10 @@ func (s *TokenStore) Reveal(id string) (string, error) {
 // the desired-revision bump and the immutable snapshot.
 
 // issueTokenTx creates a token row inside the transaction, returning plaintext
-// once. The row has no sealed issuance binding yet and does not authenticate
+// once. createdBy and enabled are carried from the row being replaced. The row has no sealed issuance binding yet and does not authenticate
 // until TokenStore seals it (RotateWithExpiry does so in the same
 // transaction, #1281). Unexported so no caller can hand out an unsealed row.
-func (t *Tx) issueTokenTx(clientID, label string, expiresAt *int64) (IssuedToken, error) {
+func (t *Tx) issueTokenTx(clientID, label, createdBy string, enabled bool, expiresAt *int64) (IssuedToken, error) {
 	if err := validateTokenMetadata(label, expiresAt); err != nil {
 		return IssuedToken{}, err
 	}
@@ -835,14 +835,15 @@ func (t *Tx) issueTokenTx(clientID, label string, expiresAt *int64) (IssuedToken
 		TokenHash: hashToken(plaintext),
 		Prefix:    tokenPrefix(plaintext),
 		Label:     label,
-		Enabled:   true,
+		CreatedBy: createdBy,
+		Enabled:   enabled,
 		ExpiresAt: expiresAt,
 		CreatedAt: nowUnix(),
 	}
 	_, err = t.q.Exec(`INSERT INTO subscription_tokens
 	  (id, client_id, token_hash, token_prefix, enabled, expires_at, created_at, created_by, label)
 	  VALUES(?,?,?,?,?,?,?,?,?)`,
-		tok.ID, tok.ClientID, []byte(tok.TokenHash), tok.Prefix, boolToInt(tok.Enabled), tok.ExpiresAt, tok.CreatedAt, "", tok.Label)
+		tok.ID, tok.ClientID, []byte(tok.TokenHash), tok.Prefix, boolToInt(tok.Enabled), tok.ExpiresAt, tok.CreatedAt, tok.CreatedBy, tok.Label)
 	if err != nil {
 		return IssuedToken{}, fmt.Errorf("client: issue token: %w", err)
 	}
@@ -902,7 +903,11 @@ func (t *Tx) rotateTokenWithExpiryTx(id string, expiresAt *int64, expirySupplied
 	if err := t.RevokeTokenTx(id); err != nil {
 		return IssuedToken{}, err
 	}
-	return t.issueTokenTx(tok.ClientID, tok.Label, tok.ExpiresAt)
+	// "Same policy, new secret" (#1272 item 2/4): the replacement keeps the
+	// old row's label, issuer and enabled flag. Only the expiry may change,
+	// and only when the caller supplies one. The rotating actor is recorded
+	// in the audit log, not in created_by.
+	return t.issueTokenTx(tok.ClientID, tok.Label, tok.CreatedBy, tok.Enabled, tok.ExpiresAt)
 }
 
 // ReencryptSubscriptionTokens moves every stored token reveal ciphertext to a

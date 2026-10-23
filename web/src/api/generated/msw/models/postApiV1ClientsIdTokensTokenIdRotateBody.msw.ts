@@ -43,7 +43,7 @@
 
 export type PostApiV1ClientsIdTokensTokenIdRotateBody = {
   /**
-     * Replacement expiry. A future value is required when rotating an expired token.
+     * Replacement expiry. Omit the field (or send no body) to keep the current expiry. An explicit null makes the replacement token non-expiring. A future value is required when rotating an expired token. The replacement always keeps the old token's label, issuer and enabled flag.
      * @nullable
      */
   expiresAt?: number | null;
