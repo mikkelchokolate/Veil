@@ -8022,6 +8022,7 @@ components:
           type:
           - boolean
           - 'null'
+          description: Whether the client is enabled; null clears to the default (true), the same default create applies.
         groupId:
           type:
           - string
