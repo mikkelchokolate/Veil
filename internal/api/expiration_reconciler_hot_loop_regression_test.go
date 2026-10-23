@@ -191,3 +191,67 @@ func TestExpirationReconcilerPauseReminderIsWallClock(t *testing.T) {
 		t.Fatalf("pause logged %d times after the reminder interval elapsed; want 2\n%s", n, logs.String())
 	}
 }
+
+// Issue #1423 follow-up: clearing the pause resets the reminder clock, so a
+// pause that re-enters well inside the reminder interval (two restores back
+// to back) still logs on entry.
+func TestExpirationReconcilerLogsEachPauseEntry(t *testing.T) {
+	_, state := newApplyTrackedRouterWithState(t)
+	state.expirationReconciler.Stop()
+	due := time.Now().UTC().Unix() - 5
+	row, err := state.clientRepo.Create(client.Client{
+		Name: "due-reentry", Enabled: true, QuotaResetPolicy: client.ResetNever, ExpiresAt: &due,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	setPaused := func(paused bool) {
+		state.mu.Lock()
+		state.runtimeVerificationUnknown = paused
+		state.mu.Unlock()
+	}
+	setPaused(true)
+
+	logs := &lockedLogBuffer{}
+	previousWriter := log.Writer()
+	log.SetOutput(logs)
+	defer log.SetOutput(previousWriter)
+
+	reconciler := newExpirationReconciler(state)
+	reconciler.pausedRetry = time.Hour
+	reconciler.pausedReminder = time.Hour
+	state.mu.Lock()
+	state.expirationReconciler = reconciler
+	state.mu.Unlock()
+	reconciler.Start()
+	defer reconciler.Stop()
+
+	pauseLines := func() int { return strings.Count(logs.String(), "expiration enforcement paused") }
+	waitFor := func(what string, cond func() bool) {
+		t.Helper()
+		deadline := time.Now().Add(10 * time.Second)
+		for time.Now().Before(deadline) {
+			if cond() {
+				return
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for %s\n%s", what, logs.String())
+	}
+	waitFor("first pause line", func() bool { return pauseLines() == 1 })
+
+	// Clear the pause and wait for an unpaused pass (it reserves enforcement).
+	setPaused(false)
+	reconciler.Signal()
+	waitFor("an unpaused reconcile pass", func() bool {
+		var rows int
+		if err := state.db.QueryRow(`SELECT COUNT(*) FROM expiration_enforcement WHERE client_id=?`, row.ID).Scan(&rows); err != nil {
+			t.Fatal(err)
+		}
+		return rows > 0
+	})
+
+	setPaused(true)
+	reconciler.Signal()
+	waitFor("a second pause-entry line", func() bool { return pauseLines() == 2 })
+}
