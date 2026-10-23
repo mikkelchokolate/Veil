@@ -18,6 +18,14 @@ All notable changes to Veil will be documented in this file.
   however often it is signalled), and re-checks every 30 s.
   Restore convergence wakes it as soon as the pause clears. A past boundary
   is floored at 1 s (#1423).
+- The weekly `upstream-compat` workflow builds the latest caddy with
+  forward_proxy again. Its `go mod edit -require ...caddy/v2@latest` wrote
+  `latest` into go.mod verbatim, and go.mod only accepts canonical versions,
+  so the step failed on every run with `version "latest" invalid`. After the
+  #1415 mita fix this was the next step stopping the latest-runtime
+  compatibility tests. The step now resolves the query with `go get`. A
+  contract test rejects any `go mod edit -require` with a non-canonical
+  version in the workflows, `scripts/ci/*.sh` and `ci/vm/Containerfile`.
 - The release workflow now publishes a prerelease tag (for example
   `v1.2.3-rc.1`) as a GitHub prerelease with `--latest=false`, and a stable
   `vX.Y.Z` tag with `--latest`, using the same stable-semver test as the

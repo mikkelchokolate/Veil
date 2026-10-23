@@ -136,8 +136,11 @@ jobs:
           mkdir -p /tmp/caddy-latest && cd /tmp/caddy-latest
           printf 'package main\n\nimport (\n\tcaddycmd "github.com/caddyserver/caddy/v2/cmd"\n\t_ "github.com/caddyserver/caddy/v2/modules/standard"\n\t_ "github.com/caddyserver/forwardproxy"\n)\n\nfunc main() {\n\tcaddycmd.Main()\n}\n' > main.go
           go mod init caddy >/dev/null
-          go mod edit -require "github.com/caddyserver/caddy/v2@latest"
           go mod edit -replace "github.com/caddyserver/forwardproxy=github.com/klzgrad/forwardproxy@master"
+          # `go mod edit -require` writes the version verbatim and go.mod only
+          # accepts canonical versions, so @latest broke the step; `go get`
+          # resolves the query to a concrete version first.
+          go get "github.com/caddyserver/caddy/v2@latest"
           go mod tidy
           CGO_ENABLED=0 go build -o /tmp/caddy-latest/caddy -trimpath .
           sudo install -m 0755 /tmp/caddy-latest/caddy /usr/local/bin/caddy
