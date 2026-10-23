@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
@@ -407,6 +408,10 @@ func TestServeSecurityLoopbackAutoMetricsAuthenticatedWhenProvisionedWithoutUser
 	statePath := filepath.Join(dir, "state.json")
 	if err := os.WriteFile(filepath.Join(dir, "users-provisioned.marker"), []byte("1\n"), 0o600); err != nil {
 		t.Fatalf("write marker: %v", err)
+	}
+	// Guard against a renamed marker constant silently bypassing the latch.
+	if !api.UsersProvisionedMarkerExists(statePath) {
+		t.Fatalf("test marker name no longer matches the api provisioned latch")
 	}
 	cfg, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath}).Resolve()
 	if err != nil {

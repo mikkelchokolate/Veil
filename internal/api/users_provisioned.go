@@ -21,7 +21,13 @@ import (
 const usersProvisionedMarkerName = "users-provisioned.marker"
 
 func (s *managementState) usersProvisionedMarkerPath() string {
-	statePath := strings.TrimSpace(s.statePath)
+	return usersProvisionedMarkerPathFor(s.statePath)
+}
+
+// usersProvisionedMarkerPathFor is the single derivation of the latch path,
+// shared by the router latch and the startup check so they cannot drift.
+func usersProvisionedMarkerPathFor(statePath string) string {
+	statePath = strings.TrimSpace(statePath)
 	if statePath == "" {
 		return ""
 	}
@@ -33,11 +39,11 @@ func (s *managementState) usersProvisionedMarkerPath() string {
 // uses it so a rolled-back zero-user state is reported (and protected) as
 // provisioned before the router is even built (#1433).
 func UsersProvisionedMarkerExists(statePath string) bool {
-	statePath = strings.TrimSpace(statePath)
-	if statePath == "" {
+	marker := usersProvisionedMarkerPathFor(statePath)
+	if marker == "" {
 		return false
 	}
-	_, err := os.Stat(filepath.Join(filepath.Dir(statePath), usersProvisionedMarkerName))
+	_, err := os.Stat(marker)
 	return err == nil
 }
 
