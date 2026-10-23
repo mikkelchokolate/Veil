@@ -242,3 +242,123 @@ func TestStatusRoundtripAndMissing(t *testing.T) {
 		t.Fatalf("status mode = %o, want 0600", info.Mode().Perm())
 	}
 }
+
+// TestConfigSaveLoadPersistsTrimmedFields pins #1408: Validate judges the
+// trimmed host/user/remoteDir/keyPath/hostKey, so the persisted and loaded
+// values must be those trimmed values. Otherwise the dial address carries
+// the whitespace and the remote namespace turns into a relative path.
+func TestConfigSaveLoadPersistsTrimmedFields(t *testing.T) {
+	t.Setenv("VEIL_ETC_DIR", hostenv.DefaultEtcDir)
+	hostKey := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDb8mQJYHLqAoBzBfOkJM0iOOcXLbbQ1sDHs/RTmkrqX"
+	cases := []struct {
+		name  string
+		input Config
+		want  Config
+	}{
+		{
+			name: "password",
+			input: Config{
+				Enabled: true, Host: " example.com ", User: " backup\t", RemoteDir: " /srv/veil ",
+				AuthType: AuthTypePassword, Password: " pw with edges ", HostKey: "\n" + hostKey + " \n",
+			},
+			want: Config{
+				Enabled: true, Host: "example.com", Port: DefaultPort, User: "backup", RemoteDir: "/srv/veil",
+				AuthType: AuthTypePassword, Password: " pw with edges ", HostKey: hostKey,
+			},
+		},
+		{
+			name: "key",
+			input: Config{
+				Host: "\texample.com", User: "backup ", RemoteDir: "/srv/veil\t",
+				AuthType: AuthTypeKey, KeyPath: " /etc/veil/backup-sftp.key ", KeyPassphrase: " pass ",
+			},
+			want: Config{
+				Host: "example.com", Port: DefaultPort, User: "backup", RemoteDir: "/srv/veil",
+				AuthType: AuthTypeKey, KeyPath: "/etc/veil/backup-sftp.key", KeyPassphrase: " pass ",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), ConfigFileName)
+			if err := SaveConfig(path, tc.input); err != nil {
+				t.Fatal(err)
+			}
+			// The bytes on disk are already normalized, not just the load.
+			raw := Config{}
+			body, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := json.Unmarshal(body, &raw); err != nil {
+				t.Fatal(err)
+			}
+			if raw != tc.want {
+				t.Fatalf("persisted = %+v, want %+v", raw, tc.want)
+			}
+			loaded, err := LoadConfig(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if loaded == nil || *loaded != tc.want {
+				t.Fatalf("loaded = %+v, want %+v", loaded, tc.want)
+			}
+			if got := loaded.Address(); got != "example.com:22" {
+				t.Fatalf("Address() = %q", got)
+			}
+		})
+	}
+}
+
+// TestConfigLoadNormalizesLegacyUntrimmedFile covers a config written before
+// SaveConfig normalized (#1408): consumers must still get the validated form.
+func TestConfigLoadNormalizesLegacyUntrimmedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ConfigFileName)
+	legacy := `{"enabled":true,"host":" example.com ","port":22,"user":" backup","remoteDir":" /srv/veil ","authType":"password","password":" pw "}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := Config{
+		Enabled: true, Host: "example.com", Port: 22, User: "backup", RemoteDir: "/srv/veil",
+		AuthType: AuthTypePassword, Password: " pw ",
+	}
+	if loaded == nil || *loaded != want {
+		t.Fatalf("loaded = %+v, want %+v", loaded, want)
+	}
+}
+
+// TestConfigSaveTrimsHostKeyEdgesButRejectsEmbeddedCR makes the #1408
+// relaxation explicit: SaveConfig normalizes before Validate, so a host key
+// pasted with a trailing CRLF is trimmed and accepted, while a carriage
+// return inside the key is still rejected.
+func TestConfigSaveTrimsHostKeyEdgesButRejectsEmbeddedCR(t *testing.T) {
+	hostKey := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDb8mQJYHLqAoBzBfOkJM0iOOcXLbbQ1sDHs/RTmkrqX"
+	base := Config{
+		Host: "example.com", User: "backup", RemoteDir: "/srv/veil",
+		AuthType: AuthTypePassword, Password: "pw",
+	}
+	path := filepath.Join(t.TempDir(), ConfigFileName)
+
+	crlf := base
+	crlf.HostKey = hostKey + "\r\n"
+	if err := SaveConfig(path, crlf); err != nil {
+		t.Fatalf("trailing CRLF host key rejected: %v", err)
+	}
+	loaded, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.HostKey != hostKey {
+		t.Fatalf("host key = %q, want %q", loaded.HostKey, hostKey)
+	}
+
+	embedded := base
+	embedded.HostKey = "ssh-ed25519\rAAAAC3NzaC1lZDI1NTE5AAAAIDb8mQJYHLqAoBzBfOkJM0iOOcXLbbQ1sDHs/RTmkrqX"
+	if err := SaveConfig(path, embedded); err == nil || !strings.Contains(err.Error(), "host key contains invalid characters") {
+		t.Fatalf("embedded CR host key: err = %v", err)
+	}
+}

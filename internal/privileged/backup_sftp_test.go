@@ -449,3 +449,60 @@ func TestLocalAdapterBackupSftpThroughPolicy(t *testing.T) {
 		t.Fatalf("adapter get=%+v", got.Destination)
 	}
 }
+
+// TestBackupSftpSetTrimsFieldsEndToEnd pins #1408 through the privileged set
+// action: a destination submitted with surrounding whitespace (the SPA trims,
+// an API/SDK client may not) is persisted and used in the validated, trimmed
+// form — the returned view, the dial config and the remote namespace all see
+// "backups.example.com" / "veil" / the absolute "/srv/veil-backups".
+func TestBackupSftpSetTrimsFieldsEndToEnd(t *testing.T) {
+	remote := sftpfake.New()
+	fixture := newSftpBackupFixture(t, remote, nil)
+	var dialed []backupsftp.Config
+	fixture.config.SftpDial = func(_ context.Context, config backupsftp.Config, _ string) (backupsftp.RemoteFS, error) {
+		dialed = append(dialed, config)
+		return remote, nil
+	}
+	ctx := context.Background()
+	password := " pw "
+	set, err := runProductionBackupSftp(ctx, fixture.config, ResolvedBackupSftp{
+		Action: BackupSftpActionSet, BackupRoot: fixture.backupRoot, Paths: fixture.sftpPaths,
+		Config: &BackupSftpConfig{
+			Enabled: true, Host: " backups.example.com ", User: " veil\t", RemoteDir: " /srv/veil-backups ",
+			AuthType: string(backupsftp.AuthTypePassword), Password: &password,
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.Destination.Host != "backups.example.com" || set.Destination.User != "veil" ||
+		set.Destination.RemoteDir != "/srv/veil-backups" {
+		t.Fatalf("set view not trimmed: %+v", set.Destination)
+	}
+	persisted, err := backupsftp.LoadConfig(fixture.sftpPaths.ConfigPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if persisted.Password != " pw " {
+		t.Fatalf("secret was altered: %q", persisted.Password)
+	}
+
+	result, err := runProductionBackup(ctx, fixture.config, fixture.createRequest())
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if result.RemoteUpload == nil || result.RemoteError != "" {
+		t.Fatalf("remote upload failed: %+v", result)
+	}
+	if !remote.Has(fixture.remoteDir + "/" + result.ArchiveName) {
+		t.Fatalf("archive not under the absolute namespace %s: %v", fixture.remoteDir, remote.Paths())
+	}
+	if len(dialed) == 0 {
+		t.Fatal("remote never dialed")
+	}
+	for _, config := range dialed {
+		if config.Address() != "backups.example.com:22" || config.User != "veil" {
+			t.Fatalf("dial config not trimmed: addr=%q user=%q", config.Address(), config.User)
+		}
+	}
+}

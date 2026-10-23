@@ -211,6 +211,9 @@ func backupSftpSet(engine backupsftp.Engine, request *BackupSftpConfig) (BackupS
 		merged.KeyPath = ""
 		merged.KeyPassphrase = ""
 	}
+	// SaveConfig trims the same fields; normalizing here too keeps the
+	// returned view identical to what was persisted (#1408).
+	merged = merged.Normalized()
 	if err := engine.SaveConfig(merged); err != nil {
 		return BackupSftpResult{}, newError(ErrorInvalidRequest, err.Error())
 	}
