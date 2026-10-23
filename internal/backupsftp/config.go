@@ -105,6 +105,24 @@ type Status struct {
 	LastErrorAt       string `json:"lastErrorAt,omitempty"`
 }
 
+// Normalized returns the config with surrounding whitespace removed from the
+// non-secret fields that Validate inspects in trimmed form (host, user,
+// remote dir, key path, pinned host key). Validate deliberately judges the
+// trimmed values, so the persisted and consumed values must be those same
+// trimmed values: otherwise " example.com " passes the no-whitespace host
+// check yet dials " example.com :22", and " /srv/veil " passes as an
+// absolute dir yet scopes uploads under the relative path " /srv/veil /…"
+// (#1408). Password and key passphrase are secrets compared byte-for-byte by
+// the server and are left untouched.
+func (c Config) Normalized() Config {
+	c.Host = strings.TrimSpace(c.Host)
+	c.User = strings.TrimSpace(c.User)
+	c.RemoteDir = strings.TrimSpace(c.RemoteDir)
+	c.KeyPath = strings.TrimSpace(c.KeyPath)
+	c.HostKey = strings.TrimSpace(c.HostKey)
+	return c
+}
+
 // Validate checks a destination config before it is persisted. Address is
 // the TCP dial address.
 func (c Config) Validate() error {
@@ -227,13 +245,19 @@ func LoadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", filepath.Base(path), err)
 	}
-	return config, nil
+	// A file written before SaveConfig normalized (#1408) may still carry
+	// surrounding whitespace; consumers always see the validated form.
+	normalized := config.Normalized()
+	return &normalized, nil
 }
 
 // SaveConfig writes the destination config atomically with root-only
 // permissions — the file carries secrets and must never be world-readable.
-// A zero port normalizes to the SSH default before persisting.
+// A zero port normalizes to the SSH default and the non-secret text fields
+// are trimmed (Normalized) before validating and persisting, so what is
+// validated is exactly what is stored and later dialled (#1408).
 func SaveConfig(path string, config Config) error {
+	config = config.Normalized()
 	if config.Port == 0 {
 		config.Port = DefaultPort
 	}
