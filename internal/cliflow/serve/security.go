@@ -3,6 +3,7 @@ package serve
 import (
 	"fmt"
 
+	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
@@ -106,6 +107,12 @@ func (s Security) Resolve() (Config, error) {
 	metricsAuthRequired, err := env.MetricsAuthRequired(metricsAccess, exposed, tokenSource, sessionAuthConfigured)
 	if err != nil {
 		return Config{}, err
+	}
+	// A zero-user state on a provisioned instance (rollback/restore, #1100)
+	// fails closed in the router; resolve auto the same way up front so the
+	// banner and the static policy agree with the live check (#1433).
+	if metricsAccess == "auto" && !metricsAuthRequired && api.UsersProvisionedMarkerExists(statePath) {
+		metricsAuthRequired = true
 	}
 	webBasePath, _ := env.WebBasePath(opts.WebBasePath)
 	webBasePath, err = webbasepath.Normalize(webBasePath)

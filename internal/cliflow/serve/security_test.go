@@ -398,3 +398,31 @@ func TestServeSecurityLoopbackToleratesUnreadableStateForSessionProbe(t *testing
 		t.Fatalf("loopback Resolve with unreadable state: %v", err)
 	}
 }
+
+// The provisioned latch (#1100) with zero users resolves auto to
+// authenticated up front, so the banner matches the router's live check.
+func TestServeSecurityLoopbackAutoMetricsAuthenticatedWhenProvisionedWithoutUsers(t *testing.T) {
+	t.Setenv("VEIL_PANEL_ACCESS", "local")
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	if err := os.WriteFile(filepath.Join(dir, "users-provisioned.marker"), []byte("1\n"), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	cfg, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath}).Resolve()
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.SessionAuthConfigured {
+		t.Fatalf("SessionAuthConfigured must still reflect current users only")
+	}
+	if !cfg.MetricsAuthRequired {
+		t.Fatalf("MetricsAuthRequired = false under auto on a provisioned zero-user state")
+	}
+	explicit, err := NewSecurity(SecurityOptions{Listen: "127.0.0.1:2096", StatePath: statePath, MetricsAccess: "public"}).Resolve()
+	if err != nil {
+		t.Fatalf("Resolve public: %v", err)
+	}
+	if explicit.MetricsAuthRequired {
+		t.Fatalf("explicit public must stay public on loopback")
+	}
+}

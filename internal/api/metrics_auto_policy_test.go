@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -81,4 +82,25 @@ func getMetrics(router http.Handler, cookie *http.Cookie) *httptest.ResponseReco
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+// A provisioned instance rolled back to zero users (#1100) must keep
+// /metrics closed under auto: the latch, not the current user count, decides.
+func TestMetricsAutoPolicyFailsClosedOnProvisionedZeroUserState(t *testing.T) {
+	dir := t.TempDir()
+	statePath := filepath.Join(dir, "state.json")
+	if err := os.WriteFile(filepath.Join(dir, usersProvisionedMarkerName), []byte("1\n"), 0o600); err != nil {
+		t.Fatalf("write marker: %v", err)
+	}
+	if !UsersProvisionedMarkerExists(statePath) {
+		t.Fatalf("UsersProvisionedMarkerExists = false with the marker present")
+	}
+	router, _ := newTestRouter(ServerInfo{
+		Version:                        "test",
+		StatePath:                      statePath,
+		MetricsAuthWhenUsersConfigured: true,
+	})
+	if rec := getMetrics(router, nil); rec.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous /metrics on provisioned zero-user state = %d, want 401: %s", rec.Code, rec.Body.String())
+	}
 }

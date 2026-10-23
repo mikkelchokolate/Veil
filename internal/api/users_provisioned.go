@@ -28,6 +28,19 @@ func (s *managementState) usersProvisionedMarkerPath() string {
 	return filepath.Join(filepath.Dir(statePath), usersProvisionedMarkerName)
 }
 
+// UsersProvisionedMarkerExists reports whether the durable "users ever
+// existed" latch is present next to statePath. Startup policy resolution
+// uses it so a rolled-back zero-user state is reported (and protected) as
+// provisioned before the router is even built (#1433).
+func UsersProvisionedMarkerExists(statePath string) bool {
+	statePath = strings.TrimSpace(statePath)
+	if statePath == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(filepath.Dir(statePath), usersProvisionedMarkerName))
+	return err == nil
+}
+
 // usersProvisionedLocked reports whether this instance has ever held a panel
 // user. Caller must hold s.mu. True whenever a user row currently exists;
 // once true it stays true for the life of the data directory.
