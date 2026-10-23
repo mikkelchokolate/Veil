@@ -6,6 +6,11 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The weekly `upstream-compat` workflow now probes mita with
+  `mita version`, the same subcommand the runtime catalog uses. Since #738
+  it ran `mita -version || mita --version`, flags mita does not have, so the
+  step aborted under `set -e` and none of the latest-runtime compatibility
+  tests had run since 2026-09-21 (#1415).
 - `POST /api/v1/users/me/totp/enroll` on an account that already has TOTP
   enabled now also requires `code`, a live and unused code from the current
   authenticator, which the call spends. Before, a session that had passed
