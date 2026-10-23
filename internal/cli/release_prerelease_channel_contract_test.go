@@ -40,7 +40,28 @@ func publishChannelStepRun(t *testing.T, wf publishChannelWorkflow, name string)
 	return run
 }
 
-var stableTagTest = regexp.MustCompile(`\[\[ "\$\{GITHUB_REF_NAME\}" =~ (\S+) \]\]`)
+var (
+	stableTagTest   = regexp.MustCompile(`\[\[ "\$\{GITHUB_REF_NAME\}" =~ (\S+) \]\]`)
+	stableTagAssign = regexp.MustCompile(`(?m)^\s*stable='(\S+)'\s*$`)
+)
+
+// stableTagPattern returns the regex a step's first GITHUB_REF_NAME test uses,
+// resolving a `${stable}` reference to the step's `stable='...'` assignment.
+func stableTagPattern(t *testing.T, run string) string {
+	t.Helper()
+	m := stableTagTest.FindStringSubmatch(run)
+	if m == nil {
+		t.Fatalf("stable-semver test missing in step:\n%s", run)
+	}
+	if m[1] != "${stable}" {
+		return m[1]
+	}
+	a := stableTagAssign.FindAllStringSubmatch(run, -1)
+	if len(a) != 1 {
+		t.Fatalf("step tests ${stable} but has %d stable='...' assignments, want 1", len(a))
+	}
+	return a[0][1]
+}
 
 // Issue #1414: install.sh, install-privileged.sh and veil/panel update all
 // resolve /releases/latest, so the GitHub release for a prerelease tag must
@@ -60,13 +81,10 @@ func TestReleasePublishKeepsPrereleasesOffLatest(t *testing.T) {
 	publish := publishChannelStepRun(t, wf, "Publish GitHub release")
 	docker := publishChannelStepRun(t, wf, "Detect stable semver release tag")
 
-	publishTest := stableTagTest.FindStringSubmatch(publish)
-	dockerTest := stableTagTest.FindStringSubmatch(docker)
-	if publishTest == nil || dockerTest == nil {
-		t.Fatalf("stable-semver test missing: publish=%v docker=%v", publishTest, dockerTest)
-	}
-	if publishTest[1] != dockerTest[1] {
-		t.Fatalf("publish classifies tags with %q but docker-publish uses %q; keep one stable-semver contract", publishTest[1], dockerTest[1])
+	publishTest := stableTagPattern(t, publish)
+	dockerTest := stableTagPattern(t, docker)
+	if publishTest != dockerTest {
+		t.Fatalf("publish classifies tags with %q but docker-publish uses %q; keep one stable-semver contract", publishTest, dockerTest)
 	}
 
 	if runtime.GOOS == "windows" {
@@ -117,9 +135,9 @@ func TestReleasePublishNeverDemotesLatestToABackport(t *testing.T) {
 	promote := []string{"--latest"}
 	keep := []string{"--latest=false"}
 	for _, tc := range []struct {
-		name, tag, latest string
-		want              []string
-		wantAbsent        []string
+		name, tag, published string
+		want                 []string
+		wantAbsent           []string
 	}{
 		{"first stable release", "v0.1.0", "", promote, []string{"--latest=false", "--prerelease"}},
 		{"newer patch", "v0.7.4", "v0.7.3", promote, []string{"--latest=false", "--prerelease"}},
@@ -132,9 +150,16 @@ func TestReleasePublishNeverDemotesLatestToABackport(t *testing.T) {
 		// #1414) is no ordering anchor: the stable tag reclaims Latest.
 		{"non-stable latest is ignored", "v0.8.0", "v0.9.0-rc.1", promote, []string{"--latest=false", "--prerelease"}},
 		{"prerelease stays off latest", "v0.9.0-rc.1", "v0.8.0", []string{"--prerelease", "--latest=false"}, []string{"--latest\n"}},
+		// The anchor is the newest stable release, not the release flagged
+		// Latest: with a mis-flagged RC as Latest and v0.8.0 published, a
+		// v0.7.4 backport must still stay off Latest.
+		{"anchor is newest stable not latest flag", "v0.7.4", "v0.9.0-rc.1\nv0.7.3\nv0.8.0\nv0.7.2", keep, []string{"--latest\n", "--prerelease"}},
+		{"newest among many", "v0.8.1", "v0.7.3\nv0.8.0\nv0.10.0-beta\nv0.7.2", promote, []string{"--latest=false", "--prerelease"}},
+		{"newest stable picked by version order", "v0.9.10", "v0.10.0\nv0.9.9", keep, []string{"--latest\n", "--prerelease"}},
+		{"re-run of the newest tag", "v0.8.0", "v0.8.0\nv0.7.3", promote, []string{"--latest=false", "--prerelease"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			args, out, err := runPublishStep(t, bash, publish, tc.tag, tc.latest, false)
+			args, out, err := runPublishStep(t, bash, publish, tc.tag, tc.published, false)
 			if err != nil {
 				t.Fatalf("publish step failed: %v\n%s", err, out)
 			}
@@ -167,9 +192,10 @@ func loadPublishStep(t *testing.T) string {
 }
 
 // runPublishStep executes the publish step under bash with a fake gh. The fake
-// answers `gh release list` with latest (as the tag that isLatest), or fails
-// it when listFails is set, and records the argv of `gh release create`.
-func runPublishStep(t *testing.T, bash, publish, tag, latest string, listFails bool) (createArgs string, out []byte, err error) {
+// answers `gh release list` with the newline-separated published tags (as
+// `--jq '.[].tagName'` would), or fails it when listFails is set, and records
+// the argv of `gh release create`.
+func runPublishStep(t *testing.T, bash, publish, tag, published string, listFails bool) (createArgs string, out []byte, err error) {
 	t.Helper()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin")
@@ -186,7 +212,8 @@ func runPublishStep(t *testing.T, bash, publish, tag, latest string, listFails b
 	fakeGH := `#!/bin/sh
 if [ "$1" = release ] && [ "$2" = list ]; then
   if [ -n "$FAKE_GH_LIST_FAIL" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
-  if [ -n "$FAKE_GH_LATEST" ]; then printf '%s\n' "$FAKE_GH_LATEST"; fi
+  case " $* " in *" --json tagName "*) ;; *) echo "release list must ask for --json tagName: $*" >&2; exit 2;; esac
+  if [ -n "$FAKE_GH_PUBLISHED" ]; then printf '%s\n' "$FAKE_GH_PUBLISHED"; fi
   exit 0
 fi
 if [ "$1" = release ] && [ "$2" = create ]; then
@@ -209,7 +236,7 @@ exit 2
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GITHUB_REF_NAME="+tag,
 		"GITHUB_REPOSITORY=mikkelchokolate/Veil",
-		"FAKE_GH_LATEST="+latest,
+		"FAKE_GH_PUBLISHED="+published,
 		"FAKE_GH_LIST_FAIL="+fail,
 	)
 	out, err = cmd.CombinedOutput()

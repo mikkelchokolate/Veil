@@ -37,9 +37,10 @@ All notable changes to Veil will be documented in this file.
   A stable tag cut after a newer stable line (for example `v0.7.4` after
   `v0.8.0`) used to get `--latest`, which pointed `/releases/latest`, and
   so `install.sh` and `veil update`, at the older line. The publish step now
-  compares the tag with the current Latest release using `sort -V` and
-  publishes an older tag with `--latest=false` and a warning. If the current
-  Latest can't be read, the step fails before anything is published
+  compares the tag with the newest stable release already published, using
+  `sort -V`, and publishes an older tag with `--latest=false` and a warning.
+  The comparison doesn't rely on which release carries the Latest flag. If
+  the releases can't be listed, the step fails before anything is published
   (follow-up to the #1422 review).
 - The weekly `upstream-compat` workflow now probes mita with
   `mita version`, the same subcommand the runtime catalog uses. Since #738
