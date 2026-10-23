@@ -500,14 +500,22 @@ func (s *Service) CreateWithBindingsIssuedTx(tx *Tx, c Client, bindings []Bindin
 // takes the management-state mutex, which the API layer already holds around
 // the whole mutation).
 func (s *Service) UpdateTx(tx *Tx, c Client, version int) error {
+	_, err := updateTx(tx, c, version)
+	return err
+}
+
+// updateTx is the single update sequence behind UpdateTx and Update. The
+// quota-enforcement supersede in prepareQuotaClear and the version-checked
+// UPDATE share the caller's transaction, so a rejected update (stale version,
+// validation error) rolls the supersede back with it (#1272 item 3).
+func updateTx(tx *Tx, c Client, version int) (Client, error) {
 	if err := prepareQuotaClear(tx, &c); err != nil {
-		return err
+		return Client{}, err
 	}
 	if err := validateUpdate(tx, c); err != nil {
-		return err
+		return Client{}, err
 	}
-	_, err := tx.Update(c, version)
-	return err
+	return tx.Update(c, version)
 }
 
 // DeleteTx is the transactional variant of Delete for the unified mutation
@@ -644,16 +652,18 @@ func (s *Service) List(f ListFilter) ([]View, int, error) {
 	return views, total, nil
 }
 
-// Update applies an optimistic-locking update.
+// Update applies an optimistic-locking update in its own transaction. It
+// runs the same sequence as UpdateTx, so a stale version or a validation
+// error commits nothing, including the quota-enforcement supersede (#1272
+// item 3). Like the other non-Tx wrappers it records no revision snapshot;
+// API and CLI writers go through UpdateTx inside the mutation orchestration.
 func (s *Service) Update(c Client, version int) (View, error) {
-	if err := prepareQuotaClear(s.repo, &c); err != nil {
-		return View{}, err
-	}
-	if err := validateUpdate(s.repo, c); err != nil {
-		return View{}, err
-	}
-	updated, err := s.repo.Update(c, version)
-	if err != nil {
+	var updated Client
+	if err := s.repo.WithTx(func(tx *Tx) error {
+		var err error
+		updated, err = updateTx(tx, c, version)
+		return err
+	}); err != nil {
 		return View{}, err
 	}
 	return s.toView(updated)
