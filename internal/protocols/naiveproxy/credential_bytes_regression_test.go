@@ -3,6 +3,7 @@ package naiveproxy
 import (
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -44,12 +45,12 @@ func TestLiveNaiveUsersEmitsRuntimeCredentialBytes(t *testing.T) {
 			{Name: "alice", Username: "alice", Password: " padded-cred "},
 		},
 	}
-	users := liveNaiveUsers(model.Settings{}, inbound)
+	users := caddyassembly.NaiveUsers(inbound, model.Settings{})
 	if len(users) != 1 {
-		t.Fatalf("liveNaiveUsers = %+v, want exactly one user (normalized credential overrides the trimmed-username profile)", users)
+		t.Fatalf("NaiveUsers = %+v, want exactly one user (normalized credential overrides the trimmed-username profile)", users)
 	}
 	if users[0].Username != "alice" || users[0].Password != " padded-cred " {
-		t.Fatalf("liveNaiveUsers = %+v, want stored credential bytes", users)
+		t.Fatalf("NaiveUsers = %+v, want stored credential bytes", users)
 	}
 }
 
@@ -64,8 +65,8 @@ func TestLiveNaiveUsersSkipsWhitespaceOnlyCredentials(t *testing.T) {
 			{Name: "blank-pass", Username: "bob", Password: "   "},
 		},
 	}
-	users := liveNaiveUsers(model.Settings{}, inbound)
+	users := caddyassembly.NaiveUsers(inbound, model.Settings{})
 	if len(users) != 0 {
-		t.Fatalf("liveNaiveUsers = %+v, want no users for a whitespace-only credential", users)
+		t.Fatalf("NaiveUsers = %+v, want no users for a whitespace-only credential", users)
 	}
 }

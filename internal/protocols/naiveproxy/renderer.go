@@ -4,12 +4,10 @@ import (
 	"fmt"
 	"net"
 	"strconv"
-	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
-	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -30,7 +28,6 @@ func (Plugin) RenderConfig(input generatedconfig.ProtocolRenderInput) ([]generat
 	if err != nil {
 		return nil, false, err
 	}
-	applyNaiveLiveUsers(plan, input.Settings, input.Inbounds)
 	if input.Warp.Enabled {
 		socksPort := input.Warp.SocksPort
 		if socksPort == 0 {
@@ -81,74 +78,4 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 			return []string{"caddy", "validate", "--config", path}
 		},
 	}
-}
-
-func applyNaiveLiveUsers(plan caddyassembly.CaddyRenderPlan, settings model.Settings, inbounds []model.Inbound) {
-	byName := map[string]model.Inbound{}
-	for _, inbound := range inbounds {
-		if inbound.Protocol == "naiveproxy" {
-			byName[inbound.Name] = inbound
-		}
-	}
-	for key, owner := range plan.Servers {
-		if owner.Kind != caddyassembly.CaddyOwnerNaive {
-			continue
-		}
-		inbound, ok := byName[owner.InboundName]
-		if !ok {
-			continue
-		}
-		owner.NaiveUsers = liveNaiveUsers(settings, inbound)
-		plan.Servers[key] = owner
-	}
-}
-
-// liveNaiveUsers renders the effective Caddy forward_auth user list. Stored
-// credential bytes are emitted as-is so the server authenticates exactly what
-// client export advertises; usernames match on trimmed bytes so a normalized
-// credential overrides a legacy profile with the same effective name
-// (audit #334).
-func liveNaiveUsers(settings model.Settings, inbound model.Inbound) []caddyassembly.CaddyNaiveUser {
-	var users []caddyassembly.CaddyNaiveUser
-	runtimeUsers := make(map[string]caddyassembly.CaddyNaiveUser, len(inbound.RuntimeCredentials))
-	for _, credential := range inbound.RuntimeCredentials {
-		if strings.TrimSpace(credential.Username) == "" || strings.TrimSpace(credential.Password) == "" {
-			continue
-		}
-		runtimeUsers[strings.TrimSpace(credential.Username)] = caddyassembly.CaddyNaiveUser{Username: credential.Username, Password: credential.Password}
-	}
-	for _, profile := range inbound.Profiles {
-		if !profile.Enabled || strings.TrimSpace(profile.Username) == "" || strings.TrimSpace(profile.Password) == "" {
-			continue
-		}
-		if _, replaced := runtimeUsers[strings.TrimSpace(profile.Username)]; !replaced {
-			users = append(users, caddyassembly.CaddyNaiveUser{Username: profile.Username, Password: profile.Password})
-		}
-	}
-	for _, credential := range inbound.RuntimeCredentials {
-		if user, ok := runtimeUsers[strings.TrimSpace(credential.Username)]; ok {
-			users = append(users, user)
-			delete(runtimeUsers, strings.TrimSpace(credential.Username))
-		}
-	}
-	if len(users) > 0 {
-		return users
-	}
-	if inbound.HadClientProfiles() {
-		// Profiles exist but are all disabled or were suppressed
-		// post-migration, or the normalized client store still has bindings
-		// whose credentials are all revoked/expired/depleted — the legacy
-		// fallback must not be revived (issues #1098, #1117).
-		// An EMPTY auth_credentials list means "no authentication" to the
-		// forward_proxy module (an open relay), so render a sentinel account
-		// that can never authenticate instead.
-		user, pass := model.RevokedClientCredential(settings, inbound)
-		return []caddyassembly.CaddyNaiveUser{{Username: user, Password: pass}}
-	}
-	username := naiveUsername(settings, inbound)
-	password := naivePassword(settings, inbound)
-	if username != "" && password != "" {
-		return []caddyassembly.CaddyNaiveUser{{Username: username, Password: password}}
-	}
-	return nil
 }
