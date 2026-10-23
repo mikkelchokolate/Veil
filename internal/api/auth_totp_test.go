@@ -817,58 +817,65 @@ func TestTOTPFirstEnrollOnMarkedSessionNeedsNoCode(t *testing.T) {
 // recovery codes and sessions all survive.
 func TestTOTPReenrollOverActiveFactorRequiresCurrentCode(t *testing.T) {
 	const activeSecret = "JBSWY3DPEHPK3PXP"
-	user := totpTestUser(t, "correct-password-123")
-	user.TOTPEnabled = true
-	user.TOTPSecret = activeSecret
-	user.TOTPRecoveryHashes = []string{hashRecoveryCode("AAAA-BBBB")}
-	state, now := totpTestState(t, user)
-	stolen := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
-	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(stolen.Token); err != nil {
-		t.Fatal(err)
-	}
-	owner := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
-	if _, err := state.sessionRegistry().MarkSecondFactorPersisted(owner.Token); err != nil {
-		t.Fatal(err)
-	}
-
-	// The current step is spent already (e.g. by the owner's last login):
-	// replaying it is refused like a wrong code.
-	spent := totpCode(t, activeSecret, *now)
-	state.users[0].TOTPLastStep = (*now).Unix() / totpPeriod
-
-	for name, body := range map[string]string{
-		"no body":             "",
-		"password only":       `{"password":"correct-password-123"}`,
-		"blank code":          `{"code":"   "}`,
-		"recovery code":       `{"code":"AAAA-BBBB"}`,
-		"spent code replayed": `{"code":"` + spent + `"}`,
+	// Each case runs on a fresh state: a failed code records a backoff, and
+	// a shared state would let a later case pass on the 429 without ever
+	// reaching the code or watermark check it is meant to pin.
+	for _, tc := range []struct {
+		name string
+		body func(spent string) string
+	}{
+		{"spent code replayed", func(spent string) string { return `{"code":"` + spent + `"}` }},
+		{"no body", func(string) string { return "" }},
+		{"password only", func(string) string { return `{"password":"correct-password-123"}` }},
+		{"blank code", func(string) string { return `{"code":"   "}` }},
+		{"recovery code", func(string) string { return `{"code":"AAAA-BBBB"}` }},
 	} {
-		rec := authedTOTPRequest(t, state, stolen, http.MethodPost, "/api/v1/users/me/totp/enroll", body)
-		if rec.Code != http.StatusBadRequest && rec.Code != http.StatusTooManyRequests {
-			t.Fatalf("%s: enroll status=%d body=%s, want 400/429", name, rec.Code, rec.Body.String())
-		}
-		if strings.Contains(rec.Body.String(), "otpauth") || strings.Contains(rec.Body.String(), `"secret"`) {
-			t.Fatalf("%s: gated re-enroll leaked a seed: %s", name, rec.Body.String())
-		}
-		if state.users[0].TOTPPendingSecret != "" {
-			t.Fatalf("%s: gated re-enroll stored a pending secret", name)
-		}
-	}
+		t.Run(tc.name, func(t *testing.T) {
+			user := totpTestUser(t, "correct-password-123")
+			user.TOTPEnabled = true
+			user.TOTPSecret = activeSecret
+			user.TOTPRecoveryHashes = []string{hashRecoveryCode("AAAA-BBBB")}
+			state, now := totpTestState(t, user)
+			stolen := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+			if _, err := state.sessionRegistry().MarkSecondFactorPersisted(stolen.Token); err != nil {
+				t.Fatal(err)
+			}
+			owner := mustCreateSession(t, state.sessionRegistry(), "alice", "admin")
+			if _, err := state.sessionRegistry().MarkSecondFactorPersisted(owner.Token); err != nil {
+				t.Fatal(err)
+			}
+			// The current step is spent already (e.g. by the owner's last
+			// login): replaying it is refused like a wrong code.
+			spent := totpCode(t, activeSecret, *now)
+			state.users[0].TOTPLastStep = (*now).Unix() / totpPeriod
 
-	// Confirm has no attacker-controlled pending secret to activate.
-	rec := authedTOTPRequest(t, state, stolen, http.MethodPost, "/api/v1/users/me/totp/confirm", `{"code":"123456"}`)
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("confirm without enrollment status=%d body=%s", rec.Code, rec.Body.String())
-	}
-	got := state.users[0]
-	if !got.TOTPEnabled || got.TOTPSecret != activeSecret {
-		t.Fatalf("active factor replaced: %+v", got)
-	}
-	if _, ok := consumeRecoveryCodeHash(got.TOTPRecoveryHashes, "AAAA-BBBB"); !ok {
-		t.Fatal("owner's recovery code no longer valid")
-	}
-	if _, ok := state.sessionRegistry().Get(owner.Token); !ok {
-		t.Fatal("owner session revoked by a gated re-enroll attempt")
+			rec := authedTOTPRequest(t, state, stolen, http.MethodPost, "/api/v1/users/me/totp/enroll", tc.body(spent))
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("enroll status=%d body=%s, want 400", rec.Code, rec.Body.String())
+			}
+			if strings.Contains(rec.Body.String(), "otpauth") || strings.Contains(rec.Body.String(), `"secret"`) {
+				t.Fatalf("gated re-enroll leaked a seed: %s", rec.Body.String())
+			}
+			if state.users[0].TOTPPendingSecret != "" {
+				t.Fatal("gated re-enroll stored a pending secret")
+			}
+
+			// Confirm has no attacker-controlled pending secret to activate.
+			rec = authedTOTPRequest(t, state, stolen, http.MethodPost, "/api/v1/users/me/totp/confirm", `{"code":"123456"}`)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("confirm without enrollment status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			got := state.users[0]
+			if !got.TOTPEnabled || got.TOTPSecret != activeSecret {
+				t.Fatalf("active factor replaced: %+v", got)
+			}
+			if _, ok := consumeRecoveryCodeHash(got.TOTPRecoveryHashes, "AAAA-BBBB"); !ok {
+				t.Fatal("owner's recovery code no longer valid")
+			}
+			if _, ok := state.sessionRegistry().Get(owner.Token); !ok {
+				t.Fatal("owner session revoked by a gated re-enroll attempt")
+			}
+		})
 	}
 }
 
