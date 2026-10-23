@@ -1,4 +1,4 @@
-//go:build linux
+//go:build unix
 
 package backup
 
@@ -125,6 +125,10 @@ func TestBackupCallersRejectFIFOLeafWithoutBlocking(t *testing.T) {
 		},
 		"rawStateSchemaVersionFile": func(p string) error {
 			_, err := rawStateSchemaVersionFile(p)
+			return err
+		},
+		"copySnapshotFile": func(p string) error {
+			_, err := copySnapshotFile(p, filepath.Join(t.TempDir(), "copy"), 1<<20)
 			return err
 		},
 		"prepareTarballFileWithOptions": func(p string) error {

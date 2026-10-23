@@ -1,4 +1,4 @@
-//go:build linux
+//go:build unix
 
 package backup
 
@@ -17,7 +17,8 @@ import (
 // (#1254 F5, the #1083 class). A FIFO, directory, device or socket is refused
 // after fstat on the held descriptor, so it is never handed to a reader as an
 // empty file. O_NONBLOCK is cleared before returning so callers keep normal
-// blocking read semantics.
+// blocking read semantics. The same code runs on every unix GOOS, so a
+// non-Linux build gets the same prevention rather than only detection.
 func openBackupRegularNoFollow(path string) (*os.File, error) {
 	fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW|unix.O_NONBLOCK, 0)
 	if err != nil {
@@ -25,7 +26,7 @@ func openBackupRegularNoFollow(path string) (*os.File, error) {
 	}
 	var st unix.Stat_t
 	if err := unix.Fstat(fd, &st); err != nil {
-		return nil, errors.Join(err, unix.Close(fd))
+		return nil, errors.Join(fmt.Errorf("open backup file %s: fstat: %w", path, err), unix.Close(fd))
 	}
 	if st.Mode&unix.S_IFMT != unix.S_IFREG {
 		return nil, errors.Join(
@@ -34,7 +35,7 @@ func openBackupRegularNoFollow(path string) (*os.File, error) {
 		)
 	}
 	if err := unix.SetNonblock(fd, false); err != nil {
-		return nil, errors.Join(err, unix.Close(fd))
+		return nil, errors.Join(fmt.Errorf("open backup file %s: clear O_NONBLOCK: %w", path, err), unix.Close(fd))
 	}
 	file := os.NewFile(uintptr(fd), path)
 	if file == nil {
