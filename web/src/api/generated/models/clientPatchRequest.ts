@@ -58,7 +58,10 @@ export interface ClientPatchRequest {
      * @nullable
      */
   email?: string | null;
-  /** @nullable */
+  /**
+     * Whether the client is enabled; null clears to the default (true), the same default create applies.
+     * @nullable
+     */
   enabled?: boolean | null;
   /**
      * Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).

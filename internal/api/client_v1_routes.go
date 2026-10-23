@@ -792,7 +792,10 @@ func (s *managementState) handleV1UpdateClient(w http.ResponseWriter, r *http.Re
 		c.Email = optionalStringPatch(req.Email)
 	}
 	if req.Enabled.Present {
-		c.Enabled = !req.Enabled.Null && req.Enabled.Value
+		// Explicit null clears to the documented default, which is the same
+		// default create applies to an omitted/null enabled: true. Mapping
+		// null to false silently disabled the client (#1450).
+		c.Enabled = req.Enabled.Null || req.Enabled.Value
 	}
 	if req.GroupID.Present {
 		c.GroupID = optionalStringPatch(req.GroupID)

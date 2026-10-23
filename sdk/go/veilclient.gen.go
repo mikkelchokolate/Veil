@@ -1951,8 +1951,10 @@ type ClientPatchRequest struct {
 	DeviceLimit nullable.Nullable[int] `json:"deviceLimit,omitempty"`
 
 	// Email Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.
-	Email   nullable.Nullable[string] `json:"email,omitempty"`
-	Enabled nullable.Nullable[bool]   `json:"enabled,omitempty"`
+	Email nullable.Nullable[string] `json:"email,omitempty"`
+
+	// Enabled Whether the client is enabled; null clears to the default (true), the same default create applies.
+	Enabled nullable.Nullable[bool] `json:"enabled,omitempty"`
 
 	// ExpiresAt Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.
 	ExpiresAt nullable.Nullable[int64] `json:"expiresAt,omitempty"`

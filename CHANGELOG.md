@@ -6,6 +6,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `PATCH /api/v1/clients/{id}` with `"enabled": null` no longer disables
+  the client. Null used to map to `false`, which took the client offline,
+  while create treats a null or omitted `enabled` as the default `true` and
+  the schema says explicit null clears to the default. A null now clears to
+  `true`, the same as create. An omitted `enabled` still keeps the stored
+  value and an explicit `false` still disables. Integrators who sent null to
+  disable a client must send `false` instead (#1450).
 - `veil admin set` on an existing user no longer strips that user's second
   factors. It used to rebuild the record from the username, password, role
   and locale only, so a password or role change (the documented CLI path)

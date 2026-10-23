@@ -887,7 +887,7 @@ export const PatchApiV1ClientsIdBody = zod.object({
   "version": zod.int().min(1).describe('Optimistic concurrency version.'),
   "name": zod.string().optional(),
   "email": zod.string().max(patchApiV1ClientsIdBodyEmailMax).nullish().describe('Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.'),
-  "enabled": zod.boolean().nullish(),
+  "enabled": zod.boolean().nullish().describe('Whether the client is enabled; null clears to the default (true), the same default create applies.'),
   "groupId": zod.string().max(patchApiV1ClientsIdBodyGroupIdMax).nullish().describe('Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).'),
   "quotaBytes": zod.int().min(patchApiV1ClientsIdBodyQuotaBytesMin).max(patchApiV1ClientsIdBodyQuotaBytesMax).nullish(),
   "quotaResetPolicy": zod.union([zod.literal('never'),zod.literal('daily'),zod.literal('weekly'),zod.literal('monthly'),zod.literal(null)]).nullish(),
