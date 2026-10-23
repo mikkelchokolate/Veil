@@ -30,6 +30,10 @@ const expirationMinLoopWait = time.Second
 // reconciler, so this only bounds the re-check when no signal arrives (#1423).
 const expirationPausedRetryInterval = 30 * time.Second
 
+// expirationPausedReminderPasses repeats the paused log line every 10
+// paused checks (5 minutes at the 30 s retry interval).
+const expirationPausedReminderPasses = 10
+
 var errExpirationEnforcementPaused = errors.New("expiration enforcement paused while runtime verification is unknown")
 
 type expirationReconciler struct {
@@ -48,19 +52,22 @@ func (r *expirationReconciler) Start() {
 	r.cancel = cancel
 	go func() {
 		defer close(r.done)
-		paused := false
+		pausedPasses := 0
 		for {
 			wait := expirationSafetySweepInterval
 			if r.state.expirationEnforcementPaused() {
 				// Nothing can be enforced until the pause clears; polling the
 				// due set would only log the same refusal per client per pass.
-				if !paused {
+				// Log on entering the pause and then every
+				// expirationPausedReminderPasses checks so a long pause is
+				// not silent.
+				if pausedPasses%expirationPausedReminderPasses == 0 {
 					log.Printf("client expiry reconciliation: %v", errExpirationEnforcementPaused)
 				}
-				paused = true
+				pausedPasses++
 				wait = expirationPausedRetryInterval
 			} else {
-				paused = false
+				pausedPasses = 0
 				if err := r.ReconcileOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
 					log.Printf("client expiry reconciliation: %v", err)
 				}

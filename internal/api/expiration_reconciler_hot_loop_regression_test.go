@@ -83,11 +83,15 @@ func TestExpirationReconcilerBacksOffWhileEnforcementPaused(t *testing.T) {
 	_, state := newApplyTrackedRouterWithState(t)
 	state.expirationReconciler.Stop()
 	due := time.Now().UTC().Unix() - 5
-	row, err := state.clientRepo.Create(client.Client{
-		Name: "due-paused", Enabled: true, QuotaResetPolicy: client.ResetNever, ExpiresAt: &due,
-	})
-	if err != nil {
-		t.Fatal(err)
+	var ids []string
+	for i := 0; i < 3; i++ {
+		row, err := state.clientRepo.Create(client.Client{
+			Name: fmt.Sprintf("due-paused-%d", i), Enabled: true, QuotaResetPolicy: client.ResetNever, ExpiresAt: &due,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, row.ID)
 	}
 	state.mu.Lock()
 	state.runtimeVerificationUnknown = true
@@ -104,12 +108,16 @@ func TestExpirationReconcilerBacksOffWhileEnforcementPaused(t *testing.T) {
 	state.mu.Unlock()
 	reconciler.Start()
 	defer reconciler.Stop()
-	time.Sleep(500 * time.Millisecond)
-	if n := strings.Count(logs.String(), "client expiry"); n > 2 {
-		t.Fatalf("reconciler logged %d expiry lines in 500ms while paused; want a backoff, not a hot loop", n)
+	// Longer than expirationMinLoopWait, with several due clients: only the
+	// paused short-circuit keeps this at a single line. The 1 s floor alone
+	// would re-list the due set and log one refusal per client per second.
+	time.Sleep(expirationMinLoopWait + 500*time.Millisecond)
+	if n := strings.Count(logs.String(), "client expiry"); n != 1 {
+		t.Fatalf("reconciler logged %d expiry lines in %v while paused with %d due clients; want exactly one pause line\n%s",
+			n, expirationMinLoopWait+500*time.Millisecond, len(ids), logs.String())
 	}
 	var rows int
-	if err := state.db.QueryRow(`SELECT COUNT(*) FROM expiration_enforcement WHERE client_id=?`, row.ID).Scan(&rows); err != nil {
+	if err := state.db.QueryRow(`SELECT COUNT(*) FROM expiration_enforcement`).Scan(&rows); err != nil {
 		t.Fatal(err)
 	}
 	if rows != 0 {
@@ -122,13 +130,13 @@ func TestExpirationReconcilerBacksOffWhileEnforcementPaused(t *testing.T) {
 	reconciler.Signal()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if err := state.db.QueryRow(`SELECT COUNT(*) FROM expiration_enforcement WHERE client_id=?`, row.ID).Scan(&rows); err != nil {
+		if err := state.db.QueryRow(`SELECT COUNT(DISTINCT client_id) FROM expiration_enforcement`).Scan(&rows); err != nil {
 			t.Fatal(err)
 		}
-		if rows > 0 {
+		if rows == len(ids) {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("reconciler did not resume enforcement after the pause cleared and it was signalled")
+	t.Fatalf("reconciler reserved enforcement for %d of %d clients after the pause cleared and it was signalled", rows, len(ids))
 }
