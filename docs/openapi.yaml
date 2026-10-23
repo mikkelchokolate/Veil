@@ -4095,6 +4095,8 @@ paths:
                   - detach_inbound
                 clientIds:
                   type: array
+                  maxItems: 500
+                  description: At most 500 client ids (one full client list page) per request; more is rejected with 400 before anything is applied.
                   items:
                     type: string
                 days:
@@ -4113,6 +4115,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClientBulkResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '409':
           $ref: '#/components/responses/Conflict'
         '422':

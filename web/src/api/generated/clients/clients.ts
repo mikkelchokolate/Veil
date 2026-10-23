@@ -353,7 +353,7 @@ export const getPostApiV1ClientsBulkQueryKey = (postApiV1ClientsBulkBody?: PostA
     }
 
 
-export const getPostApiV1ClientsBulkQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
+export const getPostApiV1ClientsBulkQueryOptions = <TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -372,10 +372,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type PostApiV1ClientsBulkQueryResult = NonNullable<Awaited<ReturnType<typeof postApiV1ClientsBulk>>>
-export type PostApiV1ClientsBulkQueryError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
+export type PostApiV1ClientsBulkQueryError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse
 
 
-export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1ClientsBulk>>,
@@ -385,7 +385,7 @@ export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof postApiV1ClientsBulk>>,
@@ -395,7 +395,7 @@ export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postAp
       >, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -403,7 +403,7 @@ export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postAp
  * @summary Bulk action across clients; per-client results
  */
 
-export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
+export function usePostApiV1ClientsBulk<TData = Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError = BadRequestResponse | ConflictResponse | ValidationFailedResponse | LockedResponse | ServiceUnavailableResponse>(
  postApiV1ClientsBulkBody: PostApiV1ClientsBulkBody, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof postApiV1ClientsBulk>>, TError, TData>>, request?: SecondParameter<typeof apiFetch>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

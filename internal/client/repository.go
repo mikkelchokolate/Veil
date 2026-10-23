@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -318,6 +319,13 @@ func (q queries) List(f ListFilter) ([]Client, int, error) {
 	}
 	if size < 1 {
 		size = 25
+	}
+	// (page-1)*size overflows int for a huge page, and SQLite clamps a
+	// negative OFFSET to 0, so the product used to wrap back to page 1 (or
+	// any other page) instead of past the end (#1272 item 5). No table holds
+	// MaxInt rows, so such a page is always empty.
+	if page-1 > math.MaxInt/size {
+		return nil, total, nil
 	}
 	order := "created_at DESC"
 	switch f.Sort {

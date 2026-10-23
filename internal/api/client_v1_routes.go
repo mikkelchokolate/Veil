@@ -151,6 +151,14 @@ type v1BulkResult struct {
 	IssuedCredentials []client.IssuedCredential `json:"issuedCredentials,omitempty"`
 }
 
+// maxV1BulkClientIDs caps clientIds per bulk request (#1272 item 1). The
+// whole bulk runs as one transaction with a savepoint+Get+Update per id while
+// withClientMutation holds s.mu, so the 1 MB body cap alone (~33k ids) let a
+// single admin request stall every serialized client mutation. The SPA sends
+// the ids selected on one list page, which holds at most
+// maxV1ClientListPageSize clients, so the cap matches that page size.
+const maxV1BulkClientIDs = maxV1ClientListPageSize
+
 // handleV1Bulk applies one action to many clients. Per-client failures roll
 // back only that client (SQLite savepoints inside ONE transaction); the whole
 // bulk then commits atomically together with the desired-revision bump and the
@@ -170,6 +178,10 @@ func (s *managementState) handleV1Bulk(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Action == "" || len(req.ClientIDs) == 0 {
 		writeError(w, "action and clientIds are required", http.StatusBadRequest)
+		return
+	}
+	if len(req.ClientIDs) > maxV1BulkClientIDs {
+		writeError(w, fmt.Sprintf("clientIds must list at most %d clients per request", maxV1BulkClientIDs), http.StatusBadRequest)
 		return
 	}
 	if req.Action == "extend" || req.Action == "extend_expiry" {
