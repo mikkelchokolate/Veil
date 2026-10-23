@@ -42,6 +42,17 @@ for cross_goos in windows darwin freebsd; do
   ci_run "${cross_goos}-cross-compile" env GOOS="${cross_goos}" GOARCH=amd64 go build ./...
 done
 
+# Test files are not covered by `go build`: an untagged *_test.go that reaches
+# for a Linux-only symbol (backupStatfs, Stat_t.Ctim) leaves the package's test
+# binary uncompilable elsewhere, so the *_unix_test.go coverage it carries is
+# type-checked on Linux only (#1391 review). `go vet` type-checks test files
+# too, so it gates them for the other unix targets. Windows is not in this list
+# yet: several packages' tests still use unix-only syscalls (Flock, Kill,
+# Mkfifo, Rlimit) untagged; extend the list once they are split out.
+for cross_goos in darwin freebsd; do
+  ci_run "${cross_goos}-cross-vet-tests" env GOOS="${cross_goos}" GOARCH=amd64 go vet ./...
+done
+
 GOBIN_PATH="$(go env GOPATH)/bin"
 export PATH="${GOBIN_PATH}:${PATH}"
 

@@ -4,11 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 func TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence(t *testing.T) {
@@ -25,8 +25,14 @@ func TestUpdateRecoveryAcceptsOnlyExactHelperCommittedEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	stat := info.Sys().(*syscall.Stat_t)
-	inode := fmt.Sprintf("%d:%d:%d:%d", stat.Dev, stat.Ino, stat.Ctim.Sec, stat.Ctim.Nsec)
+	// safefs.FileIdentity is the dev:ino:ctime tag the helper records; its
+	// per-platform format (Ctim on Linux, Ctimespec on the BSDs/darwin) is
+	// pinned in internal/safefs. Using it here keeps this test compiling on
+	// every unix the cross-compile gate covers.
+	inode, ok := safefs.FileIdentity(info)
+	if !ok {
+		t.Skip("platform supplies no inode identity for helper evidence")
+	}
 	digestBytes := sha256.Sum256(binary)
 	digest := hex.EncodeToString(digestBytes[:])
 	manifestPath := filepath.Join(root, ".veil-update-evidence.json")
