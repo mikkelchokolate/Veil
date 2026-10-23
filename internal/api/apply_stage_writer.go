@@ -5,8 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/atomicfile"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
@@ -83,6 +85,13 @@ func writeApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 		}
 	}
 	renderedPaths := sortedRenderedPaths(rendered)
+	// Every path is checked before any rendered body is written, so one bad
+	// path cannot leave a partially written set behind (#1273).
+	for _, path := range renderedPaths {
+		if err := validateStagedRenderedPath(input.ApplyRoot, path); err != nil {
+			return nil, nil, nil, nil, err
+		}
+	}
 	for _, path := range renderedPaths {
 		body := []byte(rendered[path])
 		if err := atomicfile.Write(path, body, 0o600, 0o700); err != nil {
@@ -97,6 +106,36 @@ func writeApplyStage(input ApplyStageInput) ([]string, []ConfigValidationResult,
 	}
 	validations := validate(renderedPaths)
 	return written, validations, renderedPaths, digests, nil
+}
+
+// validateStagedRenderedPath confines a renderer-supplied path to the
+// staging tree. Renderers only emit fixed artifact subpaths or names derived
+// from inbounds.IsSafeName, and promotion re-checks every path, but the write
+// itself happens here, before promotion, as the veil uid. So a renderer that
+// ever emits a `..` or absolute subpath must not be able to write outside
+// <applyRoot>/generated (#1273). The path must be canonical (filepath.Clean
+// leaves it unchanged), strictly beneath <applyRoot>/generated, and outside
+// generated/veil. That directory holds this writer's own plan and state
+// files, which a rendered artifact must not overwrite. The check is lexical
+// only. It is not a symlink defence: a link already planted under the
+// veil-writable generated tree would still redirect a write, and promotion's
+// own path checks remain the boundary for that.
+func validateStagedRenderedPath(applyRoot, path string) error {
+	if filepath.Clean(path) != path {
+		return fmt.Errorf("rendered config path %q is not canonical", path)
+	}
+	generatedRoot := filepath.Join(applyRoot, "generated")
+	// filepath.Rel errors when exactly one side is absolute, so a relative
+	// path under an absolute root (or the reverse) is rejected by err below.
+	rel, err := filepath.Rel(generatedRoot, path)
+	if err != nil || rel == "." || rel == ".." || filepath.IsAbs(rel) ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("rendered config path %q is outside the staging root %q", path, generatedRoot)
+	}
+	if rel == "veil" || strings.HasPrefix(rel, "veil"+string(filepath.Separator)) {
+		return fmt.Errorf("rendered config path %q targets the reserved stage directory", path)
+	}
+	return nil
 }
 
 func stagedBodyDigest(body []byte) string {
