@@ -6,6 +6,11 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Root-helper backup reads (archive inspection, decrypt, metadata digests,
+  `state.json` schema probes, restore staging) no longer hang if a file under
+  the backups tree is swapped for a FIFO between the check and the open. The
+  open uses `O_NONBLOCK` and refuses anything that is not a regular file
+  (FIFO, directory, device, socket) on the held descriptor (#1254).
 - Source-built `main-<short SHA> (<full SHA>)` installations can update through
   the Panel or CLI without forcing when GitHub proves the running commit is
   included in the target release. The downloaded signed provenance is bound
