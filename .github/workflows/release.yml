@@ -413,7 +413,9 @@ jobs:
           # before #1414) neither blocks nor misleads the comparison.
           # Ordering is by version (sort -V), so v0.10.0 > v0.9.9. If the
           # releases cannot be listed, the step fails before publishing
-          # anything (set -e) instead of guessing.
+          # anything (set -e) instead of guessing. The list is newest-first
+          # and capped at 1000; past that many non-prerelease releases the
+          # anchor could fall off the page, so raise the limit before then.
           stable='^v[0-9]+\.[0-9]+\.[0-9]+$'
           if [[ "${GITHUB_REF_NAME}" =~ ${stable} ]]; then
             published="$(gh release list --repo "${GITHUB_REPOSITORY}" \

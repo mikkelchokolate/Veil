@@ -212,7 +212,9 @@ func runPublishStep(t *testing.T, bash, publish, tag, published string, listFail
 	fakeGH := `#!/bin/sh
 if [ "$1" = release ] && [ "$2" = list ]; then
   if [ -n "$FAKE_GH_LIST_FAIL" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
-  case " $* " in *" --json tagName "*) ;; *) echo "release list must ask for --json tagName: $*" >&2; exit 2;; esac
+  json=""; prev=""
+  for a in "$@"; do [ "$prev" = --json ] && json="$a"; prev="$a"; done
+  case ",$json," in *,tagName,*) ;; *) echo "release list must ask for --json with tagName: $*" >&2; exit 2;; esac
   if [ -n "$FAKE_GH_PUBLISHED" ]; then printf '%s\n' "$FAKE_GH_PUBLISHED"; fi
   exit 0
 fi
