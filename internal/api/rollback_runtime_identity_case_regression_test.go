@@ -3,7 +3,10 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 // rollbackCaseFixture creates one hysteria2 client binding, stores a mutated
@@ -142,5 +145,33 @@ func assertRollbackIdentity(t *testing.T, state *managementState, bindingID, wan
 		if binding.ID == bindingID && binding.RuntimeIdentity != want {
 			t.Errorf("stored revision runtime identity = %q, want %q", binding.RuntimeIdentity, want)
 		}
+	}
+}
+
+// The post-graft check is unreachable through HTTP (every retained binding
+// carries its lowercased live identity), so pin it directly (#1273).
+func TestValidateRollbackRuntimeIdentities(t *testing.T) {
+	binding := func(id, inbound, identity string) model.BindingSnapshot {
+		return model.BindingSnapshot{ID: id, InboundID: inbound, RuntimeIdentity: identity}
+	}
+	tests := []struct {
+		name     string
+		bindings []model.BindingSnapshot
+		wantErr  bool
+	}{
+		{name: "valid", bindings: []model.BindingSnapshot{binding("a", "in", "ok_id"), binding("b", "in", "other-id"), binding("c", "in2", "ok_id")}},
+		{name: "mixed_case", bindings: []model.BindingSnapshot{binding("a", "in", "Mixed_ID")}, wantErr: true},
+		{name: "empty", bindings: []model.BindingSnapshot{binding("a", "in", "")}, wantErr: true},
+		{name: "too_long", bindings: []model.BindingSnapshot{binding("a", "in", strings.Repeat("a", 49))}, wantErr: true},
+		{name: "invalid_char", bindings: []model.BindingSnapshot{binding("a", "in", "bad.id")}, wantErr: true},
+		{name: "duplicate_per_inbound", bindings: []model.BindingSnapshot{binding("a", "in", "same"), binding("b", "in", "same")}, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := validateRollbackRuntimeIdentities(managementSnapshot{Bindings: test.bindings})
+			if (err != nil) != test.wantErr {
+				t.Fatalf("validateRollbackRuntimeIdentities err = %v, wantErr %v", err, test.wantErr)
+			}
+		})
 	}
 }

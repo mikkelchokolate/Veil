@@ -494,12 +494,21 @@ func graftRollbackClientSecurityTx(tx *client.Tx, selected *managementSnapshot) 
 }
 
 // validateRollbackRuntimeIdentities checks the post-graft bindings against
-// client.ValidateRuntimeIdentity, the canonical lowercase-only rule (#1273).
+// client.ValidateRuntimeIdentity, the canonical lowercase-only rule, and
+// against per-inbound uniqueness (#1273). Every retained binding carries its
+// lowercased live identity, so this is defensive: it holds the exact rows
+// ReplaceSnapshotTx writes to the rule every live writer enforces.
 func validateRollbackRuntimeIdentities(snapshot managementSnapshot) error {
+	seen := make(map[string]string, len(snapshot.Bindings))
 	for _, binding := range snapshot.Bindings {
 		if err := client.ValidateRuntimeIdentity(binding.RuntimeIdentity); err != nil {
 			return fmt.Errorf("binding %q: %v", binding.ID, err)
 		}
+		key := binding.InboundID + "\x00" + binding.RuntimeIdentity
+		if previous, duplicate := seen[key]; duplicate {
+			return fmt.Errorf("bindings %q and %q duplicate runtime identity for inbound %q", previous, binding.ID, binding.InboundID)
+		}
+		seen[key] = binding.ID
 	}
 	return nil
 }
