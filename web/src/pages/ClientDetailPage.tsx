@@ -72,13 +72,24 @@ type Tab = "overview" | "access" | "subscription" | "traffic" | "audit";
  * the form and converted with integer parsing (never Number() on raw bytes)
  * to avoid float precision loss on large quotas. Built per-render so the
  * validation messages follow the active locale. */
-function buildEditSchema(t: (key: string) => string) {
+function buildEditSchema(
+	t: (key: string) => string,
+	storedEmail: () => string = () => "",
+) {
+	const emailFormat = z.string().email();
 	return z.object({
 		name: z.string().min(1, t("clientDetail.validation.nameRequired")),
+		// The stored email is accepted as-is: a value saved before the server
+		// validated email (#1272 item 7) must not block saving other fields.
+		// An unchanged field is not sent in the PATCH; the server only checks
+		// values that change.
 		email: z
 			.string()
-			.email(t("clientDetail.validation.invalidEmail"))
-			.or(z.literal("")),
+			.refine(
+				(v) =>
+					v === "" || v === storedEmail() || emailFormat.safeParse(v).success,
+				t("clientDetail.validation.invalidEmail"),
+			),
 		enabled: z.boolean(),
 		quotaBytes: z
 			.string()
@@ -292,8 +303,10 @@ export function ClientDetailPage() {
 	}
 
 	// S3: edit form (RHF + Zod), populated from the loaded client.
+	const storedEmail = useRef("");
+	storedEmail.current = client.data?.email ?? "";
 	const form = useForm<EditValues>({
-		resolver: zodResolver(buildEditSchema(t)),
+		resolver: zodResolver(buildEditSchema(t, () => storedEmail.current)),
 		defaultValues: {
 			name: "",
 			email: "",
@@ -790,7 +803,11 @@ export function ClientDetailPage() {
 					</p>
 
 					{isAdmin ? (
+						// noValidate: the Zod schema is the single source of truth. The
+						// browser's type="email" check would otherwise block saving any
+						// field while an unchanged legacy email is stored (#1272 item 7).
 						<form
+							noValidate
 							onSubmit={form.handleSubmit((v) => save.mutate(v))}
 							style={{ marginTop: 16, maxWidth: 480 }}
 						>

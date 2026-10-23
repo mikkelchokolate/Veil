@@ -292,9 +292,9 @@ func validateCore(c Client) error {
 	return nil
 }
 
-// ValidateRestoredClient applies the same domain rules every API and
-// migration writer enforces (validate) to a client row restored from an
-// immutable revision snapshot. A rollback must not commit values the live
+// ValidateRestoredClient applies the runtime-relevant domain rules every API
+// and migration writer enforces (validateCore, not the full validate) to a
+// client row restored from an immutable revision snapshot. A rollback must not commit values the live
 // write path would refuse: some (deviceLimit=0, quotaBytes<0, an unknown
 // reset policy) would only be caught by the storage triggers as an opaque
 // failure, and others (a non-positive expiresAt, an over-range quota, a

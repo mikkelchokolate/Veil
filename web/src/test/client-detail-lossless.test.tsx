@@ -87,8 +87,8 @@ function renderClientDetail() {
 	);
 }
 
-function installStatefulClientAPI() {
-	let client = fullyPopulatedClient();
+function installStatefulClientAPI(overrides: JSONRecord = {}) {
+	let client = { ...fullyPopulatedClient(), ...overrides };
 	const initial = clone(client);
 	const requests: Array<{ method: string; path: string; body: JSONRecord }> =
 		[];
@@ -253,6 +253,37 @@ describe("ClientDetailPage lossless UI mutations", () => {
 		expectDurableRecordUnchanged(api.initial, api.current(), {
 			name: "Renamed Only",
 		});
+	});
+
+	it("keeps a legacy stored email that is not a valid address editable", async () => {
+		// #1272 item 7: the server grandfathers an unchanged stored email, so
+		// the form must not refuse to save other fields over it.
+		const api = installStatefulClientAPI({ email: "legacy contact" });
+		const user = userEvent.setup();
+		renderClientDetail();
+		const name = await screen.findByLabelText(/^name$/i, {}, uiLoadTimeout);
+		await user.clear(name);
+		await user.type(name, "Renamed Legacy");
+		await user.click(screen.getByRole("button", { name: /save changes/i }));
+		await waitFor(() =>
+			expect(api.requests.some((r) => r.path === "/client")).toBe(true),
+		);
+		expect(api.requests.find((r) => r.path === "/client")?.body).toEqual({
+			version: 1,
+			name: "Renamed Legacy",
+		});
+	});
+
+	it("still rejects a changed email that is not a valid address", async () => {
+		const api = installStatefulClientAPI();
+		const user = userEvent.setup();
+		renderClientDetail();
+		const email = await screen.findByLabelText(/email/i, {}, uiLoadTimeout);
+		await user.clear(email);
+		await user.type(email, "not an email");
+		await user.click(screen.getByRole("button", { name: /save changes/i }));
+		expect(await screen.findByText(/invalid email/i)).toBeInTheDocument();
+		expect(api.requests.some((r) => r.path === "/client")).toBe(false);
 	});
 
 	it("sends explicit null when nullable form fields are cleared", async () => {
