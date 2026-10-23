@@ -121,7 +121,126 @@ var ErrValidation = errors.New("client: validation error")
 // and the SPA's form schemas) instead of being represented imprecisely.
 const MaxQuotaBytes int64 = 1<<53 - 1
 
+// Free-text metadata limits (#1272 item 7). email, groupId and notes are
+// operator-supplied labels with no runtime effect, but they are echoed into
+// the SPA, the audit log and exports, so control characters, invalid UTF-8
+// and unbounded sizes are refused at the same boundary as the name rules.
+const (
+	// MaxClientEmailBytes is the RFC 5321 forward-path limit for an address.
+	MaxClientEmailBytes = 254
+	// MaxClientGroupIDRunes matches the display-name limit.
+	MaxClientGroupIDRunes = 128
+	// MaxClientNotesRunes bounds the free-form notes field.
+	MaxClientNotesRunes = 4096
+)
+
+// validate applies every domain rule to a client written as new (create,
+// migration).
 func validate(c Client) error {
+	if err := validateCore(c); err != nil {
+		return err
+	}
+	return validateClientText(c, nil)
+}
+
+type clientGetter interface {
+	Get(id string) (Client, error)
+}
+
+// validateUpdate applies the domain rules to an updated row. The free-text
+// limits are checked only for fields the update changes: a row written by a
+// build that predates them keeps its stored email/groupId/notes, so toggling
+// enabled (including a bulk toggle) or editing another field still works,
+// while any new value has to pass.
+func validateUpdate(store clientGetter, c Client) error {
+	if err := validateCore(c); err != nil {
+		return err
+	}
+	existing, err := store.Get(c.ID)
+	if err != nil {
+		return err
+	}
+	return validateClientText(c, &existing)
+}
+
+func validateClientText(c Client, existing *Client) error {
+	if c.Email != nil && (existing == nil || !sameStringPtr(existing.Email, c.Email)) {
+		if err := validateLabelText("email", *c.Email, MaxClientEmailBytes, false); err != nil {
+			return err
+		}
+	}
+	if c.GroupID != nil && (existing == nil || !sameStringPtr(existing.GroupID, c.GroupID)) {
+		if err := validateLabelText("groupId", *c.GroupID, MaxClientGroupIDRunes, true); err != nil {
+			return err
+		}
+	}
+	if existing == nil || existing.Notes != c.Notes {
+		if err := validateNotes(c.Notes); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateLabelText enforces the single-line label rules shared with the
+// display name: valid UTF-8, no surrounding whitespace, no control or format
+// characters, and a size cap (in runes, or in bytes for email, whose limit is
+// defined in octets).
+func validateLabelText(field, value string, limit int, runes bool) error {
+	if !utf8.ValidString(value) || strings.TrimSpace(value) != value {
+		return fmt.Errorf("%w: %s must be valid Unicode without surrounding whitespace", ErrValidation, field)
+	}
+	if runes && utf8.RuneCountInString(value) > limit {
+		return fmt.Errorf("%w: %s must be at most %d characters", ErrValidation, field, limit)
+	}
+	if !runes && len(value) > limit {
+		return fmt.Errorf("%w: %s must be at most %d bytes", ErrValidation, field, limit)
+	}
+	for _, char := range value {
+		if unicode.Is(unicode.C, char) {
+			return fmt.Errorf("%w: %s must not contain control or format characters", ErrValidation, field)
+		}
+	}
+	return nil
+}
+
+// validateNotes allows multi-line text (tab, LF, CR) and the format
+// characters real text needs (ZWJ emoji sequences, soft hyphens), but refuses
+// other C0/C1 controls and the bidi embedding/override/isolate controls that
+// can make an audit or log line read differently from its bytes.
+func validateNotes(notes string) error {
+	if !utf8.ValidString(notes) {
+		return fmt.Errorf("%w: notes must be valid UTF-8", ErrValidation)
+	}
+	if utf8.RuneCountInString(notes) > MaxClientNotesRunes {
+		return fmt.Errorf("%w: notes must be at most %d characters", ErrValidation, MaxClientNotesRunes)
+	}
+	for _, char := range notes {
+		switch {
+		case char == '\t' || char == '\n' || char == '\r':
+		case unicode.Is(unicode.Cc, char):
+			return fmt.Errorf("%w: notes must not contain control characters other than tab and line breaks", ErrValidation)
+		case isBidiControl(char):
+			return fmt.Errorf("%w: notes must not contain bidirectional control characters", ErrValidation)
+		}
+	}
+	return nil
+}
+
+func isBidiControl(r rune) bool {
+	return (r >= '\u202a' && r <= '\u202e') || (r >= '\u2066' && r <= '\u2069') ||
+		r == '\u200e' || r == '\u200f' || r == '\u061c'
+}
+
+func sameStringPtr(a, b *string) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+// validateCore holds the rules that do not depend on the stored row.
+func validateCore(c Client) error {
 	if c.Name == "" {
 		return fmt.Errorf("%w: name is required", ErrValidation)
 	}
@@ -181,8 +300,15 @@ func validate(c Client) error {
 // failure, and others (a non-positive expiresAt, an over-range quota, a
 // malformed name, depletion without a quota) are not caught by storage at
 // all (#1270).
+//
+// The free-text limits on email/groupId/notes (#1272 item 7) are not applied
+// here. Those fields have no runtime effect, revision snapshots are written
+// only by the server, and a snapshot taken before the limits existed may
+// legitimately carry a value they now refuse; vetoing a recovery rollback
+// over a note would be worse than restoring it. The next live edit of the
+// field has to pass the limits (validateUpdate).
 func ValidateRestoredClient(c Client) error {
-	return validate(c)
+	return validateCore(c)
 }
 
 type quotaClearStore interface {
@@ -377,7 +503,7 @@ func (s *Service) UpdateTx(tx *Tx, c Client, version int) error {
 	if err := prepareQuotaClear(tx, &c); err != nil {
 		return err
 	}
-	if err := validate(c); err != nil {
+	if err := validateUpdate(tx, c); err != nil {
 		return err
 	}
 	_, err := tx.Update(c, version)
@@ -523,7 +649,7 @@ func (s *Service) Update(c Client, version int) (View, error) {
 	if err := prepareQuotaClear(s.repo, &c); err != nil {
 		return View{}, err
 	}
-	if err := validate(c); err != nil {
+	if err := validateUpdate(s.repo, c); err != nil {
 		return View{}, err
 	}
 	updated, err := s.repo.Update(c, version)

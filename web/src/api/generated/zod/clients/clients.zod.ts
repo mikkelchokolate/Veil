@@ -123,27 +123,33 @@ export const PostApiV1ClientsHeader = zod.object({
   "Idempotency-Key": zod.string().min(1).max(postApiV1ClientsHeaderIdempotencyKeyMax).regex(postApiV1ClientsHeaderIdempotencyKeyRegExp).optional().describe('Optional replay key for create, update, and destructive operations. Reuse with a different payload returns 409.')
 })
 
+export const postApiV1ClientsBodyEmailMax = 254;
+
+export const postApiV1ClientsBodyGroupIdMax = 128;
+
 export const postApiV1ClientsBodyQuotaBytesMin = 0;
 export const postApiV1ClientsBodyQuotaBytesMax = 9007199254740991;
 
 
 
 
+export const postApiV1ClientsBodyNotesMax = 4096;
+
 export const postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp = new RegExp('^[a-z0-9_-]{1,48}$');
 
 
 export const PostApiV1ClientsBody = zod.object({
   "name": zod.string(),
-  "email": zod.string().nullish(),
+  "email": zod.string().max(postApiV1ClientsBodyEmailMax).nullish().describe('Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.'),
   "enabled": zod.boolean().optional(),
-  "groupId": zod.string().nullish(),
+  "groupId": zod.string().max(postApiV1ClientsBodyGroupIdMax).nullish().describe('Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).'),
   "quotaBytes": zod.int().min(postApiV1ClientsBodyQuotaBytesMin).max(postApiV1ClientsBodyQuotaBytesMax).nullish(),
   "quotaResetPolicy": zod.enum(['never', 'daily', 'weekly', 'monthly']).optional(),
   "quotaResetAt": zod.int().nullish(),
   "expiresAt": zod.int().min(1).nullish().describe('Unix expiry timestamp; null means never. Non-positive values are rejected — every enforcement path already treats them as expired while status would report active.'),
   "deviceLimit": zod.int().min(1).nullish().describe('Maximum concurrent sessions for this client, aggregated across its enabled bindings. Enforced by protocols that admit sessions through an authentication hook (Hysteria2). null means unlimited; a positive value is rejected when any enabled binding targets a protocol without connection-limit support.'),
   "ipLimit": zod.int().min(1).nullish().describe('Maximum distinct source IPs this client\'s live sessions may come from. Same capability and nullability rules as deviceLimit.'),
-  "notes": zod.string().optional(),
+  "notes": zod.string().max(postApiV1ClientsBodyNotesMax).optional().describe('Free-form notes, at most 4096 characters. Tab and line breaks are allowed; other control characters and bidirectional controls are rejected.'),
   "bindings": zod.array(zod.object({
   "inboundId": zod.string(),
   "runtimeIdentity": zod.string().regex(postApiV1ClientsBodyBindingsItemRuntimeIdentityRegExp).optional().describe('Canonical lowercase runtime identity. Uppercase is rejected — runtimes fold case, so mixed-case identities break traffic accounting and enable case-only collisions.'),
@@ -863,27 +869,33 @@ export const PatchApiV1ClientsIdHeader = zod.object({
 })
 
 
+export const patchApiV1ClientsIdBodyEmailMax = 254;
+
+export const patchApiV1ClientsIdBodyGroupIdMax = 128;
+
 export const patchApiV1ClientsIdBodyQuotaBytesMin = 0;
 export const patchApiV1ClientsIdBodyQuotaBytesMax = 9007199254740991;
 
 
 
 
+export const patchApiV1ClientsIdBodyNotesMax = 4096;
+
 
 
 export const PatchApiV1ClientsIdBody = zod.object({
   "version": zod.int().min(1).describe('Optimistic concurrency version.'),
   "name": zod.string().optional(),
-  "email": zod.string().nullish(),
+  "email": zod.string().max(patchApiV1ClientsIdBodyEmailMax).nullish().describe('Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.'),
   "enabled": zod.boolean().nullish(),
-  "groupId": zod.string().nullish(),
+  "groupId": zod.string().max(patchApiV1ClientsIdBodyGroupIdMax).nullish().describe('Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).'),
   "quotaBytes": zod.int().min(patchApiV1ClientsIdBodyQuotaBytesMin).max(patchApiV1ClientsIdBodyQuotaBytesMax).nullish(),
   "quotaResetPolicy": zod.union([zod.literal('never'),zod.literal('daily'),zod.literal('weekly'),zod.literal('monthly'),zod.literal(null)]).nullish(),
   "quotaResetAt": zod.int().nullish(),
   "expiresAt": zod.int().min(1).nullish().describe('Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.'),
   "deviceLimit": zod.int().min(1).nullish().describe('Maximum concurrent sessions for the client; null clears the limit. Enforced by protocols with deviceLimits capability (Hysteria2).'),
   "ipLimit": zod.int().min(1).nullish().describe('Maximum distinct source IPs for the client\'s live sessions; null clears the limit.'),
-  "notes": zod.string().nullish()
+  "notes": zod.string().max(patchApiV1ClientsIdBodyNotesMax).nullish().describe('Free-form notes, at most 4096 characters. Tab and line breaks are allowed; other control characters and bidirectional controls are rejected.')
 }).describe('Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.')
 
 export const patchApiV1ClientsIdResponseOneQuotaBytesMin = 0;
