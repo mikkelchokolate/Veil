@@ -21,7 +21,7 @@ type publishChannelWorkflow struct {
 	} `yaml:"jobs"`
 }
 
-// releaseStepRun returns the run script of the single step called name.
+// publishChannelStepRun returns the run script of the single step called name.
 func publishChannelStepRun(t *testing.T, wf publishChannelWorkflow, name string) string {
 	t.Helper()
 	var run string

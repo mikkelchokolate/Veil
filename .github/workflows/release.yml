@@ -403,6 +403,12 @@ jobs:
           # /releases/latest, so a prerelease tag (v1.2.3-rc.1) must be
           # published as a prerelease and never become the Latest release;
           # gh's default (--latest automatic) would promote it (#1414).
+          # Stable tags get an explicit --latest on purpose: every tag is cut
+          # from main and tags are monotonic, so the newest stable tag is the
+          # one /releases/latest must serve. A backport tag cut after a newer
+          # stable line (e.g. v0.7.4 after v0.8.0) must NOT be published by
+          # this step as-is; publish it with --latest=false so fresh installs
+          # keep resolving the newest line.
           if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             channel=(--latest)
           else
