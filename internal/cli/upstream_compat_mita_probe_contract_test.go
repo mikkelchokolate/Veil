@@ -36,6 +36,9 @@ func TestUpstreamCompatMitaProbeMatchesRuntimeCatalog(t *testing.T) {
 	for _, job := range wf.Jobs {
 		for _, step := range job.Steps {
 			if strings.Contains(step.Name, "(mita)") {
+				if run != "" {
+					t.Fatalf("more than one mita install step (%q); pin every probe", step.Name)
+				}
 				run = step.Run
 			}
 		}
@@ -58,6 +61,9 @@ func TestUpstreamCompatMitaProbeMatchesRuntimeCatalog(t *testing.T) {
 	}
 	if regexp.MustCompile(`\bmita\s+--?version\b`).MatchString(script) {
 		t.Fatalf("mita has no -version/--version flag; step:\n%s", script)
+	}
+	if regexp.MustCompile(`"\$\(mita version[^)]*2>&1`).MatchString(script) {
+		t.Fatalf("mita probe must not count stderr as version output (#690); step:\n%s", script)
 	}
 	if !strings.Contains(script, `[ -n "${mita_version}" ]`) {
 		t.Fatalf("mita probe lost the non-empty-output check (#690); step:\n%s", script)

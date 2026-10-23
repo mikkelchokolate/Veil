@@ -117,9 +117,11 @@ jobs:
           # -version/--version flag; its version is the `version` subcommand,
           # the same probe the runtime catalog uses (VersionArgs in
           # internal/protocols/mieru/runtime.go, #1415). Capture failure
-          # explicitly so set -e cannot abort before the message below.
-          if ! mita_version="$(mita version 2>&1)"; then
-            echo "mita version failed: ${mita_version}" >&2
+          # explicitly so set -e cannot abort before the message below. Only
+          # stdout counts as version output; stderr is kept for the failure
+          # message so a warning alone cannot satisfy the #690 bar.
+          if ! mita_version="$(mita version 2>/tmp/mita-version.err)"; then
+            echo "mita version failed: $(cat /tmp/mita-version.err)" >&2
             exit 1
           fi
           [ -n "${mita_version}" ] || { echo "mita produced no version output" >&2; exit 1; }
