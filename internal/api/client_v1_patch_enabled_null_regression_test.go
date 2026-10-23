@@ -63,6 +63,9 @@ func TestV1PatchEnabledNullClearsToDefaultTrue(t *testing.T) {
 	if view := patch(`{"version":3,"notes":"changed"}`); view["enabled"] != false {
 		t.Fatalf("omitted enabled must be preserved, got %v", view["enabled"])
 	}
+	if stored() {
+		t.Fatal("omitted enabled re-enabled the stored client")
+	}
 
 	// Null on a disabled client clears back to the default (true).
 	view := patch(`{"version":4,"enabled":null}`)
