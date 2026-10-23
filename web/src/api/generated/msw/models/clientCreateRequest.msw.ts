@@ -45,10 +45,18 @@ import type { ClientCreateRequestQuotaResetPolicy } from './clientCreateRequestQ
 
 export interface ClientCreateRequest {
   name: string;
-  /** @nullable */
+  /**
+     * Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.
+     * @maxLength 254
+     * @nullable
+     */
   email?: string | null;
   enabled?: boolean;
-  /** @nullable */
+  /**
+     * Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).
+     * @maxLength 128
+     * @nullable
+     */
   groupId?: string | null;
   /**
      * @minimum 0
@@ -77,6 +85,10 @@ export interface ClientCreateRequest {
      * @nullable
      */
   ipLimit?: number | null;
+  /**
+     * Free-form notes, at most 4096 characters. Tab and line breaks are allowed; other control characters and bidirectional controls are rejected.
+     * @maxLength 4096
+     */
   notes?: string;
   /** Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret and returns its plaintext once in issuedCredentials. */
   bindings?: ClientBindingInput[];

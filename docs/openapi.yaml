@@ -7918,12 +7918,16 @@ components:
           type:
           - string
           - 'null'
+          maxLength: 254
+          description: Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.
         enabled:
           type: boolean
         groupId:
           type:
           - string
           - 'null'
+          maxLength: 128
+          description: Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).
         quotaBytes:
           type:
           - integer
@@ -7969,6 +7973,8 @@ components:
             nullability rules as deviceLimit.
         notes:
           type: string
+          maxLength: 4096
+          description: Free-form notes, at most 4096 characters. Tab and line breaks are allowed; other control characters and bidirectional controls are rejected.
         bindings:
           type: array
           description: Bind the client to inbounds atomically with creation. When credential is empty the server generates a high-entropy secret
@@ -7993,6 +7999,8 @@ components:
           type:
           - string
           - 'null'
+          maxLength: 254
+          description: Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.
         enabled:
           type:
           - boolean
@@ -8001,6 +8009,8 @@ components:
           type:
           - string
           - 'null'
+          maxLength: 128
+          description: Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).
         quotaBytes:
           type:
           - integer
@@ -8046,6 +8056,8 @@ components:
           type:
           - string
           - 'null'
+          maxLength: 4096
+          description: Free-form notes, at most 4096 characters. Tab and line breaks are allowed; other control characters and bidirectional controls are rejected.
     ClientBindingInput:
       type: object
       required:

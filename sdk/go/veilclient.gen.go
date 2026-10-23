@@ -1844,17 +1844,23 @@ type ClientCreateRequest struct {
 	Bindings *[]ClientBindingInput `json:"bindings,omitempty"`
 
 	// DeviceLimit Maximum concurrent sessions for this client, aggregated across its enabled bindings. Enforced by protocols that admit sessions through an authentication hook (Hysteria2). null means unlimited; a positive value is rejected when any enabled binding targets a protocol without connection-limit support.
-	DeviceLimit nullable.Nullable[int]    `json:"deviceLimit,omitempty"`
-	Email       nullable.Nullable[string] `json:"email,omitempty"`
-	Enabled     *bool                     `json:"enabled,omitempty"`
+	DeviceLimit nullable.Nullable[int] `json:"deviceLimit,omitempty"`
+
+	// Email Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.
+	Email   nullable.Nullable[string] `json:"email,omitempty"`
+	Enabled *bool                     `json:"enabled,omitempty"`
 
 	// ExpiresAt Unix expiry timestamp; null means never. Non-positive values are rejected — every enforcement path already treats them as expired while status would report active.
-	ExpiresAt nullable.Nullable[int64]  `json:"expiresAt,omitempty"`
-	GroupId   nullable.Nullable[string] `json:"groupId,omitempty"`
+	ExpiresAt nullable.Nullable[int64] `json:"expiresAt,omitempty"`
+
+	// GroupId Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).
+	GroupId nullable.Nullable[string] `json:"groupId,omitempty"`
 
 	// IpLimit Maximum distinct source IPs this client's live sessions may come from. Same capability and nullability rules as deviceLimit.
-	IpLimit          nullable.Nullable[int]               `json:"ipLimit,omitempty"`
-	Name             string                               `json:"name"`
+	IpLimit nullable.Nullable[int] `json:"ipLimit,omitempty"`
+	Name    string                 `json:"name"`
+
+	// Notes Free-form notes, at most 4096 characters. Tab and line breaks are allowed; other control characters and bidirectional controls are rejected.
 	Notes            *string                              `json:"notes,omitempty"`
 	QuotaBytes       nullable.Nullable[int64]             `json:"quotaBytes,omitempty"`
 	QuotaResetAt     nullable.Nullable[int64]             `json:"quotaResetAt,omitempty"`
@@ -1942,17 +1948,23 @@ type ClientMigrateResponse struct {
 // ClientPatchRequest Presence-aware patch. Omitted fields are preserved, explicit null clears nullable/defaultable fields, and supplied values replace them.
 type ClientPatchRequest struct {
 	// DeviceLimit Maximum concurrent sessions for the client; null clears the limit. Enforced by protocols with deviceLimits capability (Hysteria2).
-	DeviceLimit nullable.Nullable[int]    `json:"deviceLimit,omitempty"`
-	Email       nullable.Nullable[string] `json:"email,omitempty"`
-	Enabled     nullable.Nullable[bool]   `json:"enabled,omitempty"`
+	DeviceLimit nullable.Nullable[int] `json:"deviceLimit,omitempty"`
+
+	// Email Contact address label (at most 254 bytes); no control or format characters and no surrounding whitespace.
+	Email   nullable.Nullable[string] `json:"email,omitempty"`
+	Enabled nullable.Nullable[bool]   `json:"enabled,omitempty"`
 
 	// ExpiresAt Unix expiry timestamp; null clears the expiry. Non-positive values are rejected.
-	ExpiresAt nullable.Nullable[int64]  `json:"expiresAt,omitempty"`
-	GroupId   nullable.Nullable[string] `json:"groupId,omitempty"`
+	ExpiresAt nullable.Nullable[int64] `json:"expiresAt,omitempty"`
+
+	// GroupId Group label; same rules as name (at most 128 characters, no control or format characters, no surrounding whitespace).
+	GroupId nullable.Nullable[string] `json:"groupId,omitempty"`
 
 	// IpLimit Maximum distinct source IPs for the client's live sessions; null clears the limit.
-	IpLimit          nullable.Nullable[int]                                `json:"ipLimit,omitempty"`
-	Name             *string                                               `json:"name,omitempty"`
+	IpLimit nullable.Nullable[int] `json:"ipLimit,omitempty"`
+	Name    *string                `json:"name,omitempty"`
+
+	// Notes Free-form notes, at most 4096 characters. Tab and line breaks are allowed; other control characters and bidirectional controls are rejected.
 	Notes            nullable.Nullable[string]                             `json:"notes,omitempty"`
 	QuotaBytes       nullable.Nullable[int64]                              `json:"quotaBytes,omitempty"`
 	QuotaResetAt     nullable.Nullable[int64]                              `json:"quotaResetAt,omitempty"`

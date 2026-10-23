@@ -6,6 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Client `email`, `groupId` and `notes` are now validated like the display
+  name instead of being stored verbatim (#1272 item 7). `email` must be at most
+  254 bytes and `groupId` at most 128 characters, both without control or format
+  characters or surrounding whitespace. `notes` may be up to 4096 characters
+  and keep tabs and line breaks, but refuses other control characters, invalid
+  UTF-8 and bidirectional override/isolate marks. Values stored by earlier
+  builds are kept: an update that leaves such a field unchanged (including
+  enable/disable and bulk actions) still succeeds, and a rollback can restore
+  them. Only a new value has to pass.
 - Revisions committed through the CLI state path (`veil admin set`, install
   apply, repair, key rotation) now keep each client's `ipLimit` in their
   immutable snapshot. That path previously dropped it, so rolling back to such

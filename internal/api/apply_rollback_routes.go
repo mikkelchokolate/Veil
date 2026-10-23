@@ -293,11 +293,13 @@ func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
 	return nil
 }
 
-// validateRollbackRestoredClients runs the restored client rows through the
-// same validate() rules as every live writer, so a legacy or crafted revision
-// cannot restore deviceLimit=0, a negative or over-range quota, a
-// non-positive expiry, an unknown reset policy, depletion without a quota or
-// a malformed name that the API refuses (#1270).
+// validateRollbackRestoredClients runs the restored client rows through
+// client.ValidateRestoredClient (the runtime-relevant domain rules every live
+// writer enforces), so a legacy or crafted revision cannot restore
+// deviceLimit=0, a negative or over-range quota, a non-positive expiry, an
+// unknown reset policy, depletion without a quota or a malformed name that the
+// API refuses (#1270). The email/groupId/notes free-text limits are
+// deliberately not applied to restores; see ValidateRestoredClient.
 //
 // It checks the snapshot's own values (snapshotClients, captured before the
 // graft) but only for the clients the graft retained (merged.Clients). A
