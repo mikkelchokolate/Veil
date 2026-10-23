@@ -8,19 +8,19 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/routing"
 )
 
-// #1410: the write path validates outbound against routing.Outbounds, so the
+// #1410: the write path validates outbound against routing.Outbounds(), so the
 // planner must accept exactly that set — otherwise one side drifts and a rule
 // either saves fine but never applies, or is refused at save time although
 // the planner would accept it.
 func TestPlannerAcceptsExactlyRoutingOutbounds(t *testing.T) {
-	for _, outbound := range routing.Outbounds {
+	for _, outbound := range routing.Outbounds() {
 		plan := Build(Input{
 			Rules: []model.RoutingRule{{Name: "r", Match: "geoip:private", Outbound: outbound, Enabled: true}},
 			Warp:  model.WarpConfig{Enabled: true},
 		})
 		for _, e := range plan.Errors {
 			if strings.Contains(e, "unsupported routing outbound") {
-				t.Fatalf("planner rejects routing.Outbounds member %q: %v", outbound, plan.Errors)
+				t.Fatalf("planner rejects routing.Outbounds() member %q: %v", outbound, plan.Errors)
 			}
 		}
 	}

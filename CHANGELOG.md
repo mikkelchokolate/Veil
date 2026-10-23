@@ -14,7 +14,10 @@ All notable changes to Veil will be documented in this file.
   with `unsupported routing outbound`, blocking every later apply until the
   rule was fixed. Matching is case-sensitive, like the apply planner. Stored
   state that already holds such a rule still loads; fix or delete the rule
-  through the API (#1410).
+  through the API. Rolling back to a revision that holds such a rule, even
+  a disabled one, is now refused with a validation error, as for an
+  unparseable `match` (#1082), because enabling it later would block every
+  apply (#1410).
 - The SFTP backup destination now persists and uses the same trimmed
   host, user, remote directory, key path and pinned host key that
   validation checks. Before, a destination saved through the API with

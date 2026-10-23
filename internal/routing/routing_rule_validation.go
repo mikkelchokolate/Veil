@@ -4,13 +4,20 @@ type RoutingRuleValidation struct{}
 
 func NewRoutingRuleValidation() RoutingRuleValidation { return RoutingRuleValidation{} }
 
-// Outbounds is the closed set of routing outbounds the apply planner accepts.
-// Matching is exact and case-sensitive, mirroring applyplan (#1410).
-var Outbounds = []string{"direct", "proxy", "warp"}
+// outbounds is the closed set of routing outbounds the apply planner accepts.
+// Matching is exact and case-sensitive, mirroring applyplan (#1410). It is
+// unexported so no caller can widen the write-path allowlist at runtime.
+var outbounds = [...]string{"direct", "proxy", "warp"}
 
-// IsValidOutbound reports whether outbound is one of Outbounds exactly.
+// Outbounds returns a copy of the closed set of accepted routing outbounds.
+func Outbounds() []string {
+	out := outbounds
+	return out[:]
+}
+
+// IsValidOutbound reports whether outbound is exactly one of Outbounds().
 func IsValidOutbound(outbound string) bool {
-	for _, allowed := range Outbounds {
+	for _, allowed := range outbounds {
 		if outbound == allowed {
 			return true
 		}

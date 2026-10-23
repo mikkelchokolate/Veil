@@ -230,7 +230,7 @@ func (Validation) ValidateSnapshot(snapshot model.ManagementSnapshot, fields map
 				// The planner rejects anything but direct/proxy/warp at apply
 				// time; a stored rule (enabled or not) must not validate as
 				// fine and then block every apply (#1410).
-				errs = append(errs, fmt.Sprintf("routingRules[%d].outbound %q is invalid: must be one of %s", i, rule.Outbound, strings.Join(routing.Outbounds, ", ")))
+				errs = append(errs, fmt.Sprintf("routingRules[%d].outbound %q is invalid: must be one of %s", i, rule.Outbound, strings.Join(routing.Outbounds(), ", ")))
 			}
 		}
 	}

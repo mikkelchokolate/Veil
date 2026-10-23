@@ -86,3 +86,12 @@ func TestRoutingRuleValidationRejectsUnknownOutboundOnCreateAndUpdate(t *testing
 		t.Fatalf("ValidateCreate(empty outbound) = %v, want ErrRoutingRuleInvalid", err)
 	}
 }
+
+// Outbounds() hands out a copy: mutating it must not widen the allowlist.
+func TestOutboundsReturnsCopy(t *testing.T) {
+	got := Outbounds()
+	got[0] = "evil"
+	if IsValidOutbound("evil") || Outbounds()[0] != "direct" {
+		t.Fatalf("mutating Outbounds() changed the allowlist: %v", Outbounds())
+	}
+}
