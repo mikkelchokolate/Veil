@@ -10,7 +10,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/apply"
 	"github.com/mikkelchokolate/Veil/internal/client"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
-	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
 // client_mutation.go is the single mutation orchestration for the normalized
@@ -179,39 +178,6 @@ func (s *managementState) snapshotWithClientStateLocked(
 		Warp:          s.warp,
 		Users:         s.users,
 	}
-	input.Clients, input.Bindings, input.Credentials = clientSnapshotRows(clients, bindings, creds)
+	input.Clients, input.Bindings, input.Credentials = client.SnapshotRows(clients, bindings, creds)
 	return managementstate.BuildSnapshot(input)
-}
-
-// clientSnapshotRows converts repository rows into the snapshot model. Shared
-// by the transactional mutation path and the state-file SnapshotLocked path.
-func clientSnapshotRows(
-	clients []client.Client, bindings []client.Binding, creds []client.Credential,
-) ([]model.ClientSnapshot, []model.BindingSnapshot, []model.CredentialSnapshot) {
-	cs := make([]model.ClientSnapshot, 0, len(clients))
-	for _, c := range clients {
-		cs = append(cs, model.ClientSnapshot{
-			ID: c.ID, Name: c.Name, Email: c.Email, Enabled: c.Enabled,
-			GroupID: c.GroupID, QuotaBytes: c.QuotaBytes, QuotaResetPolicy: c.QuotaResetPolicy,
-			QuotaResetAt: c.QuotaResetAt, ExpiresAt: c.ExpiresAt, DeviceLimit: c.DeviceLimit,
-			IPLimit: c.IPLimit,
-			Notes:   c.Notes, Depleted: c.Depleted, CreatedAt: c.CreatedAt, UpdatedAt: c.UpdatedAt, Version: c.Version,
-		})
-	}
-	bs := make([]model.BindingSnapshot, 0, len(bindings))
-	for _, b := range bindings {
-		bs = append(bs, model.BindingSnapshot{
-			ID: b.ID, ClientID: b.ClientID, InboundID: b.InboundID, RuntimeIdentity: b.RuntimeIdentity, Enabled: b.Enabled,
-			ProtocolSettings: b.ProtocolSettings, CreatedAt: b.CreatedAt, UpdatedAt: b.UpdatedAt, Version: b.Version,
-		})
-	}
-	ks := make([]model.CredentialSnapshot, 0, len(creds))
-	for _, c := range creds {
-		ks = append(ks, model.CredentialSnapshot{
-			ID: c.ID, BindingID: c.BindingID, Kind: c.Kind, EncryptedValue: c.EncryptedValue,
-			KeyVersion: c.KeyVersion, CredentialVersion: c.CredentialVersion,
-			CreatedAt: c.CreatedAt, RotatedAt: c.RotatedAt,
-		})
-	}
-	return cs, bs, ks
 }
