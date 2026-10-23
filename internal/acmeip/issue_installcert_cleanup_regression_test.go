@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -28,6 +29,9 @@ func TestInstallCertRejectionDropsOwnedACMEEnrollment(t *testing.T) {
 			sys.issuedCertPEM, sys.issuedKeyPEM = generateIPCertPEM(time.Now().Add(-time.Hour), ip)
 		},
 		// The destination still holds the predecessor's bytes afterwards.
+		// Synthetic: identical bytes normally mean the enrollment pre-existed
+		// (and would be preserved); here no ACME dir exists so the test pins
+		// the "previous material" rejection branch on its own.
 		"unchanged": func(sys *fakeSystem) {
 			cert, key := generateIPCertPEM(time.Now().Add(24*time.Hour), ip)
 			sys.issuedCertPEM, sys.issuedKeyPEM = cert, key
@@ -48,9 +52,8 @@ func TestInstallCertRejectionDropsOwnedACMEEnrollment(t *testing.T) {
 			sys.commands[sys.key(acmeSh, "--issue", "-d", ip, "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
 			sys.commands[sys.key(acmeSh, "--installcert", "-d", ip, "--key-file", keyPath, "--fullchain-file", certPath, "--reloadcmd", renewReloadCmd(certPath, keyPath))] = commandResult{out: "Installed"}
 
-			if _, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: ip, System: sys}); err == nil {
-				t.Fatal("expected the rejected installcert to fail issuance")
-			}
+			_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: ip, System: sys})
+			requireInstallCertRejection(t, err)
 			if !hasRunCall(sys, acmeSh, "--remove", "-d", ip) {
 				t.Fatalf("rejected installcert left the ACME enrollment registered; run calls: %v", sys.runCalls)
 			}
@@ -81,9 +84,8 @@ func TestInstallCertRejectionPreservesExistingACMEEnrollment(t *testing.T) {
 	sys.commands[sys.key(acmeSh, "--issue", "-d", ip, "--standalone", "--server", "letsencrypt", "--certificate-profile", "shortlived", "--days", "3", "--httpport", "80", "--force")] = commandResult{out: "Cert issued"}
 	sys.commands[sys.key(acmeSh, "--installcert", "-d", ip, "--key-file", keyPath, "--fullchain-file", certPath, "--reloadcmd", renewReloadCmd(certPath, keyPath))] = commandResult{out: "Installed"}
 
-	if _, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: ip, System: sys}); err == nil {
-		t.Fatal("expected the rejected installcert to fail issuance")
-	}
+	_, err := IssueIPCert(context.Background(), IssueOptions{PublicIPv4: ip, System: sys})
+	requireInstallCertRejection(t, err)
 	for _, call := range sys.runCalls {
 		if len(call) >= 2 && call[0] == acmeSh && call[1] == "--remove" {
 			t.Fatalf("cleanup removed a pre-existing ACME enrollment: %v", call)
@@ -95,6 +97,19 @@ func TestInstallCertRejectionPreservesExistingACMEEnrollment(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// requireInstallCertRejection fails unless issuance failed in the
+// post-installcert rejection branch, so a test cannot pass vacuously by
+// failing at an earlier precondition.
+func requireInstallCertRejection(t *testing.T, err error) {
+	t.Helper()
+	if err == nil {
+		t.Fatal("expected the rejected installcert to fail issuance")
+	}
+	if !strings.HasPrefix(err.Error(), "install certificate:") {
+		t.Fatalf("issuance failed outside the installcert rejection branch: %v", err)
 	}
 }
 
