@@ -16,8 +16,8 @@ func TestBuildRenderPlanFoldsPanelDomain(t *testing.T) {
 		name     string
 		settings model.Settings
 	}{
-		{"panelDomain", model.Settings{PanelAccess: "caddy", PanelDomain: " Panel.Example.COM ", PanelEmail: "admin@example.com", WebBasePath: "/p/"}},
-		{"domain fallback", model.Settings{PanelAccess: "caddy", Domain: "Panel.EXAMPLE.com ", Email: "admin@example.com", WebBasePath: "/p/"}},
+		{"panelDomain", model.Settings{PanelAccess: "caddy", PanelDomain: " Panel.Example.COM ", PanelEmail: "admin@example.com", WebBasePath: "/p/", PanelListen: "127.0.0.1:2096"}},
+		{"domain fallback", model.Settings{PanelAccess: "caddy", Domain: "Panel.EXAMPLE.com ", Email: "admin@example.com", WebBasePath: "/p/", PanelListen: "127.0.0.1:2096"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			plan, _, err := BuildRenderPlan(tc.settings, nil, nil)

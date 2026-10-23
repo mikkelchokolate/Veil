@@ -405,7 +405,7 @@ func TestRenderConfigDefaultsPublicPort(t *testing.T) {
 	}
 }
 
-func TestRenderConfigInvalidPanelListenIgnored(t *testing.T) {
+func TestRenderConfigInvalidPanelListenFailsClosed(t *testing.T) {
 	p := New()
 	settings := model.Settings{
 		Domain:           "example.com",
@@ -431,19 +431,15 @@ func TestRenderConfigInvalidPanelListenIgnored(t *testing.T) {
 		Inbounds: []model.Inbound{inbound},
 	}
 
+	// The invalid panelListen used to be swallowed: the plan carried
+	// BackendPort 0 and the renderer silently dropped every panel route from
+	// the shared naive bind, so the panel vanished without an error (and the
+	// old version of this test asserted that silent drop). Settings
+	// validation never lets such a value through, so the render fails closed
+	// instead (#1292 F6).
 	artifacts, _, err := p.RenderConfig(input)
-	if err != nil {
-		t.Fatalf("RenderConfig error: %v", err)
-	}
-	// panelCaddyRoute errors are intentionally swallowed by renderNaive.
-	// The live artifact is Caddy JSON — a Caddyfile token can never appear
-	// in it, so the old "handle /panel" check was vacuous (#895). Forbid the
-	// JSON panel-route markers instead: the reverse_proxy handler, its
-	// loopback dial, and the /panel path matchers.
-	for _, marker := range []string{`"handler": "reverse_proxy"`, `"dial": "127.0.0.1:`, `"/panel`} {
-		if strings.Contains(artifacts[0].Body, marker) {
-			t.Errorf("body unexpectedly contains panel JSON marker %q with invalid panelListen:\n%s", marker, artifacts[0].Body)
-		}
+	if err == nil || !strings.Contains(err.Error(), "panelListen") {
+		t.Fatalf("RenderConfig(panelListen=%q) = %d artifacts, err %v; want a panelListen error", settings.PanelListen, len(artifacts), err)
 	}
 }
 

@@ -136,6 +136,9 @@ func RenderHysteria2(cfg Hysteria2Config) (string, error) {
 	if cfg.ListenPort <= 0 {
 		return "", errors.New("listen port is required")
 	}
+	if cfg.ListenPort > 65535 {
+		return "", fmt.Errorf("listen port %d is outside 1-65535", cfg.ListenPort)
+	}
 	if len(cfg.Users) == 0 {
 		if cfg.Password == "" {
 			return "", errors.New("password is required")
