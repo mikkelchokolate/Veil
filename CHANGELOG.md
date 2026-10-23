@@ -6,6 +6,16 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- A rollback no longer restores a mixed-case client binding `runtimeIdentity`
+  (#1273 item 1). Identities are lowercase-only since #1111, and hysteria2
+  reports lowercased usernames, so a mixed-case identity sent that binding's
+  traffic to the unknown-identity bucket. The restored identity is now
+  lowercased before it is written to the database and the new revision, and
+  the result is checked with the same `ValidateRuntimeIdentity` rule the API
+  uses. Older revisions that still hold mixed-case identities can be restored
+  as before. A revision with two identities on one inbound that differ only by
+  case is now rejected with 422, which matches the case-insensitive uniqueness
+  index.
 - A rollback that moves a client binding back to the client it had in the
   revision no longer replaces the binding's live credentials with the older
   revision credential (#1272 item 6). The binding row is still re-created,

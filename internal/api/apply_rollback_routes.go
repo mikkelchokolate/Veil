@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,8 +23,6 @@ type applyRollbackRequest struct {
 	SelectedRevision uint64 `json:"selectedRevision"`
 	Confirm          bool   `json:"confirm"`
 }
-
-var rollbackRuntimeIdentityPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,48}$`)
 
 // errRollbackSnapshotInvalid marks a rollback refused because the selected
 // revision, once merged with the live security posture, would commit state
@@ -156,6 +154,12 @@ func (s *managementState) commitIntentionalRollbackLocked(selectedRevision uint6
 			_ = tx.Rollback()
 			return fmt.Errorf("%w: %v", errRollbackSnapshotInvalid, err)
 		}
+		// The grafted identities are exactly what ReplaceSnapshotTx writes;
+		// hold them to the canonical rule every live writer enforces (#1273).
+		if err := validateRollbackRuntimeIdentities(selected); err != nil {
+			_ = tx.Rollback()
+			return fmt.Errorf("%w: %v", errRollbackSnapshotInvalid, err)
+		}
 		// Same post-graft scope for the #1173 quota contract (#1351).
 		if err := validateRollbackQuotaBindings(selected); err != nil {
 			_ = tx.Rollback()
@@ -267,10 +271,16 @@ func validateRollbackNormalizedSnapshot(snapshot managementSnapshot) error {
 		if _, ok := inbounds[binding.InboundID]; !ok {
 			return fmt.Errorf("binding %q references missing inbound %q", binding.ID, binding.InboundID)
 		}
-		if !rollbackRuntimeIdentityPattern.MatchString(binding.RuntimeIdentity) {
+		// Pre-#1111 revisions may carry mixed-case identities; migration 29
+		// folded the live rows to lowercase and the graft carries the live
+		// identity forward, so the snapshot value is checked in its folded
+		// form against the canonical rule (#1273). Uniqueness is folded too,
+		// mirroring the NOCASE per-inbound index.
+		foldedIdentity := strings.ToLower(binding.RuntimeIdentity)
+		if err := client.ValidateRuntimeIdentity(foldedIdentity); err != nil {
 			return fmt.Errorf("binding %q has invalid runtime identity", binding.ID)
 		}
-		identityKey := binding.InboundID + "\x00" + binding.RuntimeIdentity
+		identityKey := binding.InboundID + "\x00" + foldedIdentity
 		if previous, duplicate := identities[identityKey]; duplicate {
 			return fmt.Errorf("bindings %q and %q duplicate runtime identity for inbound %q", previous, binding.ID, binding.InboundID)
 		}
@@ -456,6 +466,10 @@ func graftRollbackClientSecurityTx(tx *client.Tx, selected *managementSnapshot) 
 		if live.RuntimeIdentity != "" {
 			snapshotBinding.RuntimeIdentity = live.RuntimeIdentity
 		}
+		// Runtime identities are canonical lowercase (#1111): hysteria2
+		// reports lowercased usernames, so restoring a mixed-case identity
+		// would strand the binding's traffic in UnknownIdentities (#1273).
+		snapshotBinding.RuntimeIdentity = strings.ToLower(snapshotBinding.RuntimeIdentity)
 		bindings = append(bindings, snapshotBinding)
 		retainedBindings[snapshotBinding.ID] = struct{}{}
 	}
@@ -476,6 +490,17 @@ func graftRollbackClientSecurityTx(tx *client.Tx, selected *managementSnapshot) 
 		})
 	}
 	selected.Credentials = credentials
+	return nil
+}
+
+// validateRollbackRuntimeIdentities checks the post-graft bindings against
+// client.ValidateRuntimeIdentity, the canonical lowercase-only rule (#1273).
+func validateRollbackRuntimeIdentities(snapshot managementSnapshot) error {
+	for _, binding := range snapshot.Bindings {
+		if err := client.ValidateRuntimeIdentity(binding.RuntimeIdentity); err != nil {
+			return fmt.Errorf("binding %q: %v", binding.ID, err)
+		}
+	}
 	return nil
 }
 
