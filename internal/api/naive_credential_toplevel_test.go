@@ -10,9 +10,9 @@ import (
 
 // naiveHasCredential must accept the top-level inbound.Password that
 // clientaccess.InboundCredentialPolicy.ApplyCreate always generates for a
-// fresh naiveproxy inbound. The renderer (naiveUsers) already honours
-// inbound.Password, but the validator did not, so a create-then-apply flow was
-// incorrectly rejected.
+// fresh naiveproxy inbound. The renderer (caddyassembly.NaiveUsers) already
+// honours inbound.Password, but the validator did not, so a create-then-apply
+// flow was incorrectly rejected.
 func TestBuildApplyPlanAcceptsNaiveProxyWithTopLevelPassword(t *testing.T) {
 	stubCaddyProbe(t, func(context.Context, string) (caddycapabilities.CaddyCapabilities, error) {
 		return caddycapabilities.CaddyCapabilities{ForwardProxy: true, HTTP3: true}, nil

@@ -8,7 +8,6 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/caddycapabilities"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
-	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 )
 
@@ -79,12 +78,4 @@ func (Plugin) ArtifactSpec() generatedconfig.ArtifactSpec {
 			return []string{"caddy", "validate", "--config", path}
 		},
 	}
-}
-
-// liveNaiveUsers returns the effective Caddy forward_auth user list for an
-// inbound. It delegates to caddyassembly.NaiveUsers, the single derivation the
-// render plan already carries, so the plugin and every other Caddy render path
-// emit identical users (including the revoked-client sentinel, #1098).
-func liveNaiveUsers(settings model.Settings, inbound model.Inbound) []caddyassembly.CaddyNaiveUser {
-	return caddyassembly.NaiveUsers(inbound, settings)
 }

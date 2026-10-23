@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/caddyassembly"
 	"github.com/mikkelchokolate/Veil/internal/generatedconfig"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/protocols/schema"
@@ -38,13 +39,13 @@ func TestPluginMetadata(t *testing.T) {
 
 func TestLiveNaiveUsersOmitsFallbackWhenAllProfilesDisabled(t *testing.T) {
 	settings := model.Settings{NaiveUsername: "veil", NaivePassword: "global"}
-	users := liveNaiveUsers(settings, model.Inbound{
+	users := caddyassembly.NaiveUsers(model.Inbound{
 		Name:     "naive",
 		Protocol: "naiveproxy",
 		Enabled:  true,
 		Password: "inbound-pass",
 		Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: false}},
-	})
+	}, settings)
 	// All-disabled profiles are revocation, so the legacy fallback must not
 	// appear — but an EMPTY user list makes forward_proxy an open relay, so a
 	// deterministic sentinel that can never authenticate is rendered instead
@@ -70,7 +71,7 @@ func TestLiveNaiveUsersSentinelWhenBindingsRevoked(t *testing.T) {
 		Name: "naive", Protocol: "naiveproxy", Enabled: true,
 		Password: "inbound-pass", HasClientBindings: true,
 	}
-	users := liveNaiveUsers(settings, inbound)
+	users := caddyassembly.NaiveUsers(inbound, settings)
 	wantUser, wantPass := model.RevokedClientCredential(settings, inbound)
 	if len(users) != 1 || users[0].Username != wantUser || users[0].Password != wantPass {
 		t.Fatalf("users = %+v, want sentinel %q", users, wantUser)
@@ -84,16 +85,16 @@ func TestLiveNaiveUsersSentinelWhenBindingsRevoked(t *testing.T) {
 
 func TestLiveNaiveUsersKeepsLegacyFallbackWithoutProfiles(t *testing.T) {
 	settings := model.Settings{NaiveUsername: "veil", NaivePassword: "global"}
-	users := liveNaiveUsers(settings, model.Inbound{Name: "naive", Protocol: "naiveproxy", Enabled: true})
+	users := caddyassembly.NaiveUsers(model.Inbound{Name: "naive", Protocol: "naiveproxy", Enabled: true}, settings)
 	if len(users) != 1 || users[0].Username != "veil" || users[0].Password != "global" {
 		t.Fatalf("users = %+v", users)
 	}
 }
 
 func TestLiveNaiveUsersKeepsEnabledProfiles(t *testing.T) {
-	users := liveNaiveUsers(model.Settings{NaivePassword: "global"}, model.Inbound{
+	users := caddyassembly.NaiveUsers(model.Inbound{
 		Profiles: []model.ClientProfile{{Name: "alice", Username: "alice", Password: "alice-pass", Enabled: true}},
-	})
+	}, model.Settings{NaivePassword: "global"})
 	if len(users) != 1 || users[0].Username != "alice" || users[0].Password != "alice-pass" {
 		t.Fatalf("users = %+v", users)
 	}
