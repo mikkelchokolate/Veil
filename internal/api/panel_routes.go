@@ -160,21 +160,33 @@ func (routes PanelRoutes) handlePanel(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("veil_session")
 			if err == nil {
 				if session, ok := routes.State.sessionRegistry().Get(cookie.Value); ok {
-					// EnsureCSRFPersisted rolls the session record AND the
-					// in-memory token back together on a persist failure —
-					// EnsureCSRF could clear rawCSRF while leaving the stored
-					// hash, embedding an empty token into the page for a
-					// session that still carries a CSRF hash (#578, call-site
-					// twin of #377). The error is not discarded: fail closed.
-					token, csrfOK, csrfErr := routes.State.sessionRegistry().EnsureCSRFPersisted(cookie.Value)
-					if csrfErr != nil {
-						writeError(w, "failed to refresh session", http.StatusInternalServerError)
-						return
-					}
-					if csrfOK {
-						authenticated = true
-						csrfToken = token
-						locale = panel.ResolveLocale(routes.State.storedUserLocale(session.Username), r)
+					// Apply the API middleware's session rules first — the
+					// same call handlePersistentAuthStatus makes (#1336). A
+					// deleted user's session, one minted before the owner
+					// armed a second factor, or a stale bootstrap session is
+					// revoked here and gets the login page, instead of the
+					// authenticated panel plus a freshly minted and durably
+					// persisted CSRF hash for a session every protected call
+					// would revoke anyway (#1266).
+					username, _, authorized := routes.State.authorizeCookieSession(cookie.Value, session)
+					if authorized {
+						// EnsureCSRFPersisted rolls the session record AND the
+						// in-memory token back together on a persist failure —
+						// EnsureCSRF could clear rawCSRF while leaving the
+						// stored hash, embedding an empty token into the page
+						// for a session that still carries a CSRF hash (#578,
+						// call-site twin of #377). The error is not discarded:
+						// fail closed.
+						token, csrfOK, csrfErr := routes.State.sessionRegistry().EnsureCSRFPersisted(cookie.Value)
+						if csrfErr != nil {
+							writeError(w, "failed to refresh session", http.StatusInternalServerError)
+							return
+						}
+						if csrfOK {
+							authenticated = true
+							csrfToken = token
+							locale = panel.ResolveLocale(routes.State.storedUserLocale(username), r)
+						}
 					}
 				}
 			}
