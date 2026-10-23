@@ -169,6 +169,9 @@ func TestLegacyPanelRevokesStaleBootstrapSession(t *testing.T) {
 		}
 		return []Session{session}
 	})
+	// Set on purpose: the fallback IS configured, so the refusal comes from
+	// the existing user row (and the provisioned instance), not from a
+	// missing NaivePassword.
 	state.settings.NaivePassword = "fallback-secret"
 	assertLegacyLoginPage(t, state, sessions[0].Token)
 }
