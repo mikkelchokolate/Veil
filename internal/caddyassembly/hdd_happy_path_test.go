@@ -104,6 +104,7 @@ func TestBuildFinalRenderPlan_NaiveTCP443MergesWithPanelCaddy(t *testing.T) {
 		PanelAccess:       "caddy",
 		PanelDomain:       "panel.vpn.example.com",
 		PanelPublicPort:   443,
+		PanelListen:       "127.0.0.1:2096",
 		PanelEmail:        "admin@vpn.example.com",
 		DefaultAcmeEmail:  "admin@vpn.example.com",
 		AcmeChallengeMode: "tls-alpn-01",
@@ -135,6 +136,12 @@ func TestBuildFinalRenderPlan_NaiveTCP443MergesWithPanelCaddy(t *testing.T) {
 	}
 	if server.PanelDomain != "panel.vpn.example.com" {
 		t.Errorf("server.PanelDomain = %q, want panel.vpn.example.com", server.PanelDomain)
+	}
+	// The renderer drops the merged panel routes when BackendPort is not
+	// positive, so a merge without the backend port is no panel at all
+	// (#1292 F6).
+	if server.BackendPort != 2096 {
+		t.Errorf("server.BackendPort = %d, want 2096 from PanelListen", server.BackendPort)
 	}
 
 	// Bind-owner locks alone cannot prove ACME enrollment: both the panel

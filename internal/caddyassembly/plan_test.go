@@ -14,6 +14,7 @@ func TestBuildRenderPlanPanelAndNaive(t *testing.T) {
 		PanelDomain:     "panel.example.com",
 		PanelPublicPort: 443,
 		PanelEmail:      "admin@example.com",
+		PanelListen:     "127.0.0.1:2096",
 	}
 	inbounds := []model.Inbound{
 		{
@@ -48,6 +49,9 @@ func TestBuildRenderPlanPanelAndNaive(t *testing.T) {
 	}
 	if plan.Servers[panelKey].Kind != CaddyOwnerPanel {
 		t.Error("expected Panel server in render plan")
+	}
+	if plan.Servers[panelKey].BackendPort != 2096 {
+		t.Errorf("panel BackendPort = %d, want 2096 from PanelListen (#1292 F6)", plan.Servers[panelKey].BackendPort)
 	}
 	naiveKey := bindregistry.BindKey{Address: "0.0.0.0", Port: 8443, Network: bindregistry.ListenTCP}
 	if owners[naiveKey].Kind != bindregistry.BindOwnerNaive {

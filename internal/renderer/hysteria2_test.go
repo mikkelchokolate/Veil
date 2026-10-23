@@ -137,3 +137,19 @@ func TestRenderHysteria2RejectsNegativeListenPort(t *testing.T) {
 		t.Fatalf("expected 'listen port is required', got: %v", err)
 	}
 }
+
+// Issue #1292 F6: the listen port was only checked for <= 0, so a port above
+// 65535 rendered a config hysteria rejects at startup.
+func TestRenderHysteria2RejectsOutOfRangeListenPort(t *testing.T) {
+	for _, port := range []int{0, -1, 65536, 70000} {
+		if _, err := RenderHysteria2(Hysteria2Config{ListenPort: port, Domain: "example.com", Password: "p", MasqueradeURL: "https://www.bing.com/"}); err == nil {
+			t.Fatalf("RenderHysteria2(ListenPort=%d) succeeded, want an error", port)
+		}
+	}
+	// Both ends of the range stay valid (pins the inclusive bounds).
+	for _, port := range []int{1, 65535} {
+		if _, err := RenderHysteria2(Hysteria2Config{ListenPort: port, Domain: "example.com", Password: "p", MasqueradeURL: "https://www.bing.com/"}); err != nil {
+			t.Fatalf("RenderHysteria2(ListenPort=%d) = %v, want success", port, err)
+		}
+	}
+}

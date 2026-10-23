@@ -106,6 +106,16 @@ func BuildRenderPlanForEtcDir(
 			panelPublicPort = 443
 		}
 		if panelDomain != "" {
+			if panelPublicPort < 1 || panelPublicPort > 65535 {
+				return CaddyRenderPlan{}, nil, fmt.Errorf("panelPublicPort %d is outside 1-65535", panelPublicPort)
+			}
+			// An unusable backend port must fail the plan: a panel-only
+			// bind would reverse-proxy to 127.0.0.1:0, and a bind shared
+			// with naive would silently drop every panel route (#1292 F6).
+			backendPort := panelBackendPort(settings.PanelListen)
+			if backendPort == 0 {
+				return CaddyRenderPlan{}, nil, fmt.Errorf("panelListen %q has no valid port for the Caddy panel backend", settings.PanelListen)
+			}
 			key := bindregistry.BindKey{Address: "0.0.0.0", Port: panelPublicPort, Network: bindregistry.ListenTCP}
 			if err := setOwner(owners, key, bindregistry.BindOwner{Kind: bindregistry.BindOwnerPanelCaddy, ServiceName: "veil-caddy.service"}); err != nil {
 				return CaddyRenderPlan{}, nil, err
@@ -113,7 +123,7 @@ func BuildRenderPlanForEtcDir(
 			if err := setServer(servers, key, CaddyBindOwner{
 				Kind:        CaddyOwnerPanel,
 				Domain:      panelDomain,
-				BackendPort: panelBackendPort(settings.PanelListen),
+				BackendPort: backendPort,
 				WebBasePath: veilsettings.NormalizeWebBasePath(settings.WebBasePath),
 			}); err != nil {
 				return CaddyRenderPlan{}, nil, err
