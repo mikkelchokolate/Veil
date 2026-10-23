@@ -33,6 +33,15 @@ All notable changes to Veil will be documented in this file.
   prerelease handling, so an RC became the Latest release and was what
   `releases/latest/download/install.sh`, `install.sh` without `--version`
   and `veil update` / panel Update installed on stable hosts (#1414).
+- The release workflow no longer promotes a stable backport tag to Latest.
+  A stable tag cut after a newer stable line (for example `v0.7.4` after
+  `v0.8.0`) used to get `--latest`, which pointed `/releases/latest`, and
+  so `install.sh` and `veil update`, at the older line. The publish step now
+  compares the tag with the newest stable release already published, using
+  `sort -V`, and publishes an older tag with `--latest=false` and a warning.
+  The comparison doesn't rely on which release carries the Latest flag. If
+  the releases can't be listed, the step fails before anything is published
+  (follow-up to the #1422 review).
 - The weekly `upstream-compat` workflow now probes mita with
   `mita version`, the same subcommand the runtime catalog uses. Since #738
   it ran `mita -version || mita --version`, flags mita does not have, so the
