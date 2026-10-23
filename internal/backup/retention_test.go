@@ -108,3 +108,33 @@ func writeArchivePlaceholder(t *testing.T, dir, name string) {
 	timestamp := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	_ = os.Chtimes(path, timestamp, timestamp)
 }
+
+func TestResolveRetentionPolicyAllZeroMeansDefault(t *testing.T) {
+	policy, defaulted, err := ResolveRetentionPolicy(0, 0, 0)
+	if err != nil || !defaulted || policy != DefaultRetentionPolicy() {
+		t.Fatalf("all-zero: policy=%+v defaulted=%t err=%v", policy, defaulted, err)
+	}
+	policy, defaulted, err = ResolveRetentionPolicy(0, 0, 1)
+	if err != nil || defaulted || policy != (RetentionPolicy{Monthly: 1}) {
+		t.Fatalf("explicit: policy=%+v defaulted=%t err=%v", policy, defaulted, err)
+	}
+	policy, defaulted, err = ResolveRetentionPolicy(MaxRetentionDaily, MaxRetentionWeekly, MaxRetentionMonthly)
+	if err != nil || defaulted || policy != (RetentionPolicy{Daily: 365, Weekly: 104, Monthly: 120}) {
+		t.Fatalf("upper bounds: policy=%+v defaulted=%t err=%v", policy, defaulted, err)
+	}
+	for _, tc := range []struct {
+		daily, weekly, monthly int
+		want                   string
+	}{
+		{-1, 0, 0, "daily retention must be between 0 and 365"},
+		{366, 0, 0, "daily retention must be between 0 and 365"},
+		{0, -1, 0, "weekly retention must be between 0 and 104"},
+		{0, 105, 0, "weekly retention must be between 0 and 104"},
+		{0, 0, -1, "monthly retention must be between 0 and 120"},
+		{0, 0, 121, "monthly retention must be between 0 and 120"},
+	} {
+		if _, _, err := ResolveRetentionPolicy(tc.daily, tc.weekly, tc.monthly); err == nil || err.Error() != tc.want {
+			t.Fatalf("ResolveRetentionPolicy(%d,%d,%d) err=%v, want %q", tc.daily, tc.weekly, tc.monthly, err, tc.want)
+		}
+	}
+}

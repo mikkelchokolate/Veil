@@ -1,10 +1,11 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"sort"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/backup"
 )
 
 const (
@@ -71,16 +72,7 @@ func (s *managementState) pruneBackupRestoreJobs() {
 }
 
 func validateBackupRetention(daily, weekly, monthly int) error {
-	if daily < 0 || daily > 365 {
-		return fmt.Errorf("daily retention must be between 0 and 365")
-	}
-	if weekly < 0 || weekly > 104 {
-		return fmt.Errorf("weekly retention must be between 0 and 104")
-	}
-	if monthly < 0 || monthly > 120 {
-		return fmt.Errorf("monthly retention must be between 0 and 120")
-	}
-	return nil
+	return backup.ValidateRetentionCounts(daily, weekly, monthly)
 }
 
 // scheduleBackupRestoreOwnerSessionRevocation ends the restore owner's

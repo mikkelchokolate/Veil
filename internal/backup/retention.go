@@ -44,6 +44,45 @@ func DefaultRetentionPolicy() RetentionPolicy {
 	return RetentionPolicy{Daily: 7, Weekly: 4, Monthly: 12}
 }
 
+// Upper bounds for each retention bucket. The API, the privileged helper and
+// the CLI all enforce the same limits.
+const (
+	MaxRetentionDaily   = 365
+	MaxRetentionWeekly  = 104
+	MaxRetentionMonthly = 120
+)
+
+// ValidateRetentionCounts reports whether every retention count is within
+// [0, Max*].
+func ValidateRetentionCounts(daily, weekly, monthly int) error {
+	if daily < 0 || daily > MaxRetentionDaily {
+		return fmt.Errorf("daily retention must be between 0 and %d", MaxRetentionDaily)
+	}
+	if weekly < 0 || weekly > MaxRetentionWeekly {
+		return fmt.Errorf("weekly retention must be between 0 and %d", MaxRetentionWeekly)
+	}
+	if monthly < 0 || monthly > MaxRetentionMonthly {
+		return fmt.Errorf("monthly retention must be between 0 and %d", MaxRetentionMonthly)
+	}
+	return nil
+}
+
+// ResolveRetentionPolicy is the single retention contract shared by the CLI,
+// the API and the privileged helper: counts must be in range, and an
+// all-zero triple means "use the default policy" rather than "keep
+// nothing". Without the substitution an all-zero policy deletes every local
+// and remote archive, including one that was just created (#1412). The
+// second result reports whether the default was substituted.
+func ResolveRetentionPolicy(daily, weekly, monthly int) (RetentionPolicy, bool, error) {
+	if err := ValidateRetentionCounts(daily, weekly, monthly); err != nil {
+		return RetentionPolicy{}, false, err
+	}
+	if daily == 0 && weekly == 0 && monthly == 0 {
+		return DefaultRetentionPolicy(), true, nil
+	}
+	return RetentionPolicy{Daily: daily, Weekly: weekly, Monthly: monthly}, false, nil
+}
+
 func ListArchives(dir string) ([]ArchiveEntry, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {
