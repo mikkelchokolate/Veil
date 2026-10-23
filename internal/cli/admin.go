@@ -249,6 +249,11 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				managementstate.CompleteSetupForAdmins(snapshot, time.Now())
 				return nil
 			}); err != nil {
+				if errors.Is(err, api.ErrPanelUsernameInvalid) {
+					// Nothing was saved: report the policy refusal as-is
+					// rather than as a "save state" failure.
+					return err
+				}
 				return fmt.Errorf("save state: %w", err)
 			}
 

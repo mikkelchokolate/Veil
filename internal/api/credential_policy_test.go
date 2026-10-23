@@ -160,8 +160,8 @@ func TestValidatePanelUsernameMatchesSetupPolicy(t *testing.T) {
 		if (err == nil) != validSetupUsername(name) {
 			t.Fatalf("ValidatePanelUsername(%q) = %v, validSetupUsername = %v", name, err, validSetupUsername(name))
 		}
-		if err != nil && !errors.Is(err, errPanelUsernameInvalid) {
-			t.Fatalf("ValidatePanelUsername(%q) = %v, want errPanelUsernameInvalid", name, err)
+		if err != nil && !errors.Is(err, ErrPanelUsernameInvalid) {
+			t.Fatalf("ValidatePanelUsername(%q) = %v, want ErrPanelUsernameInvalid", name, err)
 		}
 	}
 }

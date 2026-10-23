@@ -79,7 +79,7 @@ func validateUserMutationBody(w http.ResponseWriter, r *http.Request, requireUse
 		return true
 	}
 	if requireUsername && request.Username != "" && !validSetupUsername(request.Username) {
-		writeError(w, errPanelUsernameInvalid.Error(), http.StatusBadRequest)
+		writeError(w, ErrPanelUsernameInvalid.Error(), http.StatusBadRequest)
 		return false
 	}
 	if request.Password != "" {

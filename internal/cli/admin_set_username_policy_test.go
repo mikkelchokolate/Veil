@@ -2,10 +2,12 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/api"
 	"github.com/mikkelchokolate/Veil/internal/model"
 )
 
@@ -50,6 +52,9 @@ func TestAdminSetRejectsNewUsernameOutsidePanelPolicy(t *testing.T) {
 			err := cmd.Execute()
 			if err == nil || !strings.Contains(err.Error(), "username must be 3-64 characters") {
 				t.Fatalf("admin set --username %q: want username policy error, got %v\n%s", tc.username, err, out.String())
+			}
+			if !errors.Is(err, api.ErrPanelUsernameInvalid) || strings.HasPrefix(err.Error(), "save state") {
+				t.Fatalf("admin set --username %q: want an unwrapped policy refusal (nothing was saved), got %q", tc.username, err)
 			}
 			users := loadAdminUsers(t, statePath, keyPath)
 			if len(users) != 1 || users[0].Username != "admin" || users[0].PasswordHash != "old" {
