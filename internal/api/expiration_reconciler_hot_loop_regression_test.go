@@ -140,3 +140,54 @@ func TestExpirationReconcilerBacksOffWhileEnforcementPaused(t *testing.T) {
 	}
 	t.Fatalf("reconciler reserved enforcement for %d of %d clients after the pause cleared and it was signalled", rows, len(ids))
 }
+
+// Issue #1423 follow-up: the pause reminder is wall-clock based. Signals
+// during a pause (client writes) must not add lines, and a pause that
+// outlasts the reminder interval must log again.
+func TestExpirationReconcilerPauseReminderIsWallClock(t *testing.T) {
+	_, state := newApplyTrackedRouterWithState(t)
+	state.expirationReconciler.Stop()
+	due := time.Now().UTC().Unix() - 5
+	if _, err := state.clientRepo.Create(client.Client{
+		Name: "due-reminder", Enabled: true, QuotaResetPolicy: client.ResetNever, ExpiresAt: &due,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	state.mu.Lock()
+	state.runtimeVerificationUnknown = true
+	state.mu.Unlock()
+
+	logs := &lockedLogBuffer{}
+	previousWriter := log.Writer()
+	log.SetOutput(logs)
+	defer log.SetOutput(previousWriter)
+
+	reconciler := newExpirationReconciler(state)
+	reconciler.pausedRetry = time.Hour
+	reconciler.pausedReminder = 700 * time.Millisecond
+	state.mu.Lock()
+	state.expirationReconciler = reconciler
+	state.mu.Unlock()
+	reconciler.Start()
+	defer reconciler.Stop()
+
+	pauseLines := func() int { return strings.Count(logs.String(), "expiration enforcement paused") }
+	// Many wakes inside one reminder interval: still exactly one line.
+	for i := 0; i < 10; i++ {
+		time.Sleep(30 * time.Millisecond)
+		reconciler.Signal()
+	}
+	if n := pauseLines(); n != 1 {
+		t.Fatalf("pause logged %d times across 10 signals within the reminder interval; want 1\n%s", n, logs.String())
+	}
+	// After the reminder interval, the next wake logs the reminder.
+	time.Sleep(800 * time.Millisecond)
+	reconciler.Signal()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && pauseLines() < 2 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if n := pauseLines(); n != 2 {
+		t.Fatalf("pause logged %d times after the reminder interval elapsed; want 2\n%s", n, logs.String())
+	}
+}

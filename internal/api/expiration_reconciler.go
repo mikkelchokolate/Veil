@@ -30,9 +30,11 @@ const expirationMinLoopWait = time.Second
 // reconciler, so this only bounds the re-check when no signal arrives (#1423).
 const expirationPausedRetryInterval = 30 * time.Second
 
-// expirationPausedReminderPasses repeats the paused log line every 10
-// paused checks (5 minutes at the 30 s retry interval).
-const expirationPausedReminderPasses = 10
+// expirationPausedReminderInterval is the wall-clock cadence at which a
+// continuing pause is logged again, independent of how often Signal() wakes
+// the loop, so a long pause is not silent and client writes can't make it
+// noisy.
+const expirationPausedReminderInterval = 5 * time.Minute
 
 var errExpirationEnforcementPaused = errors.New("expiration enforcement paused while runtime verification is unknown")
 
@@ -41,10 +43,15 @@ type expirationReconciler struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 	wake   chan struct{}
+	// pausedRetry and pausedReminder default to the package constants;
+	// tests shorten them to observe the paused cadence.
+	pausedRetry    time.Duration
+	pausedReminder time.Duration
 }
 
 func newExpirationReconciler(state *managementState) *expirationReconciler {
-	return &expirationReconciler{state: state, done: make(chan struct{}), wake: make(chan struct{}, 1)}
+	return &expirationReconciler{state: state, done: make(chan struct{}), wake: make(chan struct{}, 1),
+		pausedRetry: expirationPausedRetryInterval, pausedReminder: expirationPausedReminderInterval}
 }
 
 func (r *expirationReconciler) Start() {
@@ -52,22 +59,21 @@ func (r *expirationReconciler) Start() {
 	r.cancel = cancel
 	go func() {
 		defer close(r.done)
-		pausedPasses := 0
+		var lastPausedLog time.Time
 		for {
 			wait := expirationSafetySweepInterval
 			if r.state.expirationEnforcementPaused() {
 				// Nothing can be enforced until the pause clears; polling the
 				// due set would only log the same refusal per client per pass.
-				// Log on entering the pause and then every
-				// expirationPausedReminderPasses checks so a long pause is
-				// not silent.
-				if pausedPasses%expirationPausedReminderPasses == 0 {
+				// Log on entering the pause and then at most once per
+				// pausedReminder of wall-clock time.
+				if lastPausedLog.IsZero() || time.Since(lastPausedLog) >= r.pausedReminder {
 					log.Printf("client expiry reconciliation: %v", errExpirationEnforcementPaused)
+					lastPausedLog = time.Now()
 				}
-				pausedPasses++
-				wait = expirationPausedRetryInterval
+				wait = r.pausedRetry
 			} else {
-				pausedPasses = 0
+				lastPausedLog = time.Time{}
 				if err := r.ReconcileOnce(ctx); err != nil && !errors.Is(err, context.Canceled) {
 					log.Printf("client expiry reconciliation: %v", err)
 				}
