@@ -13,8 +13,12 @@ All notable changes to Veil will be documented in this file.
   `" example.com :22"`, authenticated as `" backup"`, and scoped uploads
   under the relative path `" /srv/veil /veil-node-…"` instead of the
   validated `/srv/veil`. Configs already on disk with such whitespace are
-  normalized when loaded. Passwords and key passphrases are not trimmed
-  (#1408).
+  normalized when loaded. Archives that such a config already uploaded
+  stay under the old relative path in the SFTP user's home; they are no
+  longer listed, fetched or pruned and must be moved or removed by hand. A
+  pinned host key pasted with a trailing CRLF is now trimmed and accepted;
+  an embedded `\r` is still rejected. Passwords and key passphrases are
+  not trimmed (#1408).
 - A panel IP certificate issuance whose `--installcert` step exits 0 but
   installs rejected material (missing, failing validation, or not replacing
   the previous cert) now drops the ACME enrollment it created, exactly like an

@@ -330,3 +330,35 @@ func TestConfigLoadNormalizesLegacyUntrimmedFile(t *testing.T) {
 		t.Fatalf("loaded = %+v, want %+v", loaded, want)
 	}
 }
+
+// TestConfigSaveTrimsHostKeyEdgesButRejectsEmbeddedCR makes the #1408
+// relaxation explicit: SaveConfig normalizes before Validate, so a host key
+// pasted with a trailing CRLF is trimmed and accepted, while a carriage
+// return inside the key is still rejected.
+func TestConfigSaveTrimsHostKeyEdgesButRejectsEmbeddedCR(t *testing.T) {
+	hostKey := "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDb8mQJYHLqAoBzBfOkJM0iOOcXLbbQ1sDHs/RTmkrqX"
+	base := Config{
+		Host: "example.com", User: "backup", RemoteDir: "/srv/veil",
+		AuthType: AuthTypePassword, Password: "pw",
+	}
+	path := filepath.Join(t.TempDir(), ConfigFileName)
+
+	crlf := base
+	crlf.HostKey = hostKey + "\r\n"
+	if err := SaveConfig(path, crlf); err != nil {
+		t.Fatalf("trailing CRLF host key rejected: %v", err)
+	}
+	loaded, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded.HostKey != hostKey {
+		t.Fatalf("host key = %q, want %q", loaded.HostKey, hostKey)
+	}
+
+	embedded := base
+	embedded.HostKey = "ssh-ed25519\rAAAAC3NzaC1lZDI1NTE5AAAAIDb8mQJYHLqAoBzBfOkJM0iOOcXLbbQ1sDHs/RTmkrqX"
+	if err := SaveConfig(path, embedded); err == nil || !strings.Contains(err.Error(), "host key contains invalid characters") {
+		t.Fatalf("embedded CR host key: err = %v", err)
+	}
+}
