@@ -233,7 +233,11 @@ rotated in place and `veil.env` is not touched.
 Rotation re-encrypts Management state atomically and rolls back failed file
 replacement. Existing archives remain self-contained because each archive
 includes the state key used by its state file. Create a fresh encrypted backup
-after every rotation.
+after every rotation. The whole root CLI layer (`veil backup create`,
+`veil backup restore`, `veil admin show/set/reset`) resolves `state.json` and
+the key from the installed `veil.env` the same way the Panel does, so that
+backup pairs the new state with the key the Panel reads; explicit
+`--state`/`--key-path` flags still win.
 
 ## Compatibility Policy
 

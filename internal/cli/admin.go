@@ -174,9 +174,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 		Use:   "reset",
 		Short: "Reset administrator credentials with new randomly generated ones",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			env := serveflow.NewEnvironment()
-			resolvedState, _ := env.StatePath(statePath)
-			resolvedKey, _ := env.KeyPath(keyPath)
+			resolvedState, resolvedKey, _, _ := resolveInstalledPaths(statePath, keyPath)
 
 			suffix, err := generateRandomHex(4)
 			if err != nil {
@@ -254,9 +252,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				return fmt.Errorf("role must be admin or viewer")
 			}
 
-			env := serveflow.NewEnvironment()
-			resolvedState, _ := env.StatePath(statePath)
-			resolvedKey, _ := env.KeyPath(keyPath)
+			resolvedState, resolvedKey, _, _ := resolveInstalledPaths(statePath, keyPath)
 
 			hashed, err := hasher.Hash([]byte(password))
 			if err != nil {
@@ -392,9 +388,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 		Use:   "show",
 		Short: "Show all registered users and roles",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			env := serveflow.NewEnvironment()
-			resolvedState, _ := env.StatePath(statePath)
-			resolvedKey, _ := env.KeyPath(keyPath)
+			resolvedState, resolvedKey, _, _ := resolveInstalledPaths(statePath, keyPath)
 
 			key, err := secrets.LoadOrCreateKey(resolvedKey)
 			if err != nil {
