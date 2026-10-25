@@ -20,8 +20,10 @@ All notable changes to Veil will be documented in this file.
   `postinst` exit non-zero, leaving dpkg with a post-installation-script error
   on top of the failed upgrade. The install body now runs only for `configure`,
   a bare invocation (APK) and the RPM install counters `1`/`2`; the abort
-  arguments exit without touching host state, and `abort-remove` only restarts
-  the units `preremove` stopped, without the migration. A new test executes
+  arguments exit without touching host state, and `abort-remove` only starts
+  the units `preremove` stopped (`systemctl try-restart` is a no-op for a
+  stopped unit) and re-enables `veil-helper.socket`, which `preremove` disables
+  unconditionally — without the migration either way. A new test executes
   the argument gate for every dpkg/RPM argument, so all three maintainer
   scripts are locked by one contract (#1463).
 - The Hysteria2 runtime install no longer fails with `no assets found` when

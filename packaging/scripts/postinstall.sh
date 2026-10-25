@@ -192,13 +192,16 @@ fi
 # `dpkg -i` must still succeed there (issue #498). When systemd IS running,
 # every call below fails closed: a daemon-reload/enable/restart failure is a
 # real packaging failure, not something to silence (issues #498, #504).
+#
+# The same unit list is driven by two verbs, and they are not interchangeable:
+# configure/upgrade runs while the units are still running, so try-restart
+# swaps them onto the replaced binary (a no-op on a fresh install); abort-remove
+# runs right after preremove stopped and disabled those units, and systemctl(1)
+# defines try-restart as doing nothing to a unit that is not running, so that
+# path has to start them.
 restart_managed_units() {
-    if ! command -v systemctl >/dev/null 2>&1 || [ ! -d /run/systemd/system ]; then
-        return 0
-    fi
     systemctl daemon-reload
-    # Restart already-running units so they pick up the replaced binary. This is
-    # a no-op on a fresh package install (units are not running yet).
+    systemctl enable veil-helper.socket
     systemctl try-restart veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer
     # Template units restart per concrete instance — a `@*` glob can miss
     # loaded instances, so enumerate them explicitly (issue #494).
@@ -207,16 +210,24 @@ restart_managed_units() {
     done
 }
 
-# Enabling the helper socket is install-only: abort-remove must not re-enable a
-# socket the operator disabled before the aborted removal.
-if [ "$MODE" = install ] && command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+start_managed_units() {
+    systemctl daemon-reload
+    # preremove disables the socket unconditionally, so a rolled-back removal
+    # must restore it: dpkg keeps reporting the package as installed, and a
+    # stopped+disabled socket never comes back on boot, leaving the panel's
+    # privileged operations dead until the next upgrade.
     systemctl enable veil-helper.socket
-fi
+    systemctl start veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer
+    for instance in $(systemctl list-units --all --plain --no-legend 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' 2>/dev/null | awk '{ print $1 }'); do
+        systemctl start "$instance"
+    done
+}
 
-# install: units pick up the replaced binary. restart (abort-remove): bring
-# back what preremove stopped, nothing else.
-if [ "$MODE" = install ] || [ "$MODE" = restart ]; then
-    restart_managed_units
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    case "$MODE" in
+        install) restart_managed_units ;;
+        restart) start_managed_units ;;
+    esac
 fi
 
 if [ "$MODE" = install ]; then

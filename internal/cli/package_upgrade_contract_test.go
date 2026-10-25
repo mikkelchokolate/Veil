@@ -388,9 +388,87 @@ func TestPostinstallSkipsInstallBodyOnAbortedOperations(t *testing.T) {
 			t.Fatalf("postinstall.sh runs %q before the argument gate", strings.TrimSpace(mutation))
 		}
 	}
-	// abort-remove must not re-run the migration, but must bring back the
-	// units preremove stopped.
-	if !strings.Contains(code, `if [ "$MODE" = restart ]`) && !strings.Contains(code, `[ "$MODE" = install ] || [ "$MODE" = restart ]`) {
-		t.Fatal("postinstall.sh must restart the units preremove stopped on abort-remove")
+	// abort-remove must not re-run the migration, but must start the units
+	// preremove stopped (try-restart is a no-op for stopped units) and restore
+	// the helper socket preremove disabled.
+	if !strings.Contains(code, `restart) start_managed_units ;;`) {
+		t.Fatal("postinstall.sh must start the units preremove stopped on abort-remove")
 	}
+}
+
+// TestPostinstallAbortRemoveStartsUnitsPreremoveStopped executes both systemd
+// paths against a fake systemctl. configure must try-restart the units it
+// replaces (they are still running), while abort-remove runs after preremove
+// stopped and disabled them: systemctl(1) defines try-restart as doing nothing
+// to a unit that is not running, so that path must use start, and it must
+// re-enable the helper socket preremove disabled — otherwise a rolled-back
+// removal leaves a package dpkg calls installed with a dead privileged helper.
+func TestPostinstallAbortRemoveStartsUnitsPreremoveStopped(t *testing.T) {
+	const script = "../../packaging/scripts/postinstall.sh"
+	units := "veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer"
+	for _, tc := range []struct {
+		fn   string
+		verb string
+	}{
+		{"restart_managed_units", "try-restart"},
+		{"start_managed_units", "start"},
+	} {
+		t.Run(tc.fn, func(t *testing.T) {
+			calls := runShellFuncStubbed(t, extractShellFunc(t, script, tc.fn), tc.fn)
+			joined := "\n" + strings.Join(calls, "\n") + "\n"
+			for _, want := range []string{
+				"daemon-reload",
+				"enable veil-helper.socket",
+				tc.verb + " " + units,
+				tc.verb + " veil-hysteria2@node1.service",
+			} {
+				if !strings.Contains(joined, "\n"+want+"\n") {
+					t.Errorf("%s must call `systemctl %s`; got calls:\n%s", tc.fn, want, strings.Join(calls, "\n"))
+				}
+			}
+			other := "start"
+			if tc.verb == "start" {
+				other = "try-restart"
+			}
+			for _, call := range calls {
+				if strings.HasPrefix(call, other+" ") {
+					t.Errorf("%s must not use `%s` (wrong verb for this path): %q", tc.fn, other, call)
+				}
+			}
+		})
+	}
+}
+
+// runShellFuncStubbed executes an extracted function with a fake systemctl
+// first on PATH and returns the argv lines it recorded. The fake answers
+// list-units with one live template instance so the per-instance loop runs.
+func runShellFuncStubbed(t *testing.T, fn, name string) []string {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(dir, "systemctl.log")
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$STUB_LOG\"\nif [ \"$1\" = list-units ]; then\n    echo 'veil-hysteria2@node1.service loaded active running'\nfi\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "systemctl"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "func.sh")
+	if err := os.WriteFile(script, []byte(fn+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", "-c", `. "$1"; "$2"`, "sh", script, name)
+	cmd.Env = append(os.Environ(),
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"STUB_LOG="+logPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("running %s: %v\n%s", name, err, out)
+	}
+	body, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("%s recorded no systemctl calls: %v", name, err)
+	}
+	return strings.Split(strings.TrimSpace(string(body)), "\n")
 }
