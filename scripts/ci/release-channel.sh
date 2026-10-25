@@ -30,7 +30,9 @@ fi
 # The anchor is the highest stable-semver tag among published non-prerelease
 # releases, not whichever release carries the Latest flag: a mis-flagged
 # Latest (an RC promoted before #1414) must neither block nor mislead the
-# comparison (#1422).
+# comparison (#1422). The list is capped at 1000; past that many
+# non-prerelease releases the anchor could fall off the page, so raise the
+# limit before then.
 published="$(gh release list --repo "${repo}" \
     --exclude-drafts --exclude-pre-releases --limit 1000 \
     --json tagName --jq '.[].tagName')"
