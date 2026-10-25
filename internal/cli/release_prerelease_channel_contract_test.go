@@ -4,7 +4,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -40,36 +39,8 @@ func publishChannelStepRun(t *testing.T, wf publishChannelWorkflow, name string)
 	return run
 }
 
-var (
-	stableTagTest   = regexp.MustCompile(`\[\[ "\$\{GITHUB_REF_NAME\}" =~ (\S+) \]\]`)
-	stableTagAssign = regexp.MustCompile(`(?m)^\s*stable='(\S+)'\s*$`)
-)
-
-// stableTagPattern returns the regex a step's first GITHUB_REF_NAME test uses,
-// resolving a `${stable}` reference to the step's `stable='...'` assignment.
-func stableTagPattern(t *testing.T, run string) string {
+func loadReleaseWorkflow(t *testing.T) publishChannelWorkflow {
 	t.Helper()
-	m := stableTagTest.FindStringSubmatch(run)
-	if m == nil {
-		t.Fatalf("stable-semver test missing in step:\n%s", run)
-	}
-	if m[1] != "${stable}" {
-		return m[1]
-	}
-	a := stableTagAssign.FindAllStringSubmatch(run, -1)
-	if len(a) != 1 {
-		t.Fatalf("step tests ${stable} but has %d stable='...' assignments, want 1", len(a))
-	}
-	return a[0][1]
-}
-
-// Issue #1414: install.sh, install-privileged.sh and veil/panel update all
-// resolve /releases/latest, so the GitHub release for a prerelease tag must
-// be a prerelease that never becomes Latest. The publish step must classify
-// tags with the exact stable-semver test docker-publish uses for :latest
-// (#1148), and the gh invocation it builds must carry the right flags. The
-// step is executed with a fake gh so the test pins behaviour, not text.
-func TestReleasePublishKeepsPrereleasesOffLatest(t *testing.T) {
 	body, err := os.ReadFile("../../.github/workflows/release.yml")
 	if err != nil {
 		t.Fatal(err)
@@ -78,137 +49,137 @@ func TestReleasePublishKeepsPrereleasesOffLatest(t *testing.T) {
 	if err := yaml.Unmarshal(body, &wf); err != nil {
 		t.Fatal(err)
 	}
-	publish := publishChannelStepRun(t, wf, "Publish GitHub release")
-	docker := publishChannelStepRun(t, wf, "Detect stable semver release tag")
-
-	publishTest := stableTagPattern(t, publish)
-	dockerTest := stableTagPattern(t, docker)
-	if publishTest != dockerTest {
-		t.Fatalf("publish classifies tags with %q but docker-publish uses %q; keep one stable-semver contract", publishTest, dockerTest)
-	}
-
-	if runtime.GOOS == "windows" {
-		t.Skip("executing the publish step needs bash")
-	}
-	bash, err := exec.LookPath("bash")
-	if err != nil {
-		t.Skipf("bash not found: %v", err)
-	}
-	for _, tc := range []struct {
-		tag        string
-		want       []string
-		wantAbsent []string
-	}{
-		{"v1.2.3", []string{"--latest"}, []string{"--prerelease", "--latest=false"}},
-		{"v10.20.30", []string{"--latest"}, []string{"--prerelease", "--latest=false"}},
-		{"v1.2.3-rc.1", []string{"--prerelease", "--latest=false"}, []string{"--latest\n"}},
-		{"v0.8.0-beta", []string{"--prerelease", "--latest=false"}, []string{"--latest\n"}},
-		{"v1.2.3+build.5", []string{"--prerelease", "--latest=false"}, []string{"--latest\n"}},
-	} {
-		t.Run(tc.tag, func(t *testing.T) {
-			args, out, err := runPublishStep(t, bash, publish, tc.tag, "", false)
-			if err != nil {
-				t.Fatalf("publish step failed: %v\n%s", err, out)
-			}
-			assertPublishArgs(t, tc.tag, args, tc.want, tc.wantAbsent)
-		})
-	}
+	return wf
 }
 
-// Follow-up to the #1422 review: a stable tag is only promoted to Latest when
-// it is not older than the release that is Latest right now. A backport cut
-// after a newer stable line (v0.7.4 after v0.8.0) used to get an explicit
-// --latest and repoint /releases/latest — and so install.sh and veil/panel
-// update — at the older line. The publish step must compare against the
-// current Latest with version ordering (not string ordering) and fall back to
-// --latest=false, and must fail closed (publish nothing) when it cannot learn
-// the current Latest.
-func TestReleasePublishNeverDemotesLatestToABackport(t *testing.T) {
-	publish := loadPublishStep(t)
+// TestReleaseLatestChannelAgreesAcrossJobs locks #1448 and keeps the #1148/
+// #1414/#1422 contract in one place. Two channels must never disagree about
+// what "latest" means: the GHCR `:latest` image tag (docker-publish) and the
+// GitHub Latest release (publish). A prerelease claims neither, and a stable
+// backport cut after a newer stable line must not move either — before this,
+// tagging v0.7.4 after v0.8.0 published the release with --latest=false while
+// still repointing ghcr.io/…:latest at the older line.
+//
+// The test executes both steps under bash with a fake gh, so it pins behaviour
+// rather than text, and asserts the two decisions agree for every case.
+func TestReleaseLatestChannelAgreesAcrossJobs(t *testing.T) {
+	wf := loadReleaseWorkflow(t)
+	publish := publishChannelStepRun(t, wf, "Publish GitHub release")
+	docker := publishChannelStepRun(t, wf, "Detect the latest channel")
+	for name, step := range map[string]string{"publish": publish, "docker-publish": docker} {
+		if !strings.Contains(step, "scripts/ci/release-channel.sh") {
+			t.Fatalf("%s must classify the tag with scripts/ci/release-channel.sh, or the two latest channels can disagree (#1448):\n%s", name, step)
+		}
+	}
+	body, err := os.ReadFile("../../.github/workflows/release.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.ReplaceAll(string(body), "\r\n", "\n"), "enable=${{ steps.latest.outputs.enabled }}") {
+		t.Fatal("the image metadata's latest tag must be driven by the channel decision")
+	}
+
 	if runtime.GOOS == "windows" {
-		t.Skip("executing the publish step needs bash")
+		t.Skip("executing the release steps needs bash")
 	}
 	bash, err := exec.LookPath("bash")
 	if err != nil {
 		t.Skipf("bash not found: %v", err)
 	}
-	promote := []string{"--latest"}
-	keep := []string{"--latest=false"}
+
 	for _, tc := range []struct {
-		name, tag, published string
-		want                 []string
-		wantAbsent           []string
+		name, tag, published, want string
 	}{
-		{"first stable release", "v0.1.0", "", promote, []string{"--latest=false", "--prerelease"}},
-		{"newer patch", "v0.7.4", "v0.7.3", promote, []string{"--latest=false", "--prerelease"}},
-		{"newer minor", "v0.8.0", "v0.7.3", promote, []string{"--latest=false", "--prerelease"}},
-		{"numeric not lexical ordering", "v0.10.0", "v0.9.9", promote, []string{"--latest=false", "--prerelease"}},
-		{"backport patch after newer minor", "v0.7.4", "v0.8.0", keep, []string{"--latest\n", "--prerelease"}},
-		{"backport lexically larger", "v0.9.9", "v0.10.0", keep, []string{"--latest\n", "--prerelease"}},
-		{"backport after newer major", "v1.9.0", "v2.0.0", keep, []string{"--latest\n", "--prerelease"}},
-		// A Latest that is not stable semver (e.g. an RC promoted before
-		// #1414) is no ordering anchor: the stable tag reclaims Latest.
-		{"non-stable latest is ignored", "v0.8.0", "v0.9.0-rc.1", promote, []string{"--latest=false", "--prerelease"}},
-		{"prerelease stays off latest", "v0.9.0-rc.1", "v0.8.0", []string{"--prerelease", "--latest=false"}, []string{"--latest\n"}},
-		// The anchor is the newest stable release, not the release flagged
-		// Latest: with a mis-flagged RC as Latest and v0.8.0 published, a
-		// v0.7.4 backport must still stay off Latest.
-		{"anchor is newest stable not latest flag", "v0.7.4", "v0.9.0-rc.1\nv0.7.3\nv0.8.0\nv0.7.2", keep, []string{"--latest\n", "--prerelease"}},
-		{"newest among many", "v0.8.1", "v0.7.3\nv0.8.0\nv0.10.0-beta\nv0.7.2", promote, []string{"--latest=false", "--prerelease"}},
-		{"newest stable picked by version order", "v0.9.10", "v0.10.0\nv0.9.9", keep, []string{"--latest\n", "--prerelease"}},
-		{"re-run of the newest tag", "v0.8.0", "v0.8.0\nv0.7.3", promote, []string{"--latest=false", "--prerelease"}},
+		{"first stable release", "v0.1.0", "", "latest"},
+		{"newer patch", "v0.7.4", "v0.7.3", "latest"},
+		{"newer minor", "v0.8.0", "v0.7.3", "latest"},
+		{"numeric not lexical ordering", "v0.10.0", "v0.9.9", "latest"},
+		{"re-run of the newest tag", "v0.8.0", "v0.8.0\nv0.7.3", "latest"},
+		{"backport patch after newer minor", "v0.7.4", "v0.8.0", "backport"},
+		{"backport lexically larger", "v0.9.9", "v0.10.0", "backport"},
+		{"backport after newer major", "v1.9.0", "v2.0.0", "backport"},
+		{"anchor is newest stable not latest flag", "v0.7.4", "v0.9.0-rc.1\nv0.7.3\nv0.8.0\nv0.7.2", "backport"},
+		{"prerelease stays off latest", "v0.9.0-rc.1", "v0.8.0", "prerelease"},
+		{"build metadata is not stable", "v1.2.3+build.5", "v0.8.0", "prerelease"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			args, out, err := runPublishStep(t, bash, publish, tc.tag, tc.published, false)
+			wantLatest := tc.want == "latest"
+
+			createArgs, out, err := runReleaseStep(t, bash, publish, tc.tag, tc.published, false)
 			if err != nil {
 				t.Fatalf("publish step failed: %v\n%s", err, out)
 			}
-			assertPublishArgs(t, tc.tag, args, tc.want, tc.wantAbsent)
+			if gotLatest := strings.Contains("\n"+createArgs+"\n", "\n--latest\n"); gotLatest != wantLatest {
+				t.Fatalf("publish step for %s uses --latest=%t, want %t:\n%s", tc.tag, gotLatest, wantLatest, createArgs)
+			}
+			if tc.want == "prerelease" && !strings.Contains("\n"+createArgs+"\n", "\n--prerelease\n") {
+				t.Fatalf("prerelease tag %s must be published as a prerelease:\n%s", tc.tag, createArgs)
+			}
+
+			outputs, dockerOut, err := runReleaseStepWithOutput(t, bash, docker, tc.tag, tc.published, false)
+			if err != nil {
+				t.Fatalf("docker-publish step failed: %v\n%s", err, dockerOut)
+			}
+			if gotLatest := outputs["enabled"] == "true"; gotLatest != wantLatest {
+				t.Fatalf("docker-publish would move :latest=%t for %s, want %t; step output=%v", gotLatest, tc.tag, wantLatest, outputs)
+			}
 		})
 	}
 
-	t.Run("latest lookup failure publishes nothing", func(t *testing.T) {
-		args, out, err := runPublishStep(t, bash, publish, "v0.8.1", "v0.8.0", true)
-		if err == nil {
-			t.Fatalf("publish step succeeded although the Latest lookup failed:\n%s", out)
+	t.Run("unreadable release list fails both channels closed", func(t *testing.T) {
+		if _, out, err := runReleaseStep(t, bash, publish, "v0.8.1", "v0.8.0", true); err == nil {
+			t.Fatalf("publish step succeeded although the release list failed:\n%s", out)
 		}
-		if args != "" {
-			t.Fatalf("gh release create ran although the Latest lookup failed:\n%s", args)
+		outputs, out, err := runReleaseStepWithOutput(t, bash, docker, "v0.8.1", "v0.8.0", true)
+		if err == nil {
+			t.Fatalf("docker-publish step succeeded although the release list failed:\n%s", out)
+		}
+		if outputs["enabled"] == "true" {
+			t.Fatal("docker-publish moved :latest although the channel decision failed")
 		}
 	})
 }
 
-func loadPublishStep(t *testing.T) string {
+// runReleaseStep executes a release.yml step under bash with a fake gh and the
+// real scripts/ci/release-channel.sh in the working directory, and returns the
+// argv of `gh release create` (empty when the step does not create a release).
+func runReleaseStep(t *testing.T, bash, run, tag, published string, listFails bool) (string, []byte, error) {
 	t.Helper()
-	body, err := os.ReadFile("../../.github/workflows/release.yml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var wf publishChannelWorkflow
-	if err := yaml.Unmarshal(body, &wf); err != nil {
-		t.Fatal(err)
-	}
-	return publishChannelStepRun(t, wf, "Publish GitHub release")
+	createArgs, _, out, err := runReleaseStepRaw(t, bash, run, tag, published, listFails)
+	return createArgs, out, err
 }
 
-// runPublishStep executes the publish step under bash with a fake gh. The fake
-// answers `gh release list` with the newline-separated published tags (as
-// `--jq '.[].tagName'` would), or fails it when listFails is set, and records
-// the argv of `gh release create`.
-func runPublishStep(t *testing.T, bash, publish, tag, published string, listFails bool) (createArgs string, out []byte, err error) {
+// runReleaseStepWithOutput is runReleaseStep plus the step's GITHUB_OUTPUT keys.
+func runReleaseStepWithOutput(t *testing.T, bash, run, tag, published string, listFails bool) (map[string]string, []byte, error) {
+	t.Helper()
+	_, outputs, out, err := runReleaseStepRaw(t, bash, run, tag, published, listFails)
+	return outputs, out, err
+}
+
+func runReleaseStepRaw(t *testing.T, bash, run, tag, published string, listFails bool) (createArgs string, outputs map[string]string, out []byte, err error) {
 	t.Helper()
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "bin")
-	if err := os.MkdirAll(filepath.Join(dir, "dist"), 0o755); err != nil {
+	dist := filepath.Join(dir, "dist")
+	scriptDir := filepath.Join(dir, "scripts", "ci")
+	for _, path := range []string{bin, dist, scriptDir} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dist, "release-notes.md"), []byte("notes\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(bin, 0o755); err != nil {
+	channelScript, err := os.ReadFile(filepath.Join("..", "..", "scripts", "ci", "release-channel.sh"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "dist", "release-notes.md"), []byte("notes\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(scriptDir, "release-channel.sh"), channelScript, 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	argsFile := filepath.Join(dir, "gh-args")
+	outputFile := filepath.Join(dir, "github-output")
 	fakeGH := `#!/bin/sh
 if [ "$1" = release ] && [ "$2" = list ]; then
   if [ -n "$FAKE_GH_LIST_FAIL" ]; then echo "HTTP 502: Bad Gateway" >&2; exit 1; fi
@@ -228,41 +199,35 @@ exit 2
 	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(fakeGH), 0o755); err != nil {
 		t.Fatal(err)
 	}
+
 	fail := ""
 	if listFails {
 		fail = "1"
 	}
-	cmd := exec.Command(bash, "-e", "-c", publish)
+	cmd := exec.Command(bash, "-e", "-c", run)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
 		"GITHUB_REF_NAME="+tag,
 		"GITHUB_REPOSITORY=mikkelchokolate/Veil",
+		"GITHUB_OUTPUT="+outputFile,
+		"GH_TOKEN=fake",
 		"FAKE_GH_PUBLISHED="+published,
 		"FAKE_GH_LIST_FAIL="+fail,
 	)
 	out, err = cmd.CombinedOutput()
+
 	raw, readErr := os.ReadFile(argsFile)
 	if readErr != nil && !os.IsNotExist(readErr) {
 		t.Fatal(readErr)
 	}
-	return string(raw), out, err
-}
-
-func assertPublishArgs(t *testing.T, tag, args string, want, wantAbsent []string) {
-	t.Helper()
-	if !strings.HasPrefix(args, "release\ncreate\n"+tag+"\n") {
-		t.Fatalf("unexpected gh invocation:\n%s", args)
-	}
-	lines := "\n" + args
-	for _, w := range want {
-		if !strings.Contains(lines, "\n"+w+"\n") {
-			t.Fatalf("gh args for %s missing %q:\n%s", tag, w, args)
+	outputs = map[string]string{}
+	if output, readErr := os.ReadFile(outputFile); readErr == nil {
+		for _, line := range strings.Split(string(output), "\n") {
+			if key, value, ok := strings.Cut(line, "="); ok {
+				outputs[key] = value
+			}
 		}
 	}
-	for _, absent := range wantAbsent {
-		if strings.Contains(lines, "\n"+absent) {
-			t.Fatalf("gh args for %s must not contain %q:\n%s", tag, strings.TrimSpace(absent), args)
-		}
-	}
+	return string(raw), outputs, out, err
 }

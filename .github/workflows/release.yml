@@ -219,18 +219,31 @@ jobs:
         uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
-      # 'latest' is earned only by an exact stable semver tag vMAJOR.MINOR.PATCH
-      # — prereleases (v1.2.3-rc.1) and non-semver tags must not move the
-      # floating tag (#1148). GHA expressions have no regex, so the test runs
-      # in a step and feeds the metadata action's per-tag `enable=` switch.
-      - name: Detect stable semver release tag
-        id: stable
+      # 'latest' is earned only by a stable semver tag that is not older than
+      # the newest published stable release — the same decision the GitHub
+      # Latest release gets, made once in scripts/ci/release-channel.sh so the
+      # two channels cannot disagree (#1148, #1422, #1448). GHA expressions
+      # have no regex, so the decision runs in a step and feeds the metadata
+      # action's per-tag `enable=` switch.
+      - name: Detect the latest channel
+        id: latest
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "stable=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "stable=false" >> "$GITHUB_OUTPUT"
-          fi
+          set -euo pipefail
+          channel="$(scripts/ci/release-channel.sh "${GITHUB_REF_NAME}" | sed -n 's/^channel=//p')"
+          case "${channel}" in
+            latest)
+              echo "enabled=true" >> "$GITHUB_OUTPUT"
+              ;;
+            backport)
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              echo "::warning::${GITHUB_REF_NAME} is older than the newest stable release; the image is published without moving :latest (backport)."
+              ;;
+            *)
+              echo "enabled=false" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
       - name: Extract Docker metadata
         id: meta
         uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
@@ -240,7 +253,7 @@ jobs:
             latest=false
           tags: |
             type=semver,pattern={{version}}
-            type=raw,value=latest,enable=${{ steps.stable.outputs.stable }}
+            type=raw,value=latest,enable=${{ steps.latest.outputs.enabled }}
       - name: Build and push multi-arch Docker image
         id: build-and-push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
@@ -398,47 +411,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          # Same stable-semver test as docker-publish (#1148). install.sh,
+          # The channel decision is shared with docker-publish
+          # (scripts/ci/release-channel.sh), so the GHCR :latest tag and the
+          # GitHub Latest release cannot disagree (#1448). install.sh,
           # install-privileged.sh and veil/panel update all resolve
-          # /releases/latest, so a prerelease tag (v1.2.3-rc.1) must be
-          # published as a prerelease and never become the Latest release;
-          # gh's default (--latest automatic) would promote it (#1414).
-          # A stable tag becomes Latest only when it is not older than the
-          # newest stable release already published. A backport cut after a
-          # newer stable line (e.g. v0.7.4 after v0.8.0) is published with
-          # --latest=false so fresh installs and updates keep resolving the
-          # newest line. The anchor is the highest stable-semver tag among
-          # all published non-prerelease releases, not whichever release
-          # carries the Latest flag, so a mis-flagged Latest (an RC promoted
-          # before #1414) neither blocks nor misleads the comparison.
-          # Ordering is by version (sort -V), so v0.10.0 > v0.9.9. If the
-          # releases cannot be listed, the step fails before publishing
-          # anything (set -e) instead of guessing. The list is newest-first
-          # and capped at 1000; past that many non-prerelease releases the
-          # anchor could fall off the page, so raise the limit before then.
-          stable='^v[0-9]+\.[0-9]+\.[0-9]+$'
-          if [[ "${GITHUB_REF_NAME}" =~ ${stable} ]]; then
-            published="$(gh release list --repo "${GITHUB_REPOSITORY}" \
-              --exclude-drafts --exclude-pre-releases --limit 1000 \
-              --json tagName --jq '.[].tagName')"
-            newest_stable=""
-            while IFS= read -r t; do
-              [[ "${t}" =~ ${stable} ]] || continue
-              if [[ -z "${newest_stable}" ]] || [[ "$(printf '%s\n%s\n' "${newest_stable#v}" "${t#v}" | sort -V | tail -n 1)" == "${t#v}" ]]; then
-                newest_stable="${t}"
-              fi
-            done <<< "${published}"
-            if [[ -z "${newest_stable}" ]] || [[ "$(printf '%s\n%s\n' "${newest_stable#v}" "${GITHUB_REF_NAME#v}" | sort -V | tail -n 1)" == "${GITHUB_REF_NAME#v}" ]]; then
-              channel=(--latest)
-            else
-              echo "::warning::${GITHUB_REF_NAME} is older than the newest stable release ${newest_stable}; publishing it with --latest=false (backport)."
-              channel=(--latest=false)
-            fi
-          else
-            channel=(--prerelease --latest=false)
-          fi
+          # /releases/latest: a prerelease tag (v1.2.3-rc.1) is published as a
+          # prerelease and never becomes Latest (#1414), and a stable backport
+          # cut after a newer line (v0.7.4 after v0.8.0) is published with
+          # --latest=false so fresh installs keep resolving the newest line
+          # (#1422). An unreadable release list aborts the step before
+          # anything is published instead of guessing.
+          decision="$(scripts/ci/release-channel.sh "${GITHUB_REF_NAME}")"
+          channel="$(printf '%s\n' "${decision}" | sed -n 's/^channel=//p')"
+          newest="$(printf '%s\n' "${decision}" | sed -n 's/^newest=//p')"
+          case "${channel}" in
+            latest)
+              channel_args=(--latest)
+              ;;
+            backport)
+              echo "::warning::${GITHUB_REF_NAME} is older than the newest stable release ${newest}; publishing it with --latest=false (backport)."
+              channel_args=(--latest=false)
+              ;;
+            *)
+              channel_args=(--prerelease --latest=false)
+              ;;
+          esac
           gh release create "${GITHUB_REF_NAME}" dist/* \
             --repo "${GITHUB_REPOSITORY}" \
             --title "Veil ${GITHUB_REF_NAME}" \
             --notes-file dist/release-notes.md \
-            "${channel[@]}"
+            "${channel_args[@]}"
