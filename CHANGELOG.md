@@ -6,6 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil backup restore` no longer reports success while leaving the running
+  Panel on the old database. The CLI signalled `veil.service` with SIGHUP when
+  the unit was active, but a reload re-reads `state.json`/`state.key` and keeps
+  the already-open SQLite handle to the old, now-unlinked `veil.db`: until the
+  next restart the Panel served the pre-restore client set and accepted writes
+  that vanished when it finally reopened the restored file. An archive that
+  carries `veil.db` is now refused while `veil.service` is active, with the
+  instruction to stop the Panel, restore and start it again; archives without
+  the database keep the SIGHUP reload (#144 behaviour) (#1452).
 - `veil admin rotate-key --new-key-path` now reaches every consumer of the
   state key, not only the Panel. The privileged helper had no
   `EnvironmentFile=` and kept a literal `Environment=VEIL_KEY_PATH`, and the

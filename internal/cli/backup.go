@@ -33,8 +33,45 @@ func defaultBackupSystemctlRun(args ...string) error {
 
 var backupSystemctlRun = defaultBackupSystemctlRun
 
-func reloadRunningPanelAfterRestore() (bool, error) {
+// restoredDatabaseMember is the archive member that replaces the Panel's
+// SQLite store.
+const restoredDatabaseMember = "veil.db"
+
+// runningPanelActive reports whether veil.service is active, so a restore can
+// decide how the running Panel has to be handled.
+func runningPanelActive() (bool, error) {
 	if err := backupSystemctlRun("is-active", "--quiet", "veil.service"); err != nil {
+		return false, nil
+	}
+	return true, nil
+}
+
+// archiveCarriesDatabase reports whether the archive replaces veil.db. A
+// SIGHUP reload re-reads state.json/state.key but keeps the already-open SQLite
+// handle to the old, now-unlinked inode, so the running Panel would serve the
+// pre-restore client set and silently drop every later write (#1452).
+func archiveCarriesDatabase(backupFile, passphrase string, maxBytes int64, allowUnencrypted bool) (bool, error) {
+	report, err := backup.VerifyBackupFileWithOptions(backupFile, passphrase, backup.VerifyOptions{
+		MaxBytes:         maxBytes,
+		AllowUnencrypted: allowUnencrypted,
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, file := range report.Files {
+		if file.Name == restoredDatabaseMember {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func reloadRunningPanelAfterRestore() (bool, error) {
+	active, err := runningPanelActive()
+	if err != nil {
+		return false, err
+	}
+	if !active {
 		return false, nil
 	}
 	if err := backupSystemctlRun("kill", "-s", "HUP", "veil.service"); err != nil {
@@ -226,6 +263,25 @@ func newBackupCommand(version string) *cobra.Command {
 			maxBytes, err := backup.ConfiguredMaxBackupBytes()
 			if err != nil {
 				return err
+			}
+			if !checkOnly {
+				active, err := runningPanelActive()
+				if err != nil {
+					return err
+				}
+				if active {
+					// A SIGHUP reload cannot swap the open SQLite handle, so
+					// restoring an archive that carries veil.db needs the Panel
+					// stopped; refusing here leaves the host untouched
+					// (#1452).
+					withDatabase, err := archiveCarriesDatabase(backupFile, resolvedPass, maxBytes, allowUnencryptedRestore)
+					if err != nil {
+						return fmt.Errorf("restore backup failed: %w", err)
+					}
+					if withDatabase {
+						return errors.New("refusing to restore while veil.service is running: the archive replaces veil.db, and the Panel keeps its open handle to the old file, so it would serve pre-restore clients and silently drop writes made after the reload; stop the Panel first (systemctl stop veil.service), restore, then start it again")
+					}
+				}
 			}
 			result, err := backup.RestoreBackupFileWithOptions(
 				backupFile,

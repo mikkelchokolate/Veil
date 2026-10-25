@@ -5,10 +5,16 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
-func TestCLIBackupRestoreSignalsRunningPanel(t *testing.T) {
+// TestCLIBackupRestoreRefusesDatabaseArchiveWhilePanelRuns locks #1452: a SIGHUP
+// reload re-reads state.json but keeps the open SQLite handle to the old,
+// unlinked veil.db, so the Panel would serve pre-restore clients and silently
+// drop every write made after the "successful" reload. The CLI has to refuse
+// before touching anything and tell the operator to stop the Panel.
+func TestCLIBackupRestoreRefusesDatabaseArchiveWhilePanelRuns(t *testing.T) {
 	tempVar := t.TempDir()
 	tempEtc := t.TempDir()
 	statePath := filepath.Join(tempVar, "state.json")
@@ -44,6 +50,10 @@ func TestCLIBackupRestoreSignalsRunningPanel(t *testing.T) {
 	}
 	t.Cleanup(func() { backupSystemctlRun = oldRun })
 
+	stateBefore, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	restore := NewRootCommand("test")
 	out := &bytes.Buffer{}
 	restore.SetOut(out)
@@ -55,18 +65,25 @@ func TestCLIBackupRestoreSignalsRunningPanel(t *testing.T) {
 		"--allow-unencrypted",
 		"--yes",
 	})
-	if err := restore.Execute(); err != nil {
-		t.Fatalf("backup restore: %v\n%s", err, out.String())
+	err = restore.Execute()
+	if err == nil {
+		t.Fatalf("restore of a database archive succeeded while veil.service was active:\n%s", out.String())
 	}
-	if !bytes.Contains(out.Bytes(), []byte("Signaled the running Panel to reload restored state.")) {
-		t.Fatalf("restore output missing reload notice:\n%s", out)
+	for _, want := range []string{"refusing to restore while veil.service is running", "systemctl stop veil.service"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %v does not mention %q", err, want)
+		}
 	}
-	want := [][]string{
-		{"is-active", "--quiet", "veil.service"},
-		{"kill", "-s", "HUP", "veil.service"},
+	// Only the activity probe may run: no HUP, and nothing was restored.
+	if len(calls) != 1 || !reflect.DeepEqual(calls[0], []string{"is-active", "--quiet", "veil.service"}) {
+		t.Fatalf("systemctl calls = %#v, want one is-active probe", calls)
 	}
-	if !reflect.DeepEqual(calls, want) {
-		t.Fatalf("systemctl calls = %#v, want %#v", calls, want)
+	stateAfter, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(stateBefore, stateAfter) {
+		t.Fatal("state changed although the restore was refused")
 	}
 }
 
@@ -127,7 +144,9 @@ func TestCLIBackupRestoreSkipsReloadWhenPanelInactive(t *testing.T) {
 	if bytes.Contains(out.Bytes(), []byte("Signaled the running Panel")) {
 		t.Fatalf("inactive Panel should not be signaled:\n%s", out)
 	}
-	if len(calls) != 1 || calls[0][0] != "is-active" {
-		t.Fatalf("systemctl calls = %#v", calls)
+	for _, call := range calls {
+		if call[0] != "is-active" {
+			t.Fatalf("inactive Panel must never be signalled: %#v", calls)
+		}
 	}
 }
