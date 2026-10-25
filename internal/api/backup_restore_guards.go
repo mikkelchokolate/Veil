@@ -4,8 +4,6 @@ import (
 	"net/http"
 	"sort"
 	"time"
-
-	"github.com/mikkelchokolate/Veil/internal/backup"
 )
 
 const (
@@ -69,10 +67,6 @@ func (s *managementState) pruneBackupRestoreJobs() {
 		delete(s.backupJobs, candidates[0].id)
 		candidates = candidates[1:]
 	}
-}
-
-func validateBackupRetention(daily, weekly, monthly int) error {
-	return backup.ValidateRetentionCounts(daily, weekly, monthly)
 }
 
 // scheduleBackupRestoreOwnerSessionRevocation ends the restore owner's

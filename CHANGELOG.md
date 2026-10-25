@@ -6,6 +6,21 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `POST /api/backups/prune` and `POST /api/backups` with `"prune": true` no
+  longer delete weekly and monthly archives the caller never asked to prune.
+  `docs/openapi.yaml` documents `default: 7 / 4 / 12` for the three retention
+  fields, but the handlers decoded an omitted field as `0` and forwarded the
+  raw triple to the privileged helper, which reads `0` as "keep none of that
+  bucket": a documented-valid partial body such as `{"daily":7}` resolved to
+  `7/0/0` and removed every archive outside the latest 7 archived days, then
+  mirrored the same prune onto the configured SFTP destination. Omitted fields
+  now take their documented default before validation and forwarding, an
+  explicit `0` stays expressible as "keep none of this bucket", and a request
+  that sends all three as an explicit `0` keeps the #1412 meaning of "use the
+  defaults" instead of purging everything. Integrators that relied on a
+  partial body disabling the other buckets must send those buckets as `0`
+  (#1460).
+
 - A failed `.deb` upgrade no longer wipes every packaged systemd unit. After a
   failed upgrade unpack (a full disk on a small VPS, a file conflict, an
   interrupted download) dpkg restores the old package's files and then runs

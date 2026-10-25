@@ -60,11 +60,21 @@ type BackupRestoreJob struct {
 	ownerSessionToken  string
 }
 
+// backupCreateRequest and backupPruneRequest use pointers for the retention
+// counts so an omitted field is distinguishable from an explicit 0: the
+// OpenAPI schema documents default 7/4/12 per field, and a partial body must
+// not silently disable the buckets the caller never mentioned (#1460).
 type backupCreateRequest struct {
 	Prune   bool `json:"prune"`
-	Daily   int  `json:"daily,omitempty"`
-	Weekly  int  `json:"weekly,omitempty"`
-	Monthly int  `json:"monthly,omitempty"`
+	Daily   *int `json:"daily,omitempty"`
+	Weekly  *int `json:"weekly,omitempty"`
+	Monthly *int `json:"monthly,omitempty"`
+}
+
+type backupPruneRequest struct {
+	Daily   *int `json:"daily"`
+	Weekly  *int `json:"weekly"`
+	Monthly *int `json:"monthly"`
 }
 
 func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) {
@@ -85,11 +95,14 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 		if !decodeJSONRequest(w, r, &request) {
 			return
 		}
+		retention := backup.RetentionPolicy{}
 		if request.Prune {
-			if err := validateBackupRetention(request.Daily, request.Weekly, request.Monthly); err != nil {
+			policy, _, err := backup.ResolveRequestedRetention(request.Daily, request.Weekly, request.Monthly)
+			if err != nil {
 				writeError(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			retention = policy
 		}
 		if !s.beginBackupMutation(w) {
 			return
@@ -126,7 +139,7 @@ func (s *managementState) handleBackups(w http.ResponseWriter, r *http.Request) 
 			// The same fencing lease covers the retention prune that belongs to
 			// this create request.
 			pruned, pruneErr := s.backupOperation(r.Context(), privileged.BackupRequest{
-				Action: privileged.BackupActionPrune, Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly,
+				Action: privileged.BackupActionPrune, Daily: retention.Daily, Weekly: retention.Weekly, Monthly: retention.Monthly,
 				Fence: fence,
 			})
 			if pruneErr != nil {
@@ -157,15 +170,12 @@ func (s *managementState) handleBackupPrune(w http.ResponseWriter, r *http.Reque
 		writeError(w, "forbidden: admin role required", http.StatusForbidden)
 		return
 	}
-	var request struct {
-		Daily   int `json:"daily"`
-		Weekly  int `json:"weekly"`
-		Monthly int `json:"monthly"`
-	}
+	var request backupPruneRequest
 	if !decodeJSONRequest(w, r, &request) {
 		return
 	}
-	if err := validateBackupRetention(request.Daily, request.Weekly, request.Monthly); err != nil {
+	retention, _, err := backup.ResolveRequestedRetention(request.Daily, request.Weekly, request.Monthly)
+	if err != nil {
 		writeError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -180,7 +190,7 @@ func (s *managementState) handleBackupPrune(w http.ResponseWriter, r *http.Reque
 	}
 	defer releaseFence()
 	result, err := s.backupOperation(r.Context(), privileged.BackupRequest{
-		Action: privileged.BackupActionPrune, Daily: request.Daily, Weekly: request.Weekly, Monthly: request.Monthly,
+		Action: privileged.BackupActionPrune, Daily: retention.Daily, Weekly: retention.Weekly, Monthly: retention.Monthly,
 		Fence: fence,
 	})
 	if err != nil {
