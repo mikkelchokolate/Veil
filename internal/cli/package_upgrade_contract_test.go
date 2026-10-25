@@ -407,43 +407,61 @@ func TestPostinstallSkipsInstallBodyOnAbortedOperations(t *testing.T) {
 // paths against a fake systemctl. configure must try-restart the units it
 // replaces (they are still running), while abort-remove runs after preremove
 // stopped and disabled them: systemctl(1) defines try-restart as doing nothing
-// to a unit that is not running, so that path must use start, and it must
-// re-enable the helper socket preremove disabled — otherwise a rolled-back
-// removal leaves a package dpkg calls installed with a dead privileged helper.
+// to a unit that is not running, so that path must use start. It must never
+// start the veil-backup.service oneshot — that runs a real backup and prune
+// during the rollback (#1465). The enable/start sets themselves are compared
+// against preremove's disable set in
+// TestAbortRemoveRestoresTheEnableSetPreremoveDisables.
 func TestPostinstallAbortRemoveStartsUnitsPreremoveStopped(t *testing.T) {
 	const script = "../../packaging/scripts/postinstall.sh"
-	units := "veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer"
-	for _, tc := range []struct {
-		fn   string
-		verb string
-	}{
-		{"restart_managed_units", "try-restart"},
-		{"start_managed_units", "start"},
-	} {
-		t.Run(tc.fn, func(t *testing.T) {
-			calls := runShellFuncStubbed(t, extractShellFunc(t, script, tc.fn), tc.fn)
-			joined := "\n" + strings.Join(calls, "\n") + "\n"
-			for _, want := range []string{
-				"daemon-reload",
-				"enable veil-helper.socket",
-				tc.verb + " " + units,
-				tc.verb + " veil-hysteria2@node1.service",
-			} {
-				if !strings.Contains(joined, "\n"+want+"\n") {
-					t.Errorf("%s must call `systemctl %s`; got calls:\n%s", tc.fn, want, strings.Join(calls, "\n"))
-				}
+
+	t.Run("configure try-restarts running units", func(t *testing.T) {
+		calls := runShellFuncStubbed(t, extractShellFunc(t, script, "restart_managed_units"), "restart_managed_units")
+		units := "veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer"
+		joined := "\n" + strings.Join(calls, "\n") + "\n"
+		for _, want := range []string{
+			"daemon-reload",
+			"enable veil-helper.socket",
+			"try-restart " + units,
+			"try-restart veil-hysteria2@node1.service",
+		} {
+			if !strings.Contains(joined, "\n"+want+"\n") {
+				t.Errorf("restart_managed_units must call `systemctl %s`; got:\n%s", want, strings.Join(calls, "\n"))
 			}
-			other := "start"
-			if tc.verb == "start" {
-				other = "try-restart"
+		}
+		for _, call := range calls {
+			if strings.HasPrefix(call, "start ") {
+				t.Errorf("configure path must not start units (try-restart only): %q", call)
 			}
-			for _, call := range calls {
-				if strings.HasPrefix(call, other+" ") {
-					t.Errorf("%s must not use `%s` (wrong verb for this path): %q", tc.fn, other, call)
-				}
+		}
+	})
+
+	t.Run("abort-remove starts stopped units without the oneshot backup", func(t *testing.T) {
+		calls := runShellFuncStubbed(t, extractShellFunc(t, script, "start_managed_units"), "start_managed_units")
+		joined := "\n" + strings.Join(calls, "\n") + "\n"
+		for _, want := range []string{
+			"daemon-reload",
+			"enable veil.service",
+			"enable veil-helper.socket",
+			"enable veil-backup.timer",
+			"start veil.service",
+			"start veil-helper.socket",
+			"start veil-backup.timer",
+			"start veil-hysteria2@node1.service",
+		} {
+			if !strings.Contains(joined, "\n"+want+"\n") {
+				t.Errorf("start_managed_units must call `systemctl %s`; got:\n%s", want, strings.Join(calls, "\n"))
 			}
-		})
-	}
+		}
+		for _, call := range calls {
+			if strings.HasPrefix(call, "try-restart ") {
+				t.Errorf("abort path must start, not try-restart: %q", call)
+			}
+			if call == "start veil-backup.service" || call == "enable veil-backup.service" {
+				t.Errorf("abort path must not touch the veil-backup.service oneshot: %q", call)
+			}
+		}
+	})
 }
 
 // runShellFuncStubbed executes an extracted function with a fake systemctl
@@ -457,7 +475,7 @@ func runShellFuncStubbed(t *testing.T, fn, name string) []string {
 		t.Fatal(err)
 	}
 	logPath := filepath.Join(dir, "systemctl.log")
-	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$STUB_LOG\"\nif [ \"$1\" = list-units ]; then\n    echo 'veil-hysteria2@node1.service loaded active running'\nfi\nexit 0\n"
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$STUB_LOG\"\nif [ \"$1\" = list-units ] || [ \"$1\" = list-unit-files ]; then\n    echo 'veil-hysteria2@node1.service loaded active running'\nfi\nexit 0\n"
 	if err := os.WriteFile(filepath.Join(bin, "systemctl"), []byte(stub), 0o755); err != nil {
 		t.Fatal(err)
 	}

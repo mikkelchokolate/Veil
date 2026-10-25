@@ -222,14 +222,42 @@ restart_managed_units() {
 
 start_managed_units() {
     systemctl daemon-reload
-    # preremove disables the socket unconditionally, so a rolled-back removal
-    # must restore it: dpkg keeps reporting the package as installed, and a
-    # stopped+disabled socket never comes back on boot, leaving the panel's
-    # privileged operations dead until the next upgrade.
-    systemctl enable veil-helper.socket
-    systemctl start veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer
-    for instance in $(systemctl list-units --all --plain --no-legend 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' 2>/dev/null | awk '{ print $1 }'); do
-        systemctl start "$instance"
+    # preremove disables every managed unit on the remove path, so an aborted
+    # removal has to restore that enable set or the panel, the proxies and the
+    # backup timer stay disabled after the next reboot (#1466). The list has to
+    # match preremove.sh's stop/disable set; a test runs both scripts and
+    # compares the sets. veil-helper.service and veil-backup.service are
+    # deliberately absent: neither has an [Install] section (socket-activated
+    # and timer-triggered), so systemctl enable refuses them and their
+    # enablement means nothing — the socket and the timer are the enabled units.
+    for unit in veil.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.timer; do
+        systemctl enable "$unit" \
+            || echo "warning: could not enable $unit after the aborted removal" >&2
+    done
+    # Template instances are enabled per concrete instance: a `@*` pattern can
+    # miss loaded instances, and legacy pre-consolidation veil-caddy@ units are
+    # in preremove's sweep too.
+    for pattern in 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' 'veil-caddy@*.service'; do
+        for instance in $(systemctl list-unit-files --plain --no-legend "$pattern" 2>/dev/null | awk '{ print $1 }'); do
+            systemctl enable "$instance" \
+                || echo "warning: could not enable $instance after the aborted removal" >&2
+        done
+    done
+    # Start what the rolled-back removal left stopped, and log instead of
+    # failing the package when a unit is not configured on this host: an
+    # already-aborted removal must not become a dpkg post-installation-script
+    # error (#1465). veil-backup.service is a oneshot: starting it here would
+    # run a real backup and prune during the rollback, so only its timer is
+    # started.
+    for unit in veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.timer; do
+        systemctl start "$unit" \
+            || echo "warning: could not start $unit after the aborted removal" >&2
+    done
+    for pattern in 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' 'veil-caddy@*.service'; do
+        for instance in $(systemctl list-units --all --plain --no-legend "$pattern" 2>/dev/null | awk '{ print $1 }'); do
+            systemctl start "$instance" \
+                || echo "warning: could not start $instance after the aborted removal" >&2
+        done
     done
 }
 
