@@ -111,7 +111,9 @@ func TestManagedMaterialSkipsPackagedUnitsAndWritesDropIns(t *testing.T) {
 		t.Fatalf("custom paths should write a drop-in, got %+v", files)
 	}
 	body := fileContent(files, dropIn)
-	for _, want := range []string{"VEIL_STATE_PATH=/opt/veil/var/state.json", "VEIL_KEY_PATH=/opt/veil/etc/state.key", "ReadWritePaths=/opt/veil/var"} {
+	// VEIL_KEY_PATH lives only in the installed veil.env since #1471, so the
+	// drop-in points at that file instead of restating the key path.
+	for _, want := range []string{"VEIL_STATE_PATH=/opt/veil/var/state.json", "EnvironmentFile=-/opt/veil/etc/veil.env", "ReadWritePaths=/opt/veil/var"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("drop-in missing %q:\n%s", want, body)
 		}

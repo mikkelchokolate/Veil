@@ -318,3 +318,33 @@ func TestRotatedKeyPathProducesAVerifiableBackup(t *testing.T) {
 		}
 	}
 }
+
+// TestRotateKeyRestartsThePanelBeforeTheHelper locks the ordering review point:
+// the Panel writes state, so it must be the first process on the new key. If
+// the helper restart is the one that fails, the Panel is already consistent and
+// the command reports the failure instead of reporting success with a Panel
+// still holding the pre-rotation cipher.
+func TestRotateKeyRestartsThePanelBeforeTheHelper(t *testing.T) {
+	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	calls, _ := stubAdminSystemctl(t, envPath)
+	newKeyPath := filepath.Join(etcDir, "rotated-state.key")
+	if out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", newKeyPath); err != nil {
+		t.Fatalf("rotate-key: %v\n%s", err, out)
+	}
+	panel, helper := -1, -1
+	for i, call := range *calls {
+		switch call {
+		case "restart veil.service":
+			panel = i
+		case "restart veil-helper.service":
+			helper = i
+		}
+	}
+	if panel < 0 || helper < 0 {
+		t.Fatalf("both units must be restarted; calls=%v", *calls)
+	}
+	if panel > helper {
+		t.Fatalf("the Panel must be restarted before the helper; calls=%v", *calls)
+	}
+}

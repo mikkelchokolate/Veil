@@ -221,7 +221,7 @@ func renderBackupScheduleDropIn(systemdDir, passphrasePath string) string {
 		execStart = rewriteExecStartPassphraseFile(execStart, unitPath)
 	} else {
 		execStart = filepath.ToSlash(backupVeilBinary) +
-			" backup create --state /var/lib/veil/state.json --key-path /etc/veil/state.key --passphrase-file " +
+			" backup create --state /var/lib/veil/state.json --passphrase-file " +
 			quoteSystemdExecArg(unitPath) +
 			" --output-dir /var/lib/veil/backups --prune --daily 7 --weekly 4 --monthly 12"
 	}

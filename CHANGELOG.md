@@ -20,7 +20,9 @@ All notable changes to Veil will be documented in this file.
   restarts `veil-helper.service` (when it is running) as well as the Panel
   after installing the rewritten environment, failing with an instruction if
   the helper cannot be restarted rather than leaving it on the old key
-  (#1471).
+  (#1471). Custom `--etc-dir` installs upgraded from an older package keep
+  their previous helper drop-in until `veil install`/`veil repair` re-renders
+  it, so run one before rotating the key on such a host.
 - `veil admin rotate-key --new-key-path` no longer leaves the Panel reading
   the old key. Rotation re-encrypted `state.json` and the SQLite credential
   rows and revision snapshots under the new key, wrote it to the requested

@@ -161,3 +161,36 @@ func TestPolicyEnvKnobNamesMatchTable(t *testing.T) {
 		}
 	}
 }
+
+// TestPolicyEnvOverridesIgnoreTheInstalledEnvironmentFile locks the noise the
+// #1471 change would otherwise create: veil.env is root-only configuration the
+// units load on purpose, so a VEIL_KEY_PATH that merely restates it — a
+// rotated key path, or any custom --etc-dir install — is not a poisoned
+// environment.
+func TestPolicyEnvOverridesIgnoreTheInstalledEnvironmentFile(t *testing.T) {
+	etc := t.TempDir()
+	t.Setenv("VEIL_ETC_DIR", etc)
+	customKey := filepath.Join(etc, "rotated-state.key")
+	if err := os.WriteFile(filepath.Join(etc, "veil.env"), []byte("VEIL_KEY_PATH="+customKey+"\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VEIL_KEY_PATH", customKey)
+	for _, override := range PolicyEnvOverrides() {
+		if override.Name == "VEIL_KEY_PATH" {
+			t.Fatalf("the installed veil.env value was reported as a poisoned override: %+v", override)
+		}
+	}
+
+	// A value that is not the installed configuration is still reported.
+	other := filepath.Join(etc, "other.key")
+	t.Setenv("VEIL_KEY_PATH", other)
+	found := false
+	for _, override := range PolicyEnvOverrides() {
+		if override.Name == "VEIL_KEY_PATH" && override.Value == other {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("a VEIL_KEY_PATH outside the installed configuration was not reported")
+	}
+}

@@ -153,13 +153,17 @@ func TestBackupScheduleEnablePreservesCustomInstallExecStart(t *testing.T) {
 	execStart := effectiveSystemdDirective([]string{string(dropInBody)}, "ExecStart")
 	for _, want := range []string{
 		"--state " + filepath.ToSlash(filepath.Join(customVar, "state.json")),
-		"--key-path " + filepath.ToSlash(filepath.Join(customEtc, "state.key")),
 		"--output-dir " + filepath.ToSlash(filepath.Join(customVar, "backups")),
 		"--passphrase-file " + filepath.ToSlash(customPassPath),
 	} {
 		if !strings.Contains(execStart, want) {
 			t.Fatalf("drop-in ExecStart lost the custom install layout — missing %q:\n%s", want, dropInBody)
 		}
+	}
+	// The key path comes from the custom veil.env since #1471, so the ExecStart
+	// must not carry a --key-path flag the installed unit no longer has.
+	if strings.Contains(execStart, "--key-path") {
+		t.Fatalf("drop-in ExecStart reintroduced --key-path:\n%s", dropInBody)
 	}
 	if strings.Contains(execStart, "/var/lib/veil") || strings.Contains(execStart, "/etc/veil/") {
 		t.Fatalf("drop-in ExecStart stomped the install back onto packaged defaults:\n%s", dropInBody)
