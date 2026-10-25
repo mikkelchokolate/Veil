@@ -6,6 +6,27 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil backup create` and `veil admin show/set/reset` now resolve the state and
+  encryption key from the installed `veil.env` (explicit `--state`/`--key-path`
+  still win) instead of the process environment and the packaged default. After
+  `rotate-key --new-key-path` the documented "create a fresh encrypted backup
+  after every rotation" step used to archive the re-encrypted state together
+  with the old key, fail its own verification and delete the archive, so
+  scheduled and manual backups stopped after a rotation; `admin show` failed
+  with a GCM error on the same host. All root CLI commands now read the same
+  layout as the Panel, the privileged helper and the backup timer. The same
+  resolution now applies to `veil admin rotate-key`: after a path-moving
+  rotation a second rotation (path-moving or in-place) used to read the state
+  with the packaged default key and fail with a GCM decryption error instead of
+  using the key `veil.env` names. The rotation follows the installed layout
+  rather than the path a `--key-path` happens to name: a rotate through a copy
+  of the live key repoints `VEIL_KEY_PATH` at the rotated copy, an in-place
+  rotation on the installed path leaves the environment untouched, and a
+  rotation of a state outside the installed layout that would overwrite the
+  live key (or a key move with no `veil.env` to repoint) is refused before
+  anything is written. With no
+  installed `veil.env` the previous fallback is unchanged: the process
+  environment, then the packaged default (#1477).
 - `veil backup restore` now resolves `state.json` and the encryption key from
   the installed `veil.env` — the same file the Panel, the privileged helper and
   the backup timer read — instead of the packaged `/etc/veil/state.key`

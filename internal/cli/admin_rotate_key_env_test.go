@@ -61,7 +61,7 @@ func seedRotationFixture(t *testing.T) (etcDir, keyPath, statePath, envPath stri
 	keyPath = filepath.Join(etcDir, "state.key")
 	statePath = filepath.Join(t.TempDir(), "state.json")
 	envPath = filepath.Join(etcDir, "veil.env")
-	if err := os.WriteFile(envPath, []byte("VEIL_KEY_PATH="+keyPath+"\nVEIL_LISTEN=127.0.0.1:2096\n"), 0o640); err != nil {
+	if err := os.WriteFile(envPath, []byte("VEIL_KEY_PATH="+keyPath+"\nVEIL_STATE_PATH="+statePath+"\nVEIL_LISTEN=127.0.0.1:2096\n"), 0o640); err != nil {
 		t.Fatal(err)
 	}
 	key, err := secrets.LoadOrCreateKey(keyPath)
@@ -212,7 +212,7 @@ func TestAdminRotateKeyRefusesBeforeRotatingWhenTheEnvCannotBeRepointed(t *testi
 	if err == nil {
 		t.Fatalf("rotate-key succeeded without a repointable environment:\n%s", out)
 	}
-	if !strings.Contains(err.Error(), "refusing to rotate the state key") {
+	if !strings.Contains(err.Error(), "refusing to rotate") {
 		t.Fatalf("error = %v, want a refusal before rotation", err)
 	}
 	if _, statErr := os.Stat(newKeyPath); !os.IsNotExist(statErr) {

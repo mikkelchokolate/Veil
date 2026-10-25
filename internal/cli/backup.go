@@ -67,40 +67,6 @@ func archiveCarriesDatabase(backupFile, passphrase string, maxBytes int64, allow
 	return false, nil
 }
 
-// resolveRestorePaths resolves where a restore writes state and key. The
-// installed veil.env is the live configuration the Panel, the privileged helper
-// and the backup timer read, so it outranks the process environment; an
-// explicit flag still beats both (#1474). The second result is the key path the
-// Panel will read after the restore, which is what a path-moving restore has to
-// keep in sync with the environment.
-func resolveRestorePaths(flagState, flagKey string) (statePath, keyPath, liveKeyPath, envPath string) {
-	env := serveflow.NewEnvironment()
-	envPath = veilenv.Resolve(veilenv.DefaultSystemdDir)
-	envKey := ""
-	if body, err := os.ReadFile(envPath); err == nil {
-		envKey = veilenv.Value(body, veilenv.KeyPathKey)
-		if state := veilenv.Value(body, "VEIL_STATE_PATH"); state != "" && strings.TrimSpace(flagState) == "" {
-			statePath = state
-		}
-	}
-	if statePath == "" {
-		statePath, _ = env.StatePath(flagState)
-	}
-	switch {
-	case strings.TrimSpace(flagKey) != "":
-		keyPath = flagKey
-	case envKey != "":
-		keyPath = envKey
-	default:
-		keyPath, _ = env.KeyPath("")
-	}
-	liveKeyPath = envKey
-	if liveKeyPath == "" {
-		liveKeyPath, _ = env.KeyPath("")
-	}
-	return statePath, keyPath, liveKeyPath, envPath
-}
-
 // envOwnsRestoreLayout reports whether the installed environment file defines
 // the layout this restore writes to. Explicit flags that point at a different
 // state tree (a test fixture, a secondary install) manage their own key path;
@@ -170,9 +136,7 @@ func newBackupCommand(version string) *cobra.Command {
 		Use:   "create",
 		Short: "Create a backup of the Veil panel state and encryption key",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			env := serveflow.NewEnvironment()
-			resolvedState, _ := env.StatePath(statePath)
-			resolvedKey, _ := env.KeyPath(keyPath)
+			resolvedState, resolvedKey, _, _ := resolveInstalledPaths(statePath, keyPath)
 
 			// Resolve passphrase
 			resolvedPass, err := resolvePassphrase(passphrase, passphraseFile)
@@ -283,7 +247,7 @@ func newBackupCommand(version string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			backupFile := args[0]
 
-			resolvedState, resolvedKey, liveKeyPath, envPath := resolveRestorePaths(statePath, keyPath)
+			resolvedState, resolvedKey, liveKeyPath, envPath := resolveInstalledPaths(statePath, keyPath)
 
 			// Resolve passphrase
 			resolvedPass, err := resolvePassphrase(passphrase, passphraseFile)

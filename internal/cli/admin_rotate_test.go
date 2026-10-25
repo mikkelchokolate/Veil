@@ -129,7 +129,7 @@ func TestAdminRotateKeyToNewPath(t *testing.T) {
 	// The Panel reads VEIL_KEY_PATH from the installed environment file, so a
 	// rotation to another path has to repoint a file it can rewrite (#1453).
 	envPath := filepath.Join(tempEtc, "veil.env")
-	if err := os.WriteFile(envPath, []byte("VEIL_KEY_PATH="+keyPath+"\n"), 0o640); err != nil {
+	if err := os.WriteFile(envPath, []byte("VEIL_KEY_PATH="+keyPath+"\nVEIL_STATE_PATH="+statePath+"\n"), 0o640); err != nil {
 		t.Fatalf("failed to write panel environment: %v", err)
 	}
 	t.Setenv("VEIL_ETC_DIR", tempEtc)
