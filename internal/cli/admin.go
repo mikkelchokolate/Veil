@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -426,7 +427,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			// veil.env names, so the next --new-key-path call (and an in-place
 			// rotation) has to read from there, not from the packaged default
 			// (#1477).
-			resolvedState, resolvedKey, liveKeyPath, _ := resolveInstalledPaths(statePath, keyPath)
+			resolvedState, resolvedKey, liveKeyPath, envPath := resolveInstalledPaths(statePath, keyPath)
 
 			targetKeyPath := newKeyPath
 			if targetKeyPath == "" {
@@ -437,17 +438,40 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			}
 
 			// The Panel, the privileged helper and the backup unit load their
-			// key from VEIL_KEY_PATH in the installed environment file. A
-			// rotation that moves the key the units read has to repoint that
-			// file, and the rewrite is staged before anything is rotated: if it
-			// cannot be prepared, the command fails while state and Panel still
-			// agree (#1453). Explicit flags that select a different layout
-			// (resolvedKey != liveKeyPath) manage their own key path and leave
-			// the managed environment alone.
+			// key from VEIL_KEY_PATH in the installed environment file, so two
+			// invariants have to hold: the managed state must not be left
+			// encrypted under a key the units do not read, and the live key
+			// must not be overwritten for the sake of a foreign state tree.
+			//
+			// The decision follows the layout, not the requested key: in the
+			// managed layout the environment follows the rotation whenever the
+			// target is not the live key path (a --new-key-path move, or a
+			// --key-path that names a copy of the live key), and the rewrite is
+			// staged before anything is rotated so a failure leaves state and
+			// Panel in agreement (#1453, #1477). A rotation outside the managed
+			// layout that would overwrite the live key is refused instead.
 			var pending *veilenv.PreparedUpdate
 			var err error
-			if !sameKeyPath(resolvedKey, targetKeyPath) && sameKeyPath(liveKeyPath, resolvedKey) {
-				pending, err = prepareRotatedKeyEnv(resolvedKey, targetKeyPath)
+			_, envFileErr := os.Stat(envPath)
+			managedState := envOwnsRestoreLayout(envPath, resolvedState)
+			switch {
+			case managedState:
+				if !sameKeyPath(targetKeyPath, liveKeyPath) {
+					// prepareRotatedKeyEnv compares the live path with the
+					// target, so it must get the path the units read, not the
+					// source of this rotation.
+					pending, err = prepareRotatedKeyEnv(liveKeyPath, targetKeyPath)
+				}
+			case sameKeyPath(resolvedKey, liveKeyPath):
+				// The key is the one the units read, but the state is not the
+				// managed one: rotating here would overwrite the live key for a
+				// foreign tree and break the Panel.
+				return fmt.Errorf("refusing to rotate: --state %s is outside the installed layout, but the rotation would overwrite the live key %s the Panel reads; rerun with the installed --state, or pass both --state and --key-path for the tree you mean", resolvedState, liveKeyPath)
+			case envFileErr != nil && !sameKeyPath(targetKeyPath, resolvedKey):
+				// No installed environment to repoint: moving the key would
+				// leave whoever starts with the packaged default unable to
+				// decrypt the state (#1453).
+				return fmt.Errorf("refusing to rotate the state key: %s does not exist, so the key path cannot be repointed; rotate in place (omit --new-key-path) or create the environment file first", envPath)
 			}
 			if err != nil {
 				return err

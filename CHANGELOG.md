@@ -18,7 +18,13 @@ All notable changes to Veil will be documented in this file.
   resolution now applies to `veil admin rotate-key`: after a path-moving
   rotation a second rotation (path-moving or in-place) used to read the state
   with the packaged default key and fail with a GCM decryption error instead of
-  using the key `veil.env` names. With no
+  using the key `veil.env` names. The rotation follows the installed layout
+  rather than the path a `--key-path` happens to name: a rotate through a copy
+  of the live key repoints `VEIL_KEY_PATH` at the rotated copy, an in-place
+  rotation on the installed path leaves the environment untouched, and a
+  rotation of a state outside the installed layout that would overwrite the
+  live key (or a key move with no `veil.env` to repoint) is refused before
+  anything is written. With no
   installed `veil.env` the previous fallback is unchanged: the process
   environment, then the packaged default (#1477).
 - `veil backup restore` now resolves `state.json` and the encryption key from

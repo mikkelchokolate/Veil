@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
+	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/veilenv"
 )
 
@@ -162,5 +163,94 @@ func TestRotateKeySecondRotationUsesInstalledVeilEnvKeyPath(t *testing.T) {
 	// environment rather than the packaged default.
 	if out, err := runRotateKey(t, "--state", statePath); err != nil {
 		t.Fatalf("in-place rotation after a path-moving one: %v\n%s", err, out)
+	}
+}
+
+// TestRotateKeyWithACopiedKeyFollowsTheEnvironment locks the copied-key case:
+// when --key-path names a copy of the live key, the rotation succeeds (the copy
+// decrypts the managed state) but it writes the new key to the copy, so the
+// environment has to follow it. Otherwise the Panel keeps reading the old key
+// and cannot decrypt the re-encrypted managed state.
+func TestRotateKeyWithACopiedKeyFollowsTheEnvironment(t *testing.T) {
+	etcDir, envPath, keyPath, statePath := restoreEnvFixture(t)
+	stubAdminSystemctl(t, envPath)
+	copiedKey := filepath.Join(etcDir, "copied-state.key")
+	keyBytes, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(copiedKey, keyBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if out, err := runRotateKey(t, "--key-path", copiedKey); err != nil {
+		t.Fatalf("rotate-key through a copied key: %v\n%s", err, out)
+	}
+	body, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := veilenv.Value(body, veilenv.KeyPathKey); got != copiedKey {
+		t.Fatalf("VEIL_KEY_PATH = %q, want the rotated copy %q", got, copiedKey)
+	}
+	loadedKey, err := os.ReadFile(veilenv.Value(body, veilenv.KeyPathKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := cipherFromRawKey(loadedKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := managementstate.NewStore(statePath, cipher).Load(); err != nil || !ok {
+		t.Fatalf("the Panel's key no longer decrypts the rotated state: ok=%t err=%v", ok, err)
+	}
+}
+
+// TestRotateKeyRefusesToOverwriteTheLiveKeyForAForeignState locks the mirror
+// case: an explicit --state outside the managed layout with the managed key
+// would re-encrypt that foreign state and overwrite the live key in place,
+// breaking the Panel. The command has to refuse before touching anything.
+func TestRotateKeyRefusesToOverwriteTheLiveKeyForAForeignState(t *testing.T) {
+	_, envPath, keyPath, _ := restoreEnvFixture(t)
+	stubAdminSystemctl(t, envPath)
+	foreignDir := t.TempDir()
+	foreignState := filepath.Join(foreignDir, "state.json")
+	// A foreign state encrypted with the live key (cipherFromRawKey fixture).
+	keyBytes, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	liveCipher, err := cipherFromRawKey(keyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := model.ManagementSnapshot{Users: []model.User{{Username: "foreign", PasswordHash: "hash", Role: "admin"}}}
+	if err := managementstate.EncryptSnapshot(&snapshot, liveCipher); err != nil {
+		t.Fatal(err)
+	}
+	if err := managementstate.NewStore(foreignState, liveCipher).Save(snapshot); err != nil {
+		t.Fatal(err)
+	}
+
+	envBefore, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyBefore, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := runRotateKey(t, "--state", foreignState)
+	if err == nil {
+		t.Fatalf("rotate-key overwrote the live key for a foreign state:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "outside the installed layout") {
+		t.Fatalf("error = %v, want a refusal naming the layout mismatch", err)
+	}
+	if after, err := os.ReadFile(keyPath); err != nil || !bytes.Equal(after, keyBefore) {
+		t.Fatalf("the live key changed although the command refused: err=%v", err)
+	}
+	if after, err := os.ReadFile(envPath); err != nil || !bytes.Equal(after, envBefore) {
+		t.Fatalf("veil.env changed although the command refused: err=%v", err)
 	}
 }
