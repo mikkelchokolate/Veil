@@ -177,3 +177,26 @@ func TestPrepareKeyPathRewritesASymlinkTarget(t *testing.T) {
 		t.Fatalf("symlink target not rewritten:\n%s", body)
 	}
 }
+
+func TestValueRoundTripsQuotedAndEscapedPaths(t *testing.T) {
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, "veil.env")
+	if err := os.WriteFile(envPath, []byte("VEIL_KEY_PATH=/etc/veil/state.key\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	tricky := "/etc/veil/odd " + "\"quoted\"" + " \\ path.key"
+	update, err := PrepareKeyPath(envPath, tricky)
+	if err != nil {
+		t.Fatalf("PrepareKeyPath: %v", err)
+	}
+	if err := update.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := Value(body, KeyPathKey); got != tricky {
+		t.Fatalf("Value = %q, want %q\\nfile:\\n%s", got, tricky, body)
+	}
+}

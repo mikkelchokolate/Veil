@@ -198,7 +198,10 @@ environment rewrite is staged atomically first (same directory, same owner and
 0640 mode, every other line preserved) and only installed after the rotation
 succeeds; when `veil.env` cannot be repointed — it is missing or its directory
 is not writable — the command refuses before rotating anything and tells you
-which `VEIL_KEY_PATH` to set by hand. Without `--new-key-path` the key is
+which `VEIL_KEY_PATH` to set by hand. The new key file keeps the owner and
+mode of the previous one; keep it somewhere the `veil` account can read (for
+example next to the old key under `/etc/veil`), or the Panel will fail to
+start its state after the restart. Without `--new-key-path` the key is
 rotated in place and `veil.env` is not touched.
 
 Rotation re-encrypts Management state atomically and rolls back failed file

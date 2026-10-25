@@ -79,9 +79,19 @@ func Value(body []byte, key string) string {
 		if !ok || strings.TrimSpace(name) != key {
 			continue
 		}
-		found = strings.Trim(strings.TrimSpace(value), `"'`)
+		found = unquote(strings.TrimSpace(value))
 	}
 	return found
+}
+
+// unquote reverses envValue: a double-quoted assignment loses its quotes and
+// the backslash escapes it carries, so a path with a quote or a backslash reads
+// back exactly as written.
+func unquote(value string) string {
+	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
+		return strings.NewReplacer(`\\`, `\`, `\"`, `"`).Replace(value[1 : len(value)-1])
+	}
+	return strings.Trim(value, `"'`)
 }
 
 // PreparedUpdate is an environment-file rewrite staged next to the live file
