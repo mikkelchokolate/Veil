@@ -514,3 +514,23 @@ func TestRunCaddyNaiveBuildIsIdempotent(t *testing.T) {
 		t.Fatalf("rebuilt binary content = %q", string(body))
 	}
 }
+
+// Regression for #1455: GitHub redirects renamed repositories, so the
+// expanded_assets page requested for the old name is served with hrefs under
+// the new owner/repo (apernet/hysteria -> HyNetworks/hysteria). The scrape
+// matched only hrefs under the requested repo, so the GitHub-API rate-limit
+// fallback always ended in "no assets found" and blocked runtime installs.
+func TestParseExpandedAssetsFollowsRenamedRepo(t *testing.T) {
+	html := `<a href="/HyNetworks/hysteria/releases/download/app%2Fv2.12.2/hysteria-linux-amd64">amd64</a>`
+	assets, err := parseExpandedAssets(html, "app/v2.12.2", "apernet/hysteria")
+	if err != nil {
+		t.Fatalf("parseExpandedAssets: %v", err)
+	}
+	if len(assets) != 1 || assets[0].Name != "hysteria-linux-amd64" {
+		t.Fatalf("assets = %+v", assets)
+	}
+	wantURL := "https://github.com/HyNetworks/hysteria/releases/download/app%2Fv2.12.2/hysteria-linux-amd64"
+	if assets[0].BrowserDownloadURL != wantURL {
+		t.Fatalf("download URL = %q, want %q", assets[0].BrowserDownloadURL, wantURL)
+	}
+}

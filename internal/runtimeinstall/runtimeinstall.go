@@ -1454,9 +1454,14 @@ func resolveLatestTagWeb(ctx context.Context, client *http.Client, repo string) 
 // parseExpandedAssets extracts asset names and download URLs from the GitHub
 // expanded_assets HTML page. Asset paths are relative ("/owner/repo/releases/...").
 func parseExpandedAssets(html, tag, repo string) ([]Asset, error) {
-	// Match hrefs that point at a release download for this tag.
-	// Example: href="/apernet/hysteria/releases/download/app%2Fv2.9.2/hysteria-linux-amd64"
-	pattern := fmt.Sprintf(`href="/(%s/releases/download/%s/([^"]+))"`, regexp.QuoteMeta(repo), regexp.QuoteMeta(url.PathEscape(tag)))
+	// Match hrefs that point at a release download for this tag, whatever
+	// owner/repo the page serves them under. GitHub redirects renamed
+	// repositories, so the page fetched for the old name lists the canonical
+	// one (apernet/hysteria answers with /HyNetworks/hysteria/... hrefs);
+	// requiring "repo" here made the rate-limit fallback report "no assets
+	// found" forever (#1455). The URL is kept as the page serves it.
+	// Example: href="/HyNetworks/hysteria/releases/download/app%2Fv2.9.2/hysteria-linux-amd64"
+	pattern := fmt.Sprintf(`href="/([^"/]+/[^"/]+/releases/download/%s/([^"]+))"`, regexp.QuoteMeta(url.PathEscape(tag)))
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil, err

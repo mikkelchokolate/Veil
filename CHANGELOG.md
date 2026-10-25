@@ -6,6 +6,16 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The Hysteria2 runtime install no longer fails with `no assets found` when
+  the unauthenticated GitHub API is rate-limited and Veil falls back to
+  reading the release page. Upstream renamed `apernet/hysteria` to
+  `HyNetworks/hysteria`; GitHub redirects the old URL, but the asset scrape
+  only matched download links under the repository name it had asked for, so
+  the page's canonical `/HyNetworks/hysteria/...` links never matched and the
+  fallback that exists for exactly the rate-limit case was dead. The scrape
+  now accepts whatever owner/repository the page serves for the requested tag
+  and keeps that URL; checksum verification is unchanged and still fails
+  closed (#1455).
 - `POST /api/backups/prune` and `POST /api/backups` with `"prune": true` no
   longer delete weekly and monthly archives the caller never asked to prune.
   `docs/openapi.yaml` documents `default: 7 / 4 / 12` for the three retention
