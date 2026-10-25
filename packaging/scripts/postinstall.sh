@@ -4,6 +4,66 @@
 # operator via `veil install`; packages only deliver the binary and units.
 set -e
 
+# Debian does not only run postinst as `configure [old-version]`: dpkg also
+# calls it as abort-upgrade <new-version>, abort-remove, abort-deconfigure and
+# triggered <names> when it rolls an operation back or processes triggers
+# (deb-postinst(5)). Those paths exist to restore what the rolled-back version
+# left behind, so the install body below — account setup, `veil helper
+# migrate` (which writes a fresh migration-backups snapshot holding copies of
+# state.key/state.json) and a try-restart of every managed unit — must not run
+# there. RPM passes only the install counter ($1: 1 install, 2 upgrade) and APK
+# passes nothing, so both keep the install body. abort-remove is the one abort
+# that has work to do: preremove stopped the units, so restart the ones that
+# are still installed without touching host state (#1463).
+postinstall_mode() {
+    arg="${1:-}"
+    case "$arg" in
+        configure)
+            echo install
+            return 0
+            ;;
+        "")
+            # Plain invocation: APK's post-install hook and the historic
+            # no-argument call path.
+            echo install
+            return 0
+            ;;
+        abort-remove)
+            echo restart
+            return 0
+            ;;
+        abort-upgrade|abort-deconfigure|triggered)
+            echo skip
+            return 0
+            ;;
+    esac
+    # RPM passes its install counter as $1 ("1" install, "2" upgrade); APK
+    # passes the package version, with the old version as $2 on upgrade
+    # (apk-tools run_script). Both mean the package's files were just unpacked,
+    # so a leading digit plus a version charset is the install path. Anything
+    # else is an argument we do not know: fail closed and leave host state
+    # alone.
+    case "$arg" in
+        [0-9]*)
+            case "$arg" in
+                *[!0-9A-Za-z._+~-]*) echo skip; return 0 ;;
+            esac
+            if [ "$arg" = 0 ]; then
+                echo skip
+            else
+                echo install
+            fi
+            return 0
+            ;;
+    esac
+    echo skip
+}
+
+MODE="$(postinstall_mode "${1:-}")"
+if [ "$MODE" = skip ]; then
+    exit 0
+fi
+
 group_exists() {
     name="$1"
     if command -v getent >/dev/null 2>&1; then
@@ -40,48 +100,49 @@ ensure_system_account() {
     fi
 }
 
-ensure_system_account veil
-ensure_system_account veil-proxy
-# veil-mita is the dedicated veil-mieru.service identity (issue #624): its
-# appctl socket is a control plane, so it must not share the veil-proxy edge
-# uid/group that every other internet-facing unit uses.
-ensure_system_account veil-mita
+if [ "$MODE" = install ]; then
+    ensure_system_account veil
+    ensure_system_account veil-proxy
+    # veil-mita is the dedicated veil-mieru.service identity (issue #624): its
+    # appctl socket is a control plane, so it must not share the veil-proxy edge
+    # uid/group that every other internet-facing unit uses.
+    ensure_system_account veil-mita
 
-# A silent membership failure would leave the managed directories unreadable
-# (veil-proxy) or the mita appctl socket unreachable (veil-mita) after the
-# ownership pass below, so stop loudly.
-ensure_group_member() {
-    member_user="$1"
-    member_group="$2"
-    if ! id -nG "$member_user" 2>/dev/null | tr ' ' '\n' | grep -qx "$member_group"; then
-        if command -v usermod >/dev/null 2>&1; then
-            usermod -aG "$member_group" "$member_user"
-        elif command -v addgroup >/dev/null 2>&1; then
-            addgroup "$member_user" "$member_group"
-        else
-            echo "Cannot add user $member_user to group $member_group: neither usermod nor addgroup is installed" >&2
-            exit 1
+    # A silent membership failure would leave the managed directories unreadable
+    # (veil-proxy) or the mita appctl socket unreachable (veil-mita) after the
+    # ownership pass below, so stop loudly.
+    ensure_group_member() {
+        member_user="$1"
+        member_group="$2"
+        if ! id -nG "$member_user" 2>/dev/null | tr ' ' '\n' | grep -qx "$member_group"; then
+            if command -v usermod >/dev/null 2>&1; then
+                usermod -aG "$member_group" "$member_user"
+            elif command -v addgroup >/dev/null 2>&1; then
+                addgroup "$member_user" "$member_group"
+            else
+                echo "Cannot add user $member_user to group $member_group: neither usermod nor addgroup is installed" >&2
+                exit 1
+            fi
         fi
-    fi
-}
-# The protocol units and veil-caddy.service run as veil-proxy and read
-# /etc/veil/generated, /etc/veil/tls, /etc/veil/panel, and /etc/veil/certs
-# directly. The panel account is a supplementary veil-proxy member so it can
-# keep previewing that material.
-ensure_group_member veil veil-proxy
-# The panel is also the ONLY appctl client: it joins veil-mita so
-# `mita get metrics` can connect to /run/veil-mieru/mita.sock (0770
-# veil-mita). veil-proxy units are deliberately NOT members.
-ensure_group_member veil veil-mita
+    }
+    # The protocol units and veil-caddy.service run as veil-proxy and read
+    # /etc/veil/generated, /etc/veil/tls, /etc/veil/panel, and /etc/veil/certs
+    # directly. The panel account is a supplementary veil-proxy member so it can
+    # keep previewing that material.
+    ensure_group_member veil veil-proxy
+    # The panel is also the ONLY appctl client: it joins veil-mita so
+    # `mita get metrics` can connect to /run/veil-mieru/mita.sock (0770
+    # veil-mita). veil-proxy units are deliberately NOT members.
+    ensure_group_member veil veil-mita
 
-if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then
-    # Live sysctl can be rejected on OpenVZ/LXC-style kernels where /proc/sys
-    # is read-only. Persist-or-warn like `veil install` does: the drop-in stays
-    # on disk for the next boot, but the failure is recorded loudly instead of
-    # being silently discarded (issue #477).
-    if ! sysctl -p /etc/sysctl.d/99-veil-quic.conf >/dev/null 2>&1; then
-        echo "warning: sysctl -p /etc/sysctl.d/99-veil-quic.conf failed; QUIC UDP buffer limits were not applied to the running kernel" >&2
-    fi
+    if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then
+        # Live sysctl can be rejected on OpenVZ/LXC-style kernels where /proc/sys
+        # is read-only. Persist-or-warn like `veil install` does: the drop-in stays
+        # on disk for the next boot, but the failure is recorded loudly instead of
+        # being silently discarded (issue #477).
+        if ! sysctl -p /etc/sysctl.d/99-veil-quic.conf >/dev/null 2>&1; then
+            echo "warning: sysctl -p /etc/sysctl.d/99-veil-quic.conf failed; QUIC UDP buffer limits were not applied to the running kernel" >&2
+        fi
 fi
 
 if [ -d /lib/systemd/system ] && [ -d /etc/systemd/system ]; then
@@ -134,24 +195,52 @@ fi
 # created it via the panel's RuntimeDirectory=veil (veil:veil 0750), which let
 # any veil-uid process replace the helper socket; normalize on upgrade.
 install -d -m 0711 -o root -g root /run/veil
+fi
 
 # Only drive systemd when it is the running init. Containers building images
 # or chroots may ship a systemctl binary with no live systemd behind it —
 # `dpkg -i` must still succeed there (issue #498). When systemd IS running,
 # every call below fails closed: a daemon-reload/enable/restart failure is a
 # real packaging failure, not something to silence (issues #498, #504).
-if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+#
+# The same unit list is driven by two verbs, and they are not interchangeable:
+# configure/upgrade runs while the units are still running, so try-restart
+# swaps them onto the replaced binary (a no-op on a fresh install); abort-remove
+# runs right after preremove stopped and disabled those units, and systemctl(1)
+# defines try-restart as doing nothing to a unit that is not running, so that
+# path has to start them.
+restart_managed_units() {
     systemctl daemon-reload
     systemctl enable veil-helper.socket
-    # Restart already-running units so they pick up the replaced binary. This is
-    # a no-op on a fresh package install (units are not running yet).
     systemctl try-restart veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer
     # Template units restart per concrete instance — a `@*` glob can miss
     # loaded instances, so enumerate them explicitly (issue #494).
     for instance in $(systemctl list-units --all --plain --no-legend 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' 2>/dev/null | awk '{ print $1 }'); do
         systemctl try-restart "$instance"
     done
+}
+
+start_managed_units() {
+    systemctl daemon-reload
+    # preremove disables the socket unconditionally, so a rolled-back removal
+    # must restore it: dpkg keeps reporting the package as installed, and a
+    # stopped+disabled socket never comes back on boot, leaving the panel's
+    # privileged operations dead until the next upgrade.
+    systemctl enable veil-helper.socket
+    systemctl start veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer
+    for instance in $(systemctl list-units --all --plain --no-legend 'veil-hysteria2@*.service' 'veil-olcrtc@*.service' 2>/dev/null | awk '{ print $1 }'); do
+        systemctl start "$instance"
+    done
+}
+
+if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+    case "$MODE" in
+        install) restart_managed_units ;;
+        restart) start_managed_units ;;
+    esac
 fi
 
-echo "Veil installed. Run 'veil install' to configure Panel access, or"
-echo "'veil doctor' to check host readiness."
+if [ "$MODE" = install ]; then
+    echo "Veil installed. Run 'veil install' to configure Panel access, or"
+    echo "'veil doctor' to check host readiness."
+fi

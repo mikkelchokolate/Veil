@@ -6,6 +6,28 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `postinst` now reads the maintainer-script argument dpkg passes. Debian calls
+  it not only as `configure [old-version]` but also as `abort-upgrade`,
+  `abort-remove`, `abort-deconfigure` and `triggered` when it rolls an
+  operation back or processes triggers, and the script used to run its whole
+  install body on every one of those paths: `veil helper migrate` re-applied
+  the ownership/mode pass and wrote a fresh
+  `migration-backups/<UTC stamp>/` snapshot with copies of `state.key`,
+  `state.json` and `sessions.json` (nothing prunes that directory), every
+  managed unit was restarted through `try-restart` — an unrequested outage
+  right after a failed upgrade — and `veil-helper.socket` was re-enabled even
+  if the operator had disabled it. A `migrate` failure there also made
+  `postinst` exit non-zero, leaving dpkg with a post-installation-script error
+  on top of the failed upgrade. The install body now runs only for `configure`,
+  the RPM install counters `1`/`2` (RPM passes the counter as `$1`) and the
+  APK invocation, which passes the package version as `$1` and the old version
+  as `$2` on an upgrade; the abort
+  arguments exit without touching host state, and `abort-remove` only starts
+  the units `preremove` stopped (`systemctl try-restart` is a no-op for a
+  stopped unit) and re-enables `veil-helper.socket`, which `preremove` disables
+  unconditionally — without the migration either way. A new test executes
+  the argument gate for every dpkg/RPM argument, so all three maintainer
+  scripts are locked by one contract (#1463).
 - The Hysteria2 runtime install no longer fails with `no assets found` when
   the unauthenticated GitHub API is rate-limited and Veil falls back to
   reading the release page. Upstream renamed `apernet/hysteria` to

@@ -226,6 +226,14 @@ func TestPostremoveCleansPackagedLeftovers(t *testing.T) {
 // grepping for a case list that may have gone stale (#1451).
 func extractUpgradeGate(t *testing.T, path string) string {
 	t.Helper()
+	return extractShellFunc(t, path, "is_upgrade")
+}
+
+// extractShellFunc returns a shell function defined at column 0 in path, so a
+// test can execute the real classification instead of grepping for a case
+// list that may have gone stale (#1451, #1463).
+func extractShellFunc(t *testing.T, path, name string) string {
+	t.Helper()
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -233,20 +241,20 @@ func extractUpgradeGate(t *testing.T, path string) string {
 	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
 	start := -1
 	for i, line := range lines {
-		if line == "is_upgrade() {" {
+		if line == name+"() {" {
 			start = i
 			break
 		}
 	}
 	if start < 0 {
-		t.Fatalf("%s: is_upgrade() not found at column 0", path)
+		t.Fatalf("%s: %s() not found at column 0", path, name)
 	}
 	for j := start + 1; j < len(lines); j++ {
 		if lines[j] == "}" {
 			return strings.Join(lines[start:j+1], "\n")
 		}
 	}
-	t.Fatalf("%s: is_upgrade() is not terminated", path)
+	t.Fatalf("%s: %s() is not terminated", path, name)
 	return ""
 }
 
@@ -303,4 +311,171 @@ func TestPackageUpgradeGateCoversAbortedOperations(t *testing.T) {
 			}
 		}
 	}
+}
+
+// runShellFunc executes one extracted shell function with a single argument
+// under the interpreter the maintainer scripts declare, returning its stdout.
+func runShellFunc(t *testing.T, fn, name, arg string) string {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "func.sh")
+	if err := os.WriteFile(script, []byte(fn+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", "-c", `. "$1"; "$2" "$3"`, "sh", script, name, arg)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("running %s with %q: %v\n%s", name, arg, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestPostinstallSkipsInstallBodyOnAbortedOperations locks #1463: dpkg runs
+// postinst as abort-upgrade/abort-remove/abort-deconfigure/triggered when it
+// rolls an operation back or processes triggers. The script used to run its
+// whole install body for those arguments — `veil helper migrate` (which writes
+// a fresh migration-backups snapshot holding copies of state.key/state.json)
+// plus a try-restart of every managed unit — although dpkg asked for nothing.
+// Only configure, a bare invocation (APK) and the RPM install counters run the
+// install body; abort-remove only restarts the units preremove stopped.
+func TestPostinstallSkipsInstallBodyOnAbortedOperations(t *testing.T) {
+	const script = "../../packaging/scripts/postinstall.sh"
+	fn := extractShellFunc(t, script, "postinstall_mode")
+	for _, tc := range []struct {
+		arg  string
+		want string
+	}{
+		{"configure", "install"},
+		{"configure 0.7.3", "install"}, // $1 only; Debian passes the old version as $2
+		{"", "install"},
+		{"1", "install"},
+		{"2", "install"},
+		{"abort-remove", "restart"},
+		{"abort-upgrade", "skip"},
+		{"abort-deconfigure", "skip"},
+		{"triggered", "skip"},
+		{"unexpected-argument", "skip"},
+		// APK passes the package version as $1 (apk-tools run_script); on an
+		// upgrade $1 is the new version and $2 the old one. Missing these
+		// skipped account creation on every APK install.
+		{"0.0.1", "install"},
+		{"1.2.3-r0", "install"},
+		{"1.0.0+cvs20240101", "install"},
+		{"0", "skip"},
+	} {
+		want := tc.want
+		if strings.Contains(tc.arg, " ") {
+			// A multi-word entry just documents the $1-only contract; the
+			// function receives the first word, as dpkg invokes it.
+			tc.arg = strings.Fields(tc.arg)[0]
+		}
+		if got := runShellFunc(t, fn, "postinstall_mode", tc.arg); got != want {
+			t.Errorf("postinstall_mode %q = %q, want %q", tc.arg, got, want)
+		}
+	}
+
+	// The gate must run before the first mutating command, not merely exist.
+	body, err := os.ReadFile(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
+	gate := strings.Index(code, `MODE="$(postinstall_mode`)
+	if gate < 0 {
+		t.Fatalf("postinstall.sh does not read its maintainer-script argument:\n%s", code)
+	}
+	if !strings.Contains(code[gate:], `if [ "$MODE" = install ]; then`) {
+		t.Fatal("postinstall.sh must guard the install body on the resolved mode")
+	}
+	for _, mutation := range []string{
+		"\nensure_system_account veil\n",
+		"/usr/local/bin/veil helper migrate",
+		"systemctl try-restart ",
+	} {
+		if idx := strings.Index(code, mutation); idx >= 0 && idx < gate {
+			t.Fatalf("postinstall.sh runs %q before the argument gate", strings.TrimSpace(mutation))
+		}
+	}
+	// abort-remove must not re-run the migration, but must start the units
+	// preremove stopped (try-restart is a no-op for stopped units) and restore
+	// the helper socket preremove disabled.
+	if !strings.Contains(code, `restart) start_managed_units ;;`) {
+		t.Fatal("postinstall.sh must start the units preremove stopped on abort-remove")
+	}
+}
+
+// TestPostinstallAbortRemoveStartsUnitsPreremoveStopped executes both systemd
+// paths against a fake systemctl. configure must try-restart the units it
+// replaces (they are still running), while abort-remove runs after preremove
+// stopped and disabled them: systemctl(1) defines try-restart as doing nothing
+// to a unit that is not running, so that path must use start, and it must
+// re-enable the helper socket preremove disabled — otherwise a rolled-back
+// removal leaves a package dpkg calls installed with a dead privileged helper.
+func TestPostinstallAbortRemoveStartsUnitsPreremoveStopped(t *testing.T) {
+	const script = "../../packaging/scripts/postinstall.sh"
+	units := "veil.service veil-helper.service veil-helper.socket veil-caddy.service veil-mieru.service veil-warp.service veil-backup.service veil-backup.timer"
+	for _, tc := range []struct {
+		fn   string
+		verb string
+	}{
+		{"restart_managed_units", "try-restart"},
+		{"start_managed_units", "start"},
+	} {
+		t.Run(tc.fn, func(t *testing.T) {
+			calls := runShellFuncStubbed(t, extractShellFunc(t, script, tc.fn), tc.fn)
+			joined := "\n" + strings.Join(calls, "\n") + "\n"
+			for _, want := range []string{
+				"daemon-reload",
+				"enable veil-helper.socket",
+				tc.verb + " " + units,
+				tc.verb + " veil-hysteria2@node1.service",
+			} {
+				if !strings.Contains(joined, "\n"+want+"\n") {
+					t.Errorf("%s must call `systemctl %s`; got calls:\n%s", tc.fn, want, strings.Join(calls, "\n"))
+				}
+			}
+			other := "start"
+			if tc.verb == "start" {
+				other = "try-restart"
+			}
+			for _, call := range calls {
+				if strings.HasPrefix(call, other+" ") {
+					t.Errorf("%s must not use `%s` (wrong verb for this path): %q", tc.fn, other, call)
+				}
+			}
+		})
+	}
+}
+
+// runShellFuncStubbed executes an extracted function with a fake systemctl
+// first on PATH and returns the argv lines it recorded. The fake answers
+// list-units with one live template instance so the per-instance loop runs.
+func runShellFuncStubbed(t *testing.T, fn, name string) []string {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	logPath := filepath.Join(dir, "systemctl.log")
+	stub := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$STUB_LOG\"\nif [ \"$1\" = list-units ]; then\n    echo 'veil-hysteria2@node1.service loaded active running'\nfi\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "systemctl"), []byte(stub), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(dir, "func.sh")
+	if err := os.WriteFile(script, []byte(fn+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", "-c", `. "$1"; "$2"`, "sh", script, name)
+	cmd.Env = append(os.Environ(),
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"STUB_LOG="+logPath,
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("running %s: %v\n%s", name, err, out)
+	}
+	body, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("%s recorded no systemctl calls: %v", name, err)
+	}
+	return strings.Split(strings.TrimSpace(string(body)), "\n")
 }
