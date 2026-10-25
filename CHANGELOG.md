@@ -14,7 +14,9 @@ All notable changes to Veil will be documented in this file.
   with the old key, fail its own verification and delete the archive, so
   scheduled and manual backups stopped after a rotation; `admin show` failed
   with a GCM error on the same host. All root CLI commands now read the same
-  layout as the Panel, the privileged helper and the backup timer (#1477).
+  layout as the Panel, the privileged helper and the backup timer. With no
+  installed `veil.env` the previous fallback is unchanged: the process
+  environment, then the packaged default (#1477).
 - `veil backup restore` now resolves `state.json` and the encryption key from
   the installed `veil.env` — the same file the Panel, the privileged helper and
   the backup timer read — instead of the packaged `/etc/veil/state.key`
