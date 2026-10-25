@@ -50,6 +50,14 @@ func TestCLIBackupRestoreRefusesDatabaseArchiveWhilePanelRuns(t *testing.T) {
 	}
 	t.Cleanup(func() { backupSystemctlRun = oldRun })
 
+	// The host's managed environment must stay untouched by a refusal.
+	etcDir := t.TempDir()
+	envPath := filepath.Join(etcDir, "veil.env")
+	envBody := "VEIL_KEY_PATH=" + keyPath + "\nVEIL_STATE_PATH=" + statePath + "\n"
+	if err := os.WriteFile(envPath, []byte(envBody), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("VEIL_ETC_DIR", etcDir)
 	stateBefore, err := os.ReadFile(statePath)
 	if err != nil {
 		t.Fatal(err)
@@ -84,6 +92,13 @@ func TestCLIBackupRestoreRefusesDatabaseArchiveWhilePanelRuns(t *testing.T) {
 	}
 	if !bytes.Equal(stateBefore, stateAfter) {
 		t.Fatal("state changed although the restore was refused")
+	}
+	envAfter, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(envAfter) != envBody {
+		t.Fatalf("the refusal changed veil.env:\nbefore %q\nafter  %q", envBody, envAfter)
 	}
 }
 

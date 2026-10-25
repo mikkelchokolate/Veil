@@ -138,13 +138,20 @@ sudo systemctl stop veil.service
 sudo veil backup restore \
   /path/to/veil_backup_20260605_020000.tar.gz.enc \
   --passphrase-file /root/veil-backup-passphrase \
-  --state /var/lib/veil/state.json \
-  --key-path /etc/veil/state.key \
   --yes
 sudo veil repair --yes
 sudo systemctl start veil.service
 veil status
 ```
+
+Omit `--state` and `--key-path`: the restore reads them from the installed
+`veil.env`, the same file the Panel, the privileged helper and the backup timer
+use, so a plain archive is written exactly where the Panel looks — including on
+a host whose key was moved with `rotate-key --new-key-path`. Passing them
+explicitly is still supported; when the key flag names a different path inside
+the managed layout, the restore rewrites `VEIL_KEY_PATH` to that path before
+handing over and restarts `veil.service` then `veil-helper.service`, failing
+loudly if either restart fails.
 
 Before replacement, Veil stages and verifies all archive members, then preserves
 existing state, key, and database files as timestamped `.pre-restore-*` safety
