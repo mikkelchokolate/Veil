@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- A stable backport tag no longer moves the GHCR `:latest` image. The
+  `docker-publish` job decided `:latest` from the stable-semver tag alone,
+  while the GitHub Latest release already refused a tag older than the newest
+  published stable line (#1422) — so a tag like `v0.7.4` cut after `v0.8.0`
+  published its release with `--latest=false` and still repointed
+  `ghcr.io/mikkelchokolate/veil:latest` at the older line, silently downgrading
+  everyone running `:latest` (or pulling it through compose). Both channels now
+  ask one decision script, `scripts/ci/release-channel.sh`, which reads the
+  newest published stable release and returns `latest`, `backport` or
+  `prerelease`; an unreadable release list fails the job before anything is
+  published instead of guessing (#1448).
 - `postinst` now reads the maintainer-script argument dpkg passes. Debian calls
   it not only as `configure [old-version]` but also as `abort-upgrade`,
   `abort-remove`, `abort-deconfigure` and `triggered` when it rolls an
