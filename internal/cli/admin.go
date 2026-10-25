@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/mikkelchokolate/Veil/internal/syspath"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 	"github.com/spf13/cobra"
 )
 
@@ -48,6 +50,31 @@ func revokePersistedUserSessions(statePath, username string) error {
 // signals the running Panel, whose SIGHUP reload re-reads the session store
 // (#1265). The revocation is journaled as a positional intent, so it holds
 // even if the Panel writes a session record before it handles the signal.
+// prepareRotatedKeyEnv stages the environment rewrite that keeps the installed
+// Panel on the rotated key. It returns nil when the rotation is in place: the
+// environment file already names the live key path, so there is nothing to
+// repoint.
+func prepareRotatedKeyEnv(liveKeyPath, targetKeyPath string) (*veilenv.PreparedUpdate, error) {
+	if sameKeyPath(liveKeyPath, targetKeyPath) {
+		return nil, nil
+	}
+	envPath := veilenv.Resolve(veilenv.DefaultSystemdDir)
+	update, err := veilenv.PrepareKeyPath(envPath, targetKeyPath)
+	if err != nil {
+		return nil, fmt.Errorf("refusing to rotate the state key: the Panel would keep reading %s; rotate in place (omit --new-key-path) or point VEIL_KEY_PATH at the new key first: %w", liveKeyPath, err)
+	}
+	return update, nil
+}
+
+func sameKeyPath(a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
+	return errA == nil && errB == nil && absA == absB
+}
+
 func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll bool, warn io.Writer) error {
 	if revokeAll {
 		if err := api.RevokeAllPersistedSessions(statePath); err != nil {
@@ -361,6 +388,23 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			if targetKeyPath == "" {
 				targetKeyPath = resolvedKey
 			}
+			if abs, err := filepath.Abs(targetKeyPath); err == nil {
+				targetKeyPath = abs
+			}
+
+			// The Panel, the privileged helper and the backup unit load their
+			// key from VEIL_KEY_PATH in the installed environment file. A
+			// rotation to another path has to repoint that file, and the
+			// rewrite is staged before anything is rotated: if it cannot be
+			// prepared, the command fails while state and Panel still agree
+			// (#1453).
+			pending, err := prepareRotatedKeyEnv(resolvedKey, targetKeyPath)
+			if err != nil {
+				return err
+			}
+			if pending != nil {
+				defer pending.Abort()
+			}
 
 			if _, err := statecommit.RotateKey(statecommit.RotateKeyOptions{
 				StatePath:     resolvedState,
@@ -369,12 +413,24 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			}); err != nil {
 				return fmt.Errorf("rotate state key: %w", err)
 			}
+			if pending != nil {
+				if err := pending.Commit(); err != nil {
+					// The environment still points at the old key while state
+					// holds the new one: say exactly what to do, and do not
+					// reload the Panel into a broken key.
+					return fmt.Errorf("state was re-encrypted with %s but the Panel environment could not be repointed: %w; set VEIL_KEY_PATH=%s in %s and restart the Panel",
+						targetKeyPath, err, targetKeyPath, pending.Path())
+				}
+			}
 			if err := afterAdminCredentialWrite(resolvedState, nil, true, cmd.ErrOrStderr()); err != nil {
 				return fmt.Errorf("state key was rotated but the running Panel was not updated: %w", err)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")
 			fmt.Fprintf(cmd.OutOrStdout(), "New key written to: %s\n", targetKeyPath)
+			if pending != nil {
+				fmt.Fprintf(cmd.OutOrStdout(), "VEIL_KEY_PATH in %s now points at the new key.\n", pending.Path())
+			}
 			return nil
 		},
 	}

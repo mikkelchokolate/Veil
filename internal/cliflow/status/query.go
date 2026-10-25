@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 	"github.com/mikkelchokolate/Veil/internal/webbasepath"
 )
 
@@ -153,79 +154,15 @@ func effectiveEnvFile() string {
 	return candidates[len(candidates)-1]
 }
 
+// envFileDirective is kept as the status package's seam for its drop-in
+// parsing tests; the implementation lives in internal/veilenv.
+func envFileDirective(body []byte) string { return veilenv.EnvFileDirective(body) }
+
 // envFileCandidates lists the locations a `veil status` probe may find the
-// installed EnvironmentFile, most specific first. VEIL_ETC_DIR is explicit
-// operator intent, so it short-circuits discovery; otherwise the root implied
-// by VEIL_LIVE_ROOT/VEIL_KEY_PATH, the EnvironmentFile recorded in the
-// installed systemd unit (custom --etc-dir installs), and finally the
-// packaged path are tried in order (issue #635).
+// installed EnvironmentFile, most specific first. The discovery itself lives
+// in internal/veilenv because the admin CLI rewrites the same file (#1453).
 func envFileCandidates() []string {
-	if runtime.GOOS == "windows" {
-		return []string{defaultVeilEnvPath()}
-	}
-	if dir := strings.TrimSpace(os.Getenv("VEIL_ETC_DIR")); dir != "" {
-		return []string{filepath.Join(dir, "veil.env")}
-	}
-	candidates := []string{}
-	if etc := hostenv.EtcDir(); etc != hostenv.DefaultEtcDir {
-		candidates = append(candidates, filepath.Join(etc, "veil.env"))
-	}
-	if path := systemdEnvFilePath(); path != "" {
-		candidates = append(candidates, path)
-	}
-	candidates = append(candidates, defaultVeilEnvPath())
-	return candidates
-}
-
-// systemdEnvFilePath scans the installed veil.service drop-ins for an
-// EnvironmentFile override. Later drop-ins win under systemd semantics, so
-// the last assignment is used.
-func systemdEnvFilePath() string {
-	if runtime.GOOS == "windows" {
-		return ""
-	}
-	dropInDir := filepath.Join(systemdSystemDir, "veil.service.d")
-	entries, err := os.ReadDir(dropInDir)
-	if err != nil {
-		return ""
-	}
-	found := ""
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".conf") {
-			continue
-		}
-		body, err := os.ReadFile(filepath.Join(dropInDir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		if path := envFileDirective(body); path != "" {
-			found = path
-		}
-	}
-	return found
-}
-
-// envFileDirective extracts the EnvironmentFile= target from a systemd unit
-// fragment. A leading "-" (ignore-missing marker) and systemd-style quoting
-// are stripped.
-func envFileDirective(body []byte) string {
-	found := ""
-	for _, line := range strings.Split(string(body), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		name, value, ok := strings.Cut(line, "=")
-		if !ok || strings.TrimSpace(name) != "EnvironmentFile" {
-			continue
-		}
-		// systemd applies every EnvironmentFile= line in order and an empty
-		// assignment resets the list; keep the last directive, matching the
-		// last-drop-in-wins ordering used across .conf fragments.
-		value = strings.TrimPrefix(strings.TrimSpace(value), "-")
-		found = strings.Trim(value, `"'`)
-	}
-	return found
+	return veilenv.Candidates(systemdSystemDir)
 }
 
 func effectiveStateFile() string {
@@ -269,13 +206,6 @@ func stateFileCandidates() []string {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
-}
-
-func defaultVeilEnvPath() string {
-	if runtime.GOOS == "windows" {
-		return filepath.Join(windowsProgramData(), "Veil", "veil.env")
-	}
-	return "/etc/veil/veil.env"
 }
 
 func defaultStatePath() string {
