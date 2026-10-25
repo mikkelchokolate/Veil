@@ -174,6 +174,21 @@ Do not copy generated runtime files instead of using `veil repair`; host paths,
 service availability, firewall state, and installed runtime versions may
 differ.
 
+## Restoring While The Panel Runs
+
+`veil backup restore` refuses to restore an archive that carries `veil.db`
+while `veil.service` is active. A SIGHUP reload re-reads `state.json` and
+`state.key` but keeps the SQLite handle to the old, already-unlinked file, so
+the Panel would serve the pre-restore client set and silently drop every write
+made after the "successful" reload. Stop the Panel first, restore, then start
+it again:
+
+```bash
+sudo systemctl stop veil.service
+sudo veil backup restore /var/lib/veil/backups/<archive>
+sudo systemctl start veil.service
+```
+
 ## State Key Rotation
 
 Rotate the key in place:
