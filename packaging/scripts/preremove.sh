@@ -1,13 +1,15 @@
 #!/bin/sh
 # Veil package preremove: stop and disable managed units before files are removed.
 # Debian prerm and RPM %preun also run on upgrade. Skip stop/disable then so a
-# live install is not disabled across apt/dnf upgrade.
+# live install is not disabled across apt/dnf upgrade. The abort-* arguments
+# mean dpkg rolled an operation back and the installed version stays live
+# (#1451), so it must not be stopped either.
 set -e
 
 is_upgrade() {
     arg="${1:-}"
     case "$arg" in
-        upgrade|deconfigure|failed-upgrade)
+        upgrade|deconfigure|failed-upgrade|abort-upgrade|abort-remove|abort-deconfigure)
             return 0
             ;;
         remove|purge|0|"")
