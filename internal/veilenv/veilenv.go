@@ -107,12 +107,20 @@ func PrepareKeyPath(envPath, keyPath string) (*PreparedUpdate, error) {
 		}
 		return nil, fmt.Errorf("read panel environment file %s: %w", envPath, err)
 	}
+	// An installed veil.env may be a symlink to an operator-controlled location;
+	// rewrite the target instead of replacing the link with a regular file.
+	if resolved, resolveErr := filepath.EvalSymlinks(envPath); resolveErr == nil {
+		envPath = resolved
+	}
 	info, err := os.Stat(envPath)
 	if err != nil {
 		return nil, fmt.Errorf("stat panel environment file %s: %w", envPath, err)
 	}
 
-	updated := setValue(strings.ReplaceAll(string(body), "\r\n", "\n"), KeyPathKey, keyPath)
+	updated, err := setValue(strings.ReplaceAll(string(body), "\r\n", "\n"), KeyPathKey, keyPath)
+	if err != nil {
+		return nil, err
+	}
 	tempPath, err := writeStaged(envPath, []byte(updated), info)
 	if err != nil {
 		return nil, err
@@ -149,8 +157,12 @@ func (u *PreparedUpdate) Abort() {
 
 // setValue replaces the last assignment of key (appending one when absent),
 // keeping every other line byte for byte.
-func setValue(body, key, value string) string {
-	line := key + "=" + value
+func setValue(body, key, value string) (string, error) {
+	rendered, err := envValue(value)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", key, err)
+	}
+	line := key + "=" + rendered
 	lines := strings.Split(body, "\n")
 	replaced := false
 	for i := len(lines) - 1; i >= 0; i-- {
@@ -170,7 +182,22 @@ func setValue(body, key, value string) string {
 			lines = append(lines, line)
 		}
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(lines, "\n"), nil
+}
+
+// envValue renders value as an environment-file assignment, quoting and
+// escaping when needed. A newline or NUL cannot be represented in one line and
+// is refused before anything is staged, so an operator-supplied path can never
+// inject another variable or split the assignment.
+func envValue(value string) (string, error) {
+	if strings.ContainsAny(value, "\n\r\x00") {
+		return "", fmt.Errorf("value %q contains a line break or NUL and cannot be written to an environment file", value)
+	}
+	if value != "" && !strings.ContainsAny(value, " \t#\"'\\") {
+		return value, nil
+	}
+	escaped := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(value)
+	return `"` + escaped + `"`, nil
 }
 
 // writeStaged writes content to a temporary file in the target's directory,

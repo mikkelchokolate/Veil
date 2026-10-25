@@ -42,6 +42,23 @@ func notifyRunningPanel() error {
 	return nil
 }
 
+var adminRestartPanel = restartRunningPanel
+
+// restartRunningPanel restarts veil.service instead of signalling it. The
+// Panel resolves VEIL_KEY_PATH from its process environment at startup and
+// only SIGHUP-reloads the cipher for the path it already holds, so a key
+// rotation that repoints the environment must restart the unit for systemd to
+// re-read EnvironmentFile= (#1453 review).
+func restartRunningPanel() error {
+	if err := adminSystemctlRun("is-active", "--quiet", "veil.service"); err != nil {
+		return errPanelNotActive
+	}
+	if err := adminSystemctlRun("restart", "veil.service"); err != nil {
+		return fmt.Errorf("veil.service is running but could not be restarted to load the new VEIL_KEY_PATH: %w", err)
+	}
+	return nil
+}
+
 func revokePersistedUserSessions(statePath, username string) error {
 	return api.RevokeUsernamePersistedSessions(statePath, username)
 }
@@ -72,10 +89,18 @@ func sameKeyPath(a, b string) bool {
 	}
 	absA, errA := filepath.Abs(a)
 	absB, errB := filepath.Abs(b)
-	return errA == nil && errB == nil && absA == absB
+	if errA == nil && errB == nil && absA == absB {
+		return true
+	}
+	// The live key may be reached through a symlink (a user-supplied
+	// --key-path is not canonicalized); a rotation to the target it points at
+	// is still an in-place rotation.
+	realA, errA := filepath.EvalSymlinks(a)
+	realB, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && realA == realB
 }
 
-func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll bool, warn io.Writer) error {
+func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll bool, restartPanel bool, warn io.Writer) error {
 	if revokeAll {
 		if err := api.RevokeAllPersistedSessions(statePath); err != nil {
 			return fmt.Errorf("revoke Panel sessions: %w", err)
@@ -90,12 +115,16 @@ func afterAdminCredentialWrite(statePath string, usernames []string, revokeAll b
 			}
 		}
 	}
-	err := adminNotifyPanel()
+	notify := adminNotifyPanel
+	if restartPanel {
+		notify = adminRestartPanel
+	}
+	err := notify()
 	if errors.Is(err, errPanelNotActive) {
 		if warn != nil {
 			fmt.Fprintln(warn, "warning: veil.service is not active, so no running Panel was reloaded. "+
-				"The revocation is recorded on disk and applies when a Panel starts or receives SIGHUP. "+
-				"A Panel running outside systemd keeps serving the revoked sessions until then: "+
+				"The change is recorded on disk and applies when a Panel starts or receives SIGHUP. "+
+				"A Panel running outside systemd keeps serving the old state until then: "+
 				"send it SIGHUP or restart it now.")
 		}
 		return nil
@@ -160,7 +189,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				return fmt.Errorf("save state: %w", err)
 			}
 
-			if err := afterAdminCredentialWrite(resolvedState, nil, true, cmd.ErrOrStderr()); err != nil {
+			if err := afterAdminCredentialWrite(resolvedState, nil, true, false, cmd.ErrOrStderr()); err != nil {
 				return fmt.Errorf("credentials were reset but the running Panel was not updated: %w", err)
 			}
 
@@ -319,7 +348,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				return fmt.Errorf("save state: %w", err)
 			}
 
-			if err := afterAdminCredentialWrite(resolvedState, []string{username}, false, cmd.ErrOrStderr()); err != nil {
+			if err := afterAdminCredentialWrite(resolvedState, []string{username}, false, false, cmd.ErrOrStderr()); err != nil {
 				return fmt.Errorf("credentials were saved but the running Panel was not updated: %w", err)
 			}
 
@@ -422,7 +451,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 						targetKeyPath, err, targetKeyPath, pending.Path())
 				}
 			}
-			if err := afterAdminCredentialWrite(resolvedState, nil, true, cmd.ErrOrStderr()); err != nil {
+			if err := afterAdminCredentialWrite(resolvedState, nil, true, pending != nil, cmd.ErrOrStderr()); err != nil {
 				return fmt.Errorf("state key was rotated but the running Panel was not updated: %w", err)
 			}
 

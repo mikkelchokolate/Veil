@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -124,7 +125,6 @@ func TestAdminRotateKeyToNewPath(t *testing.T) {
 		t.Fatalf("failed to save state: %v", err)
 	}
 	createAdminRotateDatabase(t, tempVar)
-	stubAdminNotifyPanel(t)
 
 	// The Panel reads VEIL_KEY_PATH from the installed environment file, so a
 	// rotation to another path has to repoint a file it can rewrite (#1453).
@@ -133,6 +133,7 @@ func TestAdminRotateKeyToNewPath(t *testing.T) {
 		t.Fatalf("failed to write panel environment: %v", err)
 	}
 	t.Setenv("VEIL_ETC_DIR", tempEtc)
+	systemctlCalls, _ := stubAdminSystemctl(t, envPath)
 
 	// Run rotate-key to a new path
 	cmd := newFastRootCommand("test")
@@ -173,6 +174,9 @@ func TestAdminRotateKeyToNewPath(t *testing.T) {
 	newSnapshot, ok, _ := newStore.Load()
 	if !ok || newSnapshot.Settings.PanelListen != "127.0.0.1:3000" {
 		t.Fatal("failed to decrypt state with new key file")
+	}
+	if !strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nrestart veil.service\n") {
+		t.Fatalf("a rotation to another path must restart the Panel; calls=%v", *systemctlCalls)
 	}
 }
 

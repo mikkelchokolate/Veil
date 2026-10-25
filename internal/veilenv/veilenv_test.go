@@ -106,3 +106,74 @@ func TestPreparedUpdateAbortDropsTheStagedCopy(t *testing.T) {
 		t.Fatalf("staged file survived Abort: %v entries=%d", err, len(entries))
 	}
 }
+
+func TestPrepareKeyPathQuotesValuesThatNeedIt(t *testing.T) {
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, "veil.env")
+	if err := os.WriteFile(envPath, []byte("VEIL_KEY_PATH=/etc/veil/state.key\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	spacey := "/etc/veil/my state.key"
+	update, err := PrepareKeyPath(envPath, spacey)
+	if err != nil {
+		t.Fatalf("PrepareKeyPath: %v", err)
+	}
+	if err := update.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `VEIL_KEY_PATH="`+spacey+`"`) {
+		t.Fatalf("value with a space must be quoted:\n%s", body)
+	}
+	if Value(body, KeyPathKey) != spacey {
+		t.Fatalf("Value = %q, want %q", Value(body, KeyPathKey), spacey)
+	}
+}
+
+func TestPrepareKeyPathRefusesLineBreakingValues(t *testing.T) {
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, "veil.env")
+	if err := os.WriteFile(envPath, []byte("VEIL_KEY_PATH=/etc/veil/state.key\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{"/etc/veil/a\nVEIL_LISTEN=evil", "/etc/veil/a\x00b"} {
+		if _, err := PrepareKeyPath(envPath, value); err == nil {
+			t.Fatalf("PrepareKeyPath accepted %q, which would inject or split an environment line", value)
+		}
+	}
+	if entries, err := os.ReadDir(dir); err != nil || len(entries) != 1 {
+		t.Fatalf("staged file after a refusal: %v entries=%d", err, len(entries))
+	}
+}
+
+func TestPrepareKeyPathRewritesASymlinkTarget(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "real-veil.env")
+	if err := os.WriteFile(target, []byte("VEIL_KEY_PATH=/etc/veil/state.key\n"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "veil.env")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	update, err := PrepareKeyPath(link, "/etc/veil/new.key")
+	if err != nil {
+		t.Fatalf("PrepareKeyPath: %v", err)
+	}
+	if err := update.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
+		t.Fatalf("the environment symlink was replaced by a regular file: %v err=%v", info, err)
+	}
+	body, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if Value(body, KeyPathKey) != "/etc/veil/new.key" {
+		t.Fatalf("symlink target not rewritten:\n%s", body)
+	}
+}

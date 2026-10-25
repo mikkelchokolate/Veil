@@ -14,12 +14,27 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/veilenv"
 )
 
-// stubAdminNotifyPanel keeps the rotation tests off the host's systemd.
-func stubAdminNotifyPanel(t *testing.T) {
+// stubAdminSystemctl keeps the rotation tests off the host's systemd and
+// records what the command asked it to do. When a restart is recorded it also
+// snapshots VEIL_KEY_PATH, so a test can prove the environment was already
+// repointed before the Panel was told to restart (#1453 review).
+func stubAdminSystemctl(t *testing.T, envPath string) (*[]string, *string) {
 	t.Helper()
-	original := adminNotifyPanel
-	adminNotifyPanel = func() error { return nil }
-	t.Cleanup(func() { adminNotifyPanel = original })
+	original := adminSystemctlRun
+	var calls []string
+	var envAtRestart string
+	adminSystemctlRun = func(args ...string) error {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 0 && args[0] == "restart" {
+			body, err := os.ReadFile(envPath)
+			if err == nil {
+				envAtRestart = veilenv.Value(body, veilenv.KeyPathKey)
+			}
+		}
+		return nil
+	}
+	t.Cleanup(func() { adminSystemctlRun = original })
+	return &calls, &envAtRestart
 }
 
 // cipherFromRawKey turns key material read back from disk into a cipher, the
@@ -90,9 +105,12 @@ func runRotateKey(t *testing.T, args ...string) (string, error) {
 // loads, reloads the Panel into a broken key and the documented procedure
 // causes a credential-decryption outage.
 func TestAdminRotateKeyRepointsPanelEnvBeforeReload(t *testing.T) {
-	stubAdminNotifyPanel(t)
+
 	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
 	t.Setenv("VEIL_ETC_DIR", etcDir)
+	// The Panel resolves VEIL_KEY_PATH at startup, so a rotation that moves the
+	// key must restart the unit; SIGHUP keeps the old environment.
+	systemctlCalls, envAtRestart := stubAdminSystemctl(t, envPath)
 
 	oldKey, err := os.ReadFile(keyPath)
 	if err != nil {
@@ -119,6 +137,18 @@ func TestAdminRotateKeyRepointsPanelEnvBeforeReload(t *testing.T) {
 	}
 	if info, err := os.Stat(envPath); err != nil || info.Mode().Perm() != 0o640 {
 		t.Fatalf("environment mode = %v err=%v, want 0640", info, err)
+	}
+
+	// The Panel was restarted, not signalled, and by then the environment
+	// already named the new key — otherwise it would reload the old one.
+	if !strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nrestart veil.service\n") {
+		t.Fatalf("rotate-key must restart veil.service to re-read the environment; calls=%v", *systemctlCalls)
+	}
+	if strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nkill -s HUP veil.service\n") {
+		t.Fatalf("rotate-key must not SIGHUP the Panel, which keeps the old environment; calls=%v", *systemctlCalls)
+	}
+	if *envAtRestart != newKeyPath {
+		t.Fatalf("restart happened while VEIL_KEY_PATH was %q, want %q", *envAtRestart, newKeyPath)
 	}
 
 	// What the Panel loads from the environment decrypts the rotated state …
@@ -156,8 +186,9 @@ func TestAdminRotateKeyRepointsPanelEnvBeforeReload(t *testing.T) {
 // key the Panel does not load. When the environment file cannot be rewritten
 // (here: it does not exist), it fails before touching state or writing a key.
 func TestAdminRotateKeyRefusesBeforeRotatingWhenTheEnvCannotBeRepointed(t *testing.T) {
-	stubAdminNotifyPanel(t)
+
 	etcDir, keyPath, statePath, _ := seedRotationFixture(t)
+	systemctlCalls, _ := stubAdminSystemctl(t, "")
 	// Drop the environment file: nothing can be repointed.
 	if err := os.Remove(filepath.Join(etcDir, "veil.env")); err != nil {
 		t.Fatal(err)
@@ -190,15 +221,19 @@ func TestAdminRotateKeyRefusesBeforeRotatingWhenTheEnvCannotBeRepointed(t *testi
 	if after, err := os.ReadFile(keyPath); err != nil || !bytes.Equal(after, keyBefore) {
 		t.Fatalf("live key changed although the command refused: err=%v equal=%t", err, bytes.Equal(after, keyBefore))
 	}
+	if len(*systemctlCalls) != 0 {
+		t.Fatalf("the Panel was signalled although the command refused before rotating: %v", *systemctlCalls)
+	}
 }
 
 // TestAdminRotateKeyInPlaceLeavesTheEnvironmentAlone keeps the in-place path
 // free of surprises: with no --new-key-path the environment file is not
 // rewritten at all.
 func TestAdminRotateKeyInPlaceLeavesTheEnvironmentAlone(t *testing.T) {
-	stubAdminNotifyPanel(t)
+
 	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
 	t.Setenv("VEIL_ETC_DIR", etcDir)
+	systemctlCalls, _ := stubAdminSystemctl(t, envPath)
 
 	before, err := os.ReadFile(envPath)
 	if err != nil {
@@ -214,5 +249,13 @@ func TestAdminRotateKeyInPlaceLeavesTheEnvironmentAlone(t *testing.T) {
 	}
 	if !bytes.Equal(before, after) {
 		t.Fatalf("in-place rotation rewrote the environment:\nbefore %q\nafter  %q", before, after)
+	}
+	// In place, the environment did not change, so the Panel reloads it with
+	// SIGHUP as before instead of being restarted.
+	if !strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nkill -s HUP veil.service\n") {
+		t.Fatalf("in-place rotation must reload the Panel with SIGHUP; calls=%v", *systemctlCalls)
+	}
+	if strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nrestart veil.service\n") {
+		t.Fatalf("in-place rotation must not restart the Panel; calls=%v", *systemctlCalls)
 	}
 }

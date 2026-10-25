@@ -188,10 +188,11 @@ Or rotate the key and keep the replacement at another path:
 sudo veil admin rotate-key --new-key-path /etc/veil/rotated-state.key
 ```
 
-With `--new-key-path`, Veil writes the new key there and repoints
-`VEIL_KEY_PATH` in the installed `veil.env` before reloading the Panel, because
-the Panel, the privileged helper and the backup unit all load their key from
-that file: the state is re-encrypted under the new key and the environment
+With `--new-key-path`, Veil writes the new key there, repoints `VEIL_KEY_PATH`
+in the installed `veil.env`, and then **restarts** `veil.service` (not SIGHUP:
+the Panel resolves `VEIL_KEY_PATH` from its process environment at startup, and
+only a restart makes systemd re-read `EnvironmentFile=`), because the Panel,
+the privileged helper and the backup unit all load their key from that file: the state is re-encrypted under the new key and the environment
 must name it, or the next credential reveal or subscription check fails. The
 environment rewrite is staged atomically first (same directory, same owner and
 0640 mode, every other line preserved) and only installed after the rotation

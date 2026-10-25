@@ -291,14 +291,14 @@ func TestAfterAdminCredentialWriteWarnsWhenPanelInactive(t *testing.T) {
 	adminNotifyPanel = func() error { return errPanelNotActive }
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	var warn bytes.Buffer
-	if err := afterAdminCredentialWrite(statePath, []string{"alice"}, false, &warn); err != nil {
+	if err := afterAdminCredentialWrite(statePath, []string{"alice"}, false, false, &warn); err != nil {
 		t.Fatalf("inactive Panel must not fail the command: %v", err)
 	}
 	if !strings.Contains(warn.String(), "veil.service is not active") || !strings.Contains(warn.String(), "SIGHUP") {
 		t.Fatalf("missing inactive-Panel warning: %q", warn.String())
 	}
 	adminNotifyPanel = func() error { return errors.New("boom") }
-	if err := afterAdminCredentialWrite(statePath, nil, true, &warn); err == nil {
+	if err := afterAdminCredentialWrite(statePath, nil, true, false, &warn); err == nil {
 		t.Fatal("a failed reload of an active Panel must still be an error")
 	}
 }
