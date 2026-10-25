@@ -69,7 +69,6 @@ func TestRenderSystemdUnitsPropagatesCustomEtcAndVarDir(t *testing.T) {
 	panel := units[UnitVeil]
 	for _, want := range []string{
 		"Environment=VEIL_STATE_PATH=/opt/veil/var/state.json",
-		"Environment=VEIL_KEY_PATH=/opt/veil/etc/state.key",
 		"Environment=VEIL_APPLY_ROOT=/opt/veil/var/staging",
 		"Environment=VEIL_LIVE_ROOT=/opt/veil/etc/generated",
 		"ReadOnlyPaths=/opt/veil/etc",
@@ -82,6 +81,14 @@ func TestRenderSystemdUnitsPropagatesCustomEtcAndVarDir(t *testing.T) {
 	helper := units[UnitHelperService]
 	if !strings.Contains(helper, "ReadWritePaths=/opt/veil/etc /opt/veil/var /usr/local/bin /etc/ufw\n") {
 		t.Fatalf("helper ReadWritePaths should include custom trees:\n%s", helper)
+	}
+	// The helper's key path comes from the same environment file as the
+	// panel's, so a rotation that repoints VEIL_KEY_PATH reaches it too (#1471).
+	if !strings.Contains(helper, "EnvironmentFile=-/opt/veil/etc/veil.env") {
+		t.Fatalf("helper must read the installed environment file:\n%s", helper)
+	}
+	if strings.Contains(helper, "Environment=VEIL_KEY_PATH=") {
+		t.Fatalf("helper must not override VEIL_KEY_PATH with a literal:\n%s", helper)
 	}
 	backup := units[UnitBackupService]
 	if !strings.Contains(backup, "--state /opt/veil/var/state.json") || !strings.Contains(backup, "--output-dir /opt/veil/var/backups") {
@@ -123,8 +130,8 @@ func TestRenderSystemdUnitsQuotesExecStartWhenPathHasSpaces(t *testing.T) {
 	if !strings.Contains(backup, `ExecStart="/opt/Veil Panel/bin/veil" backup create`) {
 		t.Fatalf("backup ExecStart must quote executable path with spaces:\n%s", backup)
 	}
-	if !strings.Contains(backup, `--key-path "/opt/Veil Panel/etc/state.key"`) {
-		t.Fatalf("backup key path must be quoted:\n%s", backup)
+	if strings.Contains(backup, "--key-path") {
+		t.Fatalf("backup must take the key path from the environment file, not a flag (#1471):\n%s", backup)
 	}
 	caddy := units[UnitCaddy]
 	if !strings.Contains(caddy, `ExecStart="/opt/Veil Panel/bin/caddy" run --config "/opt/Veil Panel/etc/generated/caddy/config.json"`) {
@@ -297,7 +304,7 @@ func TestRenderInstallDropInOverridesPackagedUnits(t *testing.T) {
 		}
 		for _, want := range []string{
 			"[Unit]\nConditionPathExists=\nConditionPathExists=/opt/veil/etc/backup.passphrase\n\n[Service]\n",
-			"ExecStart=\nExecStart=/usr/local/bin/veil backup create --state /opt/veil/var/state.json --key-path /opt/veil/etc/state.key --passphrase-file /opt/veil/etc/backup.passphrase --output-dir /opt/veil/var/backups",
+			"ExecStart=\nExecStart=/usr/local/bin/veil backup create --state /opt/veil/var/state.json --passphrase-file /opt/veil/etc/backup.passphrase --output-dir /opt/veil/var/backups",
 			"EnvironmentFile=\nEnvironmentFile=-/opt/veil/etc/veil.env",
 			"ReadWritePaths=\nReadWritePaths=/opt/veil/var",
 		} {
@@ -358,7 +365,7 @@ func TestPanelAndHelperUnitsEnforcePrivilegeBoundary(t *testing.T) {
 		"Requires=veil-helper.socket",
 		"Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock",
 		"Environment=VEIL_STATE_PATH=/var/lib/veil/state.json",
-		"Environment=VEIL_KEY_PATH=/etc/veil/state.key",
+		"EnvironmentFile=-/etc/veil/veil.env",
 		"Environment=VEIL_APPLY_ROOT=/var/lib/veil/staging",
 		"Environment=VEIL_LIVE_ROOT=/etc/veil/generated",
 		"CapabilityBoundingSet=\n",

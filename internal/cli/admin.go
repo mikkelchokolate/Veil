@@ -59,6 +59,25 @@ func restartRunningPanel() error {
 	return nil
 }
 
+var adminRestartHelper = restartHelperUnit
+
+// restartHelperUnit makes veil-helper.service re-read veil.env. The helper
+// resolves VEIL_KEY_PATH from its process environment and uses it for
+// panel-invoked backups, restores and helper-side key rotation, so a rotation
+// that repoints the key must restart it too or those paths keep the old key
+// (#1471). The unit is socket-activated: when it is not running there is
+// nothing to restart, because the next request starts it with the new
+// environment.
+func restartHelperUnit() error {
+	if err := adminSystemctlRun("is-active", "--quiet", "veil-helper.service"); err != nil {
+		return nil
+	}
+	if err := adminSystemctlRun("restart", "veil-helper.service"); err != nil {
+		return fmt.Errorf("veil-helper.service could not be restarted to load the new VEIL_KEY_PATH; restart it by hand: %w", err)
+	}
+	return nil
+}
+
 func revokePersistedUserSessions(statePath, username string) error {
 	return api.RevokeUsernamePersistedSessions(statePath, username)
 }
@@ -449,6 +468,11 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 					// reload the Panel into a broken key.
 					return fmt.Errorf("state was re-encrypted with %s but the Panel environment could not be repointed: %w; set VEIL_KEY_PATH=%s in %s and restart the Panel",
 						targetKeyPath, err, targetKeyPath, pending.Path())
+				}
+			}
+			if pending != nil {
+				if err := adminRestartHelper(); err != nil {
+					return err
 				}
 			}
 			if err := afterAdminCredentialWrite(resolvedState, nil, true, pending != nil, cmd.ErrOrStderr()); err != nil {

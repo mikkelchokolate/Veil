@@ -6,6 +6,21 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil admin rotate-key --new-key-path` now reaches every consumer of the
+  state key, not only the Panel. The privileged helper had no
+  `EnvironmentFile=` and kept a literal `Environment=VEIL_KEY_PATH`, and the
+  scheduled backup unit passed an explicit `--key-path`, which wins over
+  `VEIL_KEY_PATH`; both were rendered that way by the custom-`--etc-dir`
+  drop-ins too. After a documented rotation the timer therefore archived
+  post-rotation state with the pre-rotation key, the verify step rejected the
+  archive and deleted it, and scheduled backups silently stopped — while a
+  restore of an older backup wrote its key to the old path the Panel no longer
+  read. The units, the full renderer and the install drop-ins now take
+  `VEIL_KEY_PATH` only from `veil.env`, and `rotate-key --new-key-path`
+  restarts `veil-helper.service` (when it is running) as well as the Panel
+  after installing the rewritten environment, failing with an instruction if
+  the helper cannot be restarted rather than leaving it on the old key
+  (#1471).
 - `veil admin rotate-key --new-key-path` no longer leaves the Panel reading
   the old key. Rotation re-encrypted `state.json` and the SQLite credential
   rows and revision snapshots under the new key, wrote it to the requested
