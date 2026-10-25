@@ -6,6 +6,24 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil admin rotate-key --new-key-path` no longer leaves the Panel reading
+  the old key. Rotation re-encrypted `state.json` and the SQLite credential
+  rows and revision snapshots under the new key, wrote it to the requested
+  path, and then reloaded the Panel — while `VEIL_KEY_PATH` in the installed
+  `veil.env`, which the Panel, the privileged helper and the backup unit load,
+  still named the old key. Following the documented "write the replacement key
+  to another path" procedure caused a credential-decryption outage until the
+  operator repointed the variable by hand. The command now stages an atomic
+  rewrite of `VEIL_KEY_PATH` in the installed environment file (same
+  directory, owner and 0640 mode preserved, every other line kept) before it
+  rotates anything, installs it before signalling the Panel, and refuses with
+  an instruction when the file cannot be repointed — in-place rotation
+  A rotation that moves the key path now **restarts** `veil.service` instead of
+  sending SIGHUP: the Panel resolves `VEIL_KEY_PATH` from its process
+  environment at startup, so a SIGHUP would keep loading the old key and leave
+  the API answering `503 management state unavailable` after
+  "Key successfully rotated". In-place rotation (`rotate-key` without the flag)
+  still leaves `veil.env` untouched and keeps the SIGHUP reload (#1453).
 - A stable backport tag no longer moves the GHCR `:latest` image. The
   `docker-publish` job decided `:latest` from the stable-semver tag alone,
   while the GitHub Latest release already refused a tag older than the newest
