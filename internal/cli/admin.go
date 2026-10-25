@@ -462,7 +462,7 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 					// source of this rotation.
 					pending, err = prepareRotatedKeyEnv(liveKeyPath, targetKeyPath)
 				}
-			case sameKeyPath(resolvedKey, liveKeyPath):
+			case envNamesKey(envPath, resolvedKey):
 				// The key is the one the units read, but the state is not the
 				// managed one: rotating here would overwrite the live key for a
 				// foreign tree and break the Panel.

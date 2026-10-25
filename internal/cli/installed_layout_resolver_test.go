@@ -254,3 +254,40 @@ func TestRotateKeyRefusesToOverwriteTheLiveKeyForAForeignState(t *testing.T) {
 		t.Fatalf("veil.env changed although the command refused: err=%v", err)
 	}
 }
+
+// TestRotateKeyInPlaceWithoutEnvironmentFileKeepsTheFallback locks the mirror
+// of the copied-key fix: with no installed veil.env at all, an in-place
+// rotation that resolves its paths from the process environment is still
+// allowed. Before the envNamesKey guard the "foreign managed key" refusal fired
+// here too, because liveKeyPath falls back to the process environment and
+// therefore equals the resolved key.
+func TestRotateKeyInPlaceWithoutEnvironmentFileKeepsTheFallback(t *testing.T) {
+	etcDir, _, keyPath, statePath := restoreEnvFixture(t)
+	// Discovery sees an empty tree: no veil.env anywhere.
+	t.Setenv("VEIL_ETC_DIR", t.TempDir())
+	t.Setenv("VEIL_STATE_PATH", statePath)
+	t.Setenv("VEIL_KEY_PATH", keyPath)
+	stubAdminSystemctl(t, filepath.Join(etcDir, "veil.env"))
+
+	keyBefore, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, err := runRotateKey(t); err != nil {
+		t.Fatalf("in-place rotation without veil.env must keep the fallback: %v\n%s", err, out)
+	}
+	keyAfter, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(keyBefore, keyAfter) {
+		t.Fatal("the key was not rotated")
+	}
+	after, err := cipherFromRawKey(keyAfter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := managementstate.NewStore(statePath, after).Load(); err != nil || !ok {
+		t.Fatalf("state does not load with the rotated key: ok=%t err=%v", ok, err)
+	}
+}

@@ -41,3 +41,17 @@ func resolveInstalledPaths(flagState, flagKey string) (statePath, keyPath, liveK
 	}
 	return statePath, keyPath, liveKeyPath, envPath
 }
+
+// envNamesKey reports whether the installed environment file exists and names
+// exactly keyPath, i.e. the units genuinely read the key file at that path.
+// Without that distinction a no-`veil.env` host — where liveKeyPath falls back
+// to the process environment or the packaged default — would look "managed" and
+// an ordinary in-place rotation would be refused (#1477 review).
+func envNamesKey(envPath, keyPath string) bool {
+	body, err := os.ReadFile(envPath)
+	if err != nil {
+		return false
+	}
+	recorded := veilenv.Value(body, veilenv.KeyPathKey)
+	return recorded != "" && sameKeyPath(recorded, keyPath)
+}
