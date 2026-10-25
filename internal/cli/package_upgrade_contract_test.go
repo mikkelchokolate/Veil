@@ -354,6 +354,13 @@ func TestPostinstallSkipsInstallBodyOnAbortedOperations(t *testing.T) {
 		{"abort-deconfigure", "skip"},
 		{"triggered", "skip"},
 		{"unexpected-argument", "skip"},
+		// APK passes the package version as $1 (apk-tools run_script); on an
+		// upgrade $1 is the new version and $2 the old one. Missing these
+		// skipped account creation on every APK install.
+		{"0.0.1", "install"},
+		{"1.2.3-r0", "install"},
+		{"1.0.0+cvs20240101", "install"},
+		{"0", "skip"},
 	} {
 		want := tc.want
 		if strings.Contains(tc.arg, " ") {

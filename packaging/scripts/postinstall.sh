@@ -37,16 +37,26 @@ postinstall_mode() {
             return 0
             ;;
     esac
-    # RPM install counter: 1 = install, 2 = upgrade. Anything non-numeric is an
-    # argument we do not know, so fail closed and leave host state alone.
+    # RPM passes its install counter as $1 ("1" install, "2" upgrade); APK
+    # passes the package version, with the old version as $2 on upgrade
+    # (apk-tools run_script). Both mean the package's files were just unpacked,
+    # so a leading digit plus a version charset is the install path. Anything
+    # else is an argument we do not know: fail closed and leave host state
+    # alone.
     case "$arg" in
-        *[!0-9]*) echo skip; return 0 ;;
+        [0-9]*)
+            case "$arg" in
+                *[!0-9A-Za-z._+~-]*) echo skip; return 0 ;;
+            esac
+            if [ "$arg" = 0 ]; then
+                echo skip
+            else
+                echo install
+            fi
+            return 0
+            ;;
     esac
-    if [ "$arg" -gt 0 ]; then
-        echo install
-    else
-        echo skip
-    fi
+    echo skip
 }
 
 MODE="$(postinstall_mode "${1:-}")"
