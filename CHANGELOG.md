@@ -19,7 +19,9 @@ All notable changes to Veil will be documented in this file.
   if the operator had disabled it. A `migrate` failure there also made
   `postinst` exit non-zero, leaving dpkg with a post-installation-script error
   on top of the failed upgrade. The install body now runs only for `configure`,
-  a bare invocation (APK) and the RPM install counters `1`/`2`; the abort
+  the RPM install counters `1`/`2` (RPM passes the counter as `$1`) and the
+  APK invocation, which passes the package version as `$1` and the old version
+  as `$2` on an upgrade; the abort
   arguments exit without touching host state, and `abort-remove` only starts
   the units `preremove` stopped (`systemctl try-restart` is a no-op for a
   stopped unit) and re-enables `veil-helper.socket`, which `preremove` disables
