@@ -6,6 +6,22 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- A failed `.deb` upgrade no longer wipes every packaged systemd unit. After a
+  failed upgrade unpack (a full disk on a small VPS, a file conflict, an
+  interrupted download) dpkg restores the old package's files and then runs
+  `new-postrm abort-upgrade <old-version>`, and
+  `packaging/scripts/postremove.sh` treated that as a real removal: it deleted
+  `veil.service`, `veil-helper.*`, `veil-caddy`, `veil-hysteria2@`,
+  `veil-mieru`, `veil-olcrtc@`, `veil-warp` and `veil-backup.*` from the
+  vendor unit directories, removed the QUIC sysctl drop-in and ran
+  `systemctl daemon-reload`, while dpkg still reported the old version as
+  `install ok installed`. Nothing started after the next reboot and `apt`
+  showed no problem. `abort-upgrade`, `abort-remove` and `abort-deconfigure`
+  now take the same skip path as `upgrade` in `postremove.sh` and in
+  `preremove.sh`, which would otherwise stop and disable the units the
+  rolled-back version still needs. A new test executes both gates with every
+  dpkg/RPM argument, so grepping for a stale case list can no longer stay
+  green (#1451).
 - `veil backup prune` and `veil backup create --prune` no longer treat
   `--daily 0 --weekly 0 --monthly 0` as "keep nothing". That used to delete
   every local archive, including the one `create` had just written, and then

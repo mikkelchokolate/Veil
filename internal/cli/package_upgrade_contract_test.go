@@ -2,6 +2,8 @@ package cli
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -216,5 +218,89 @@ func TestPostremoveCleansPackagedLeftovers(t *testing.T) {
 	if strings.Contains(script, "/etc/systemd/system/veil") && strings.Contains(script, "rm -f \"$dir\"/veil") {
 		// /etc units belong to `veil install`, not to the package.
 		t.Fatal("postremove.sh must not remove operator units under /etc/systemd/system")
+	}
+}
+
+// extractUpgradeGate pulls the is_upgrade() function body out of a packaging
+// maintainer script, so a test can execute the real classification instead of
+// grepping for a case list that may have gone stale (#1451).
+func extractUpgradeGate(t *testing.T, path string) string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
+	start := -1
+	for i, line := range lines {
+		if line == "is_upgrade() {" {
+			start = i
+			break
+		}
+	}
+	if start < 0 {
+		t.Fatalf("%s: is_upgrade() not found at column 0", path)
+	}
+	for j := start + 1; j < len(lines); j++ {
+		if lines[j] == "}" {
+			return strings.Join(lines[start:j+1], "\n")
+		}
+	}
+	t.Fatalf("%s: is_upgrade() is not terminated", path)
+	return ""
+}
+
+// runUpgradeGate executes the extracted shell function for one argument and
+// reports whether it classifies the argument as an upgrade.
+func runUpgradeGate(t *testing.T, gate, arg string) bool {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "gate.sh")
+	if err := os.WriteFile(script, []byte(gate+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Same interpreter the maintainer scripts declare (#!/bin/sh).
+	cmd := exec.Command("/bin/sh", "-c",
+		`. "$1"; if is_upgrade "$2"; then echo upgrade; else echo remove; fi`, "sh", script, arg)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("running the upgrade gate with %q: %v\n%s", arg, err, out)
+	}
+	return strings.TrimSpace(string(out)) == "upgrade"
+}
+
+// TestPackageUpgradeGateCoversAbortedOperations locks issue #1451: dpkg calls
+// postrm with `abort-upgrade` after a failed upgrade unpack, and the old
+// version stays installed. postremove.sh treated that as a real removal and
+// deleted every packaged unit plus the QUIC sysctl drop-in, so a transient
+// upgrade failure became a silent outage. abort-remove/abort-deconfigure mean
+// dpkg rolled the package back for the same reason: the files stay.
+func TestPackageUpgradeGateCoversAbortedOperations(t *testing.T) {
+	// Package or files stay installed: upgrade in flight, or an aborted and
+	// rolled-back remove/deconfigure/upgrade.
+	keepArgs := []string{
+		"upgrade", "deconfigure", "failed-upgrade",
+		"abort-upgrade", "abort-remove", "abort-deconfigure",
+		// RPM %postun leftover count: a positive integer means an instance stays.
+		"1", "2",
+	}
+	// The package really goes away; the cleanup branches must still run.
+	removeArgs := []string{"remove", "purge", "disappear", "", "0"}
+	for _, path := range []string{
+		"../../packaging/scripts/preremove.sh",
+		"../../packaging/scripts/postremove.sh",
+	} {
+		gate := extractUpgradeGate(t, path)
+		for _, arg := range keepArgs {
+			if !runUpgradeGate(t, gate, arg) {
+				t.Errorf("%s: is_upgrade %q = false, want true — files must be kept",
+					filepath.Base(path), arg)
+			}
+		}
+		for _, arg := range removeArgs {
+			if runUpgradeGate(t, gate, arg) {
+				t.Errorf("%s: is_upgrade %q = true, want false — cleanup must run",
+					filepath.Base(path), arg)
+			}
+		}
 	}
 }

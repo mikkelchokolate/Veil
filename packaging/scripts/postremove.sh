@@ -5,12 +5,14 @@
 set -e
 
 # Debian postrm and RPM %postun also run on upgrade. Unit/sysctl cleanup would
-# delete the NEW package's files then, so only run it on a real remove/purge
-# (same argument contract as preremove.sh).
+# delete the NEW package's files then, so only run it on a real remove/purge.
+# The abort-* arguments mean dpkg rolled an operation back and the installed
+# version keeps its files (#1451): postrm abort-upgrade runs after a failed
+# upgrade unpack, with the OLD version still installed.
 is_upgrade() {
     arg="${1:-}"
     case "$arg" in
-        upgrade|deconfigure|failed-upgrade)
+        upgrade|deconfigure|failed-upgrade|abort-upgrade|abort-remove|abort-deconfigure)
             return 0
             ;;
         remove|purge|0|"")
