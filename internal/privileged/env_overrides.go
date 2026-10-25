@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 )
 
 // PolicyEnvOverride is a VEIL_* variable from the process environment that
@@ -59,10 +60,19 @@ var policyEnvKnobs = []struct {
 // trimmed and cleaned the way DefaultPolicy and hostenv consume them, so a
 // variable that restates the packaged path is not reported.
 func PolicyEnvOverrides() []PolicyEnvOverride {
+	// The installed veil.env is root-only configuration that the units load on
+	// purpose, so a variable that only restates its value is the installed
+	// layout, not a poisoned process environment. Without this, a rotated key
+	// path (#1471) or any custom --etc-dir install warned on every helper
+	// start.
+	installed := installedEnvValues()
 	var out []PolicyEnvOverride
 	for _, knob := range policyEnvKnobs {
 		value := strings.TrimSpace(os.Getenv(knob.name))
 		if value == "" || filepath.Clean(value) == knob.packaged {
+			continue
+		}
+		if configured := installed[knob.name]; configured != "" && filepath.Clean(configured) == filepath.Clean(value) {
 			continue
 		}
 		override := PolicyEnvOverride{Name: knob.name, Value: value, Packaged: knob.packaged}
@@ -73,6 +83,22 @@ func PolicyEnvOverrides() []PolicyEnvOverride {
 		out = append(out, override)
 	}
 	return out
+}
+
+// installedEnvValues reads the installed veil.env once; an unreadable file
+// yields no entries so the packaged-value comparison stays the only exemption.
+func installedEnvValues() map[string]string {
+	body, err := os.ReadFile(veilenv.Resolve(veilenv.DefaultSystemdDir))
+	if err != nil {
+		return nil
+	}
+	values := make(map[string]string, len(policyEnvKnobs))
+	for _, knob := range policyEnvKnobs {
+		if value := veilenv.Value(body, knob.name); value != "" {
+			values[knob.name] = value
+		}
+	}
+	return values
 }
 
 // PolicyEnvKnobNames returns the names of every VEIL_* variable that

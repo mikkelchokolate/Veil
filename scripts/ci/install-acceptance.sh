@@ -769,8 +769,14 @@ grep -q "VEIL_STATE_PATH=${CUSTOM_VAR}/state.json" "${CI_ARTIFACT_DIR}/veil-cust
 grep -q "ReadWritePaths=${CUSTOM_VAR}" "${CI_ARTIFACT_DIR}/veil-custom-unit.txt" \
   || ci_die "veil.service does not grant the custom var dir"
 ${SUDO} systemctl cat veil-helper.service > "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt"
-grep -q "VEIL_KEY_PATH=${CUSTOM_ETC}/state.key" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt" \
+# The helper takes VEIL_KEY_PATH from the installed environment file (there is
+# no per-unit key literal since #1471), so the merged unit must reference the
+# custom veil.env instead.
+grep -q "EnvironmentFile=-${CUSTOM_ETC}/veil.env" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt" \
   || ci_die "veil-helper.service does not reference the custom etc dir"
+if grep -q "VEIL_KEY_PATH=" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt"; then
+  ci_die "veil-helper.service pins VEIL_KEY_PATH instead of reading the environment file"
+fi
 grep -q "ReadWritePaths=${CUSTOM_ETC} ${CUSTOM_VAR}" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt" \
   || ci_die "veil-helper.service does not grant the custom roots"
 # The edge units must mask the CUSTOM var dir, not the packaged default.

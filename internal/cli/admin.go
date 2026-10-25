@@ -59,6 +59,25 @@ func restartRunningPanel() error {
 	return nil
 }
 
+var adminRestartHelper = restartHelperUnit
+
+// restartHelperUnit makes veil-helper.service re-read veil.env. The helper
+// resolves VEIL_KEY_PATH from its process environment and uses it for
+// panel-invoked backups, restores and helper-side key rotation, so a rotation
+// that repoints the key must restart it too or those paths keep the old key
+// (#1471). The unit is socket-activated: when it is not running there is
+// nothing to restart, because the next request starts it with the new
+// environment.
+func restartHelperUnit() error {
+	if err := adminSystemctlRun("is-active", "--quiet", "veil-helper.service"); err != nil {
+		return nil
+	}
+	if err := adminSystemctlRun("restart", "veil-helper.service"); err != nil {
+		return fmt.Errorf("veil-helper.service could not be restarted to load the new VEIL_KEY_PATH; restart it by hand: %w", err)
+	}
+	return nil
+}
+
 func revokePersistedUserSessions(statePath, username string) error {
 	return api.RevokeUsernamePersistedSessions(statePath, username)
 }
@@ -451,8 +470,21 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 						targetKeyPath, err, targetKeyPath, pending.Path())
 				}
 			}
-			if err := afterAdminCredentialWrite(resolvedState, nil, true, pending != nil, cmd.ErrOrStderr()); err != nil {
-				return fmt.Errorf("state key was rotated but the running Panel was not updated: %w", err)
+			// The Panel goes first: it is the process that writes state, so it
+			// must never keep the pre-rotation cipher after the environment
+			// moved. The helper is second because it only reads state. Both are
+			// attempted even when the first one fails — a failed helper restart
+			// must not skip the Panel restart, and a failed Panel restart must
+			// not leave the helper on the old key — and the errors are reported
+			// together so the operator knows exactly what still needs a manual
+			// restart (#1471 review).
+			panelErr := afterAdminCredentialWrite(resolvedState, nil, true, pending != nil, cmd.ErrOrStderr())
+			var helperErr error
+			if pending != nil {
+				helperErr = adminRestartHelper()
+			}
+			if panelErr != nil || helperErr != nil {
+				return fmt.Errorf("state key was rotated but not every process was updated: %w", errors.Join(panelErr, helperErr))
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")

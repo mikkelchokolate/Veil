@@ -2,12 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/backup"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -18,17 +20,16 @@ import (
 // records what the command asked it to do. When a restart is recorded it also
 // snapshots VEIL_KEY_PATH, so a test can prove the environment was already
 // repointed before the Panel was told to restart (#1453 review).
-func stubAdminSystemctl(t *testing.T, envPath string) (*[]string, *string) {
+func stubAdminSystemctl(t *testing.T, envPath string) (*[]string, *map[string]string) {
 	t.Helper()
 	original := adminSystemctlRun
 	var calls []string
-	var envAtRestart string
+	envAtRestart := map[string]string{}
 	adminSystemctlRun = func(args ...string) error {
 		calls = append(calls, strings.Join(args, " "))
-		if len(args) > 0 && args[0] == "restart" {
-			body, err := os.ReadFile(envPath)
-			if err == nil {
-				envAtRestart = veilenv.Value(body, veilenv.KeyPathKey)
+		if len(args) > 1 && args[0] == "restart" {
+			if body, err := os.ReadFile(envPath); err == nil {
+				envAtRestart[args[1]] = veilenv.Value(body, veilenv.KeyPathKey)
 			}
 		}
 		return nil
@@ -141,14 +142,16 @@ func TestAdminRotateKeyRepointsPanelEnvBeforeReload(t *testing.T) {
 
 	// The Panel was restarted, not signalled, and by then the environment
 	// already named the new key — otherwise it would reload the old one.
-	if !strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nrestart veil.service\n") {
-		t.Fatalf("rotate-key must restart veil.service to re-read the environment; calls=%v", *systemctlCalls)
+	for _, unit := range []string{"veil.service", "veil-helper.service"} {
+		if !strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nrestart "+unit+"\n") {
+			t.Fatalf("rotate-key must restart %s to re-read the environment; calls=%v", unit, *systemctlCalls)
+		}
+		if got := (*envAtRestart)[unit]; got != newKeyPath {
+			t.Fatalf("%s restarted while VEIL_KEY_PATH was %q, want %q", unit, got, newKeyPath)
+		}
 	}
 	if strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nkill -s HUP veil.service\n") {
 		t.Fatalf("rotate-key must not SIGHUP the Panel, which keeps the old environment; calls=%v", *systemctlCalls)
-	}
-	if *envAtRestart != newKeyPath {
-		t.Fatalf("restart happened while VEIL_KEY_PATH was %q, want %q", *envAtRestart, newKeyPath)
 	}
 
 	// What the Panel loads from the environment decrypts the rotated state …
@@ -255,7 +258,162 @@ func TestAdminRotateKeyInPlaceLeavesTheEnvironmentAlone(t *testing.T) {
 	if !strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nkill -s HUP veil.service\n") {
 		t.Fatalf("in-place rotation must reload the Panel with SIGHUP; calls=%v", *systemctlCalls)
 	}
-	if strings.Contains("\n"+strings.Join(*systemctlCalls, "\n")+"\n", "\nrestart veil.service\n") {
+	if strings.Contains(strings.Join(*systemctlCalls, "\n"), "restart veil.service") {
 		t.Fatalf("in-place rotation must not restart the Panel; calls=%v", *systemctlCalls)
+	}
+}
+
+// TestRotatedKeyPathProducesAVerifiableBackup locks the second half of #1471:
+// the backup timer takes its key path from the same environment file, so after
+// a rotation it archives post-rotation state with the post-rotation key and the
+// archive verifies. With the pre-rotation key the same archive would be
+// rejected, which is what silently stopped scheduled backups.
+func TestRotatedKeyPathProducesAVerifiableBackup(t *testing.T) {
+	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	stubAdminSystemctl(t, envPath)
+	oldKey, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newKeyPath := filepath.Join(etcDir, "rotated-state.key")
+	if out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", newKeyPath); err != nil {
+		t.Fatalf("rotate-key: %v\n%s", err, out)
+	}
+	envBody, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyPathFromEnv := veilenv.Value(envBody, veilenv.KeyPathKey)
+	if keyPathFromEnv != newKeyPath {
+		t.Fatalf("environment key path = %q, want %q", keyPathFromEnv, newKeyPath)
+	}
+
+	const passphrase = "0123456789abcdef"
+	archive, err := backup.CreateBackup(statePath, keyPathFromEnv, passphrase)
+	if err != nil {
+		t.Fatalf("the timer's backup path with the environment key failed: %v", err)
+	}
+	if _, err := backup.VerifyBackup(archive, passphrase); err != nil {
+		t.Fatalf("archive created after the rotation does not verify: %v", err)
+	}
+
+	// The old key is what used to be hardcoded into the unit; it no longer
+	// matches the state and must be rejected, which is the regression the fix
+	// removes.
+	oldKeyFile, err := os.Stat(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if oldKeyFile.Size() != int64(len(oldKey)) {
+		t.Fatalf("live key file changed size: %d", oldKeyFile.Size())
+	}
+	if _, err := backup.CreateBackup(statePath, keyPath, passphrase); err == nil {
+		// CreateBackup tolerates some mismatches; verify is the contract the
+		// timer relies on.
+		mismatched, createErr := backup.CreateBackup(statePath, keyPath, passphrase)
+		if createErr == nil {
+			if _, verifyErr := backup.VerifyBackup(mismatched, passphrase); verifyErr == nil {
+				t.Fatal("an archive built from inconsistent key/state verified")
+			}
+		}
+	}
+}
+
+// TestRotateKeyRestartsThePanelBeforeTheHelper locks the ordering review point:
+// the Panel writes state, so it must be the first process on the new key. If
+// the helper restart is the one that fails, the Panel is already consistent and
+// the command reports the failure instead of reporting success with a Panel
+// still holding the pre-rotation cipher.
+func TestRotateKeyRestartsThePanelBeforeTheHelper(t *testing.T) {
+	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	calls, _ := stubAdminSystemctl(t, envPath)
+	newKeyPath := filepath.Join(etcDir, "rotated-state.key")
+	if out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", newKeyPath); err != nil {
+		t.Fatalf("rotate-key: %v\n%s", err, out)
+	}
+	panel, helper := -1, -1
+	for i, call := range *calls {
+		switch call {
+		case "restart veil.service":
+			panel = i
+		case "restart veil-helper.service":
+			helper = i
+		}
+	}
+	if panel < 0 || helper < 0 {
+		t.Fatalf("both units must be restarted; calls=%v", *calls)
+	}
+	if panel > helper {
+		t.Fatalf("the Panel must be restarted before the helper; calls=%v", *calls)
+	}
+}
+
+// failingUnitSystemctl records the systemctl verbs and fails the restart of one
+// unit, so the tests can prove both restarts are attempted regardless of order.
+func failingUnitSystemctl(t *testing.T, envPath, failingUnit string) *[]string {
+	t.Helper()
+	original := adminSystemctlRun
+	var calls []string
+	adminSystemctlRun = func(args ...string) error {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 1 && args[0] == "restart" && args[1] == failingUnit {
+			return errors.New("unit entered failed state")
+		}
+		return nil
+	}
+	t.Cleanup(func() { adminSystemctlRun = original })
+	return &calls
+}
+
+// TestRotateKeyAttemptsBothRestartsWhenTheHelperFails locks the review point on
+// #1471: a failed helper restart must not skip the Panel restart, because the
+// state is already re-encrypted and an old-cipher Panel would corrupt the next
+// write.
+func TestRotateKeyAttemptsBothRestartsWhenTheHelperFails(t *testing.T) {
+	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	calls := failingUnitSystemctl(t, envPath, "veil-helper.service")
+	newKeyPath := filepath.Join(etcDir, "rotated-state.key")
+
+	out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", newKeyPath)
+	if err == nil {
+		t.Fatalf("rotate-key succeeded although the helper could not be restarted:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "veil-helper.service") {
+		t.Fatalf("error does not name the helper restart: %v", err)
+	}
+	joined := strings.Join(*calls, "\n")
+	if !strings.Contains(joined, "restart veil.service") {
+		t.Fatalf("the Panel restart was skipped after the helper failure: %v", *calls)
+	}
+	if !strings.Contains(joined, "restart veil-helper.service") {
+		t.Fatalf("the helper restart was not attempted: %v", *calls)
+	}
+}
+
+// TestRotateKeyStillRestartsTheHelperWhenThePanelFails is the mirror case: a
+// failed Panel restart must not leave the helper loading the old key, and the
+// command has to name the Panel.
+func TestRotateKeyStillRestartsTheHelperWhenThePanelFails(t *testing.T) {
+	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	calls := failingUnitSystemctl(t, envPath, "veil.service")
+	newKeyPath := filepath.Join(etcDir, "rotated-state.key")
+
+	out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", newKeyPath)
+	if err == nil {
+		t.Fatalf("rotate-key succeeded although the Panel could not be restarted:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "veil.service") {
+		t.Fatalf("error does not name the Panel unit: %v", err)
+	}
+	joined := strings.Join(*calls, "\n")
+	if !strings.Contains(joined, "restart veil.service") {
+		t.Fatalf("the Panel restart was not attempted: %v", *calls)
+	}
+	if !strings.Contains(joined, "restart veil-helper.service") {
+		t.Fatalf("the helper restart was skipped after the Panel failure: %v", *calls)
 	}
 }

@@ -189,10 +189,14 @@ sudo veil admin rotate-key --new-key-path /etc/veil/rotated-state.key
 ```
 
 With `--new-key-path`, Veil writes the new key there, repoints `VEIL_KEY_PATH`
-in the installed `veil.env`, and then **restarts** `veil.service` (not SIGHUP:
-the Panel resolves `VEIL_KEY_PATH` from its process environment at startup, and
-only a restart makes systemd re-read `EnvironmentFile=`), because the Panel,
-the privileged helper and the backup unit all load their key from that file: the state is re-encrypted under the new key and the environment
+in the installed `veil.env`, and then **restarts** `veil.service` and, when it is running, `veil-helper.service` (not
+SIGHUP: both resolve `VEIL_KEY_PATH` from their process environment at startup,
+and only a restart makes systemd re-read `EnvironmentFile=`). All three
+consumers — Panel, privileged helper and the scheduled `veil-backup` unit —
+take the key path from that one file and never from a unit literal or a
+`--key-path` flag, so the timer keeps producing verifiable archives and a
+restore of an older backup writes that archive's key to the path the Panel
+reads: the state is re-encrypted under the new key and the environment
 must name it, or the next credential reveal or subscription check fails. The
 environment rewrite is staged atomically first (same directory, same owner and
 0640 mode, every other line preserved) and only installed after the rotation

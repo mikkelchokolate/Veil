@@ -201,7 +201,6 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	cfg = defaultSystemdConfig(cfg)
 	applyRoot := path.Join(cfg.VarDir, "staging")
 	statePath := path.Join(cfg.VarDir, "state.json")
-	keyPath := path.Join(cfg.EtcDir, "state.key")
 	backupDir := path.Join(cfg.VarDir, "backups")
 	// Exec-destined values use systemdQuoteExec so a literal $ in an
 	// operator-chosen path renders as $$ and survives Exec-line variable
@@ -220,7 +219,6 @@ func RenderSystemdUnits(cfg SystemdConfig) map[string]string {
 	olcrtcConfig := systemdQuoteExecInstanceConfig(path.Join(cfg.EtcDir, "generated", "olcrtc", "%i.yaml"))
 	warpConfig := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "sing-box", "warp.json"))
 	mieruConfig := systemdQuoteExec(path.Join(cfg.EtcDir, "generated", "mieru", "server_config.json"))
-	stateKey := systemdQuoteExec(keyPath)
 	passphraseFile := systemdQuote(path.Join(cfg.EtcDir, "backup.passphrase"))
 	passphraseFileExec := systemdQuoteExec(path.Join(cfg.EtcDir, "backup.passphrase"))
 	quotedState := systemdQuoteExec(statePath)
@@ -242,7 +240,6 @@ Group=veil
 EnvironmentFile=-` + envFile + `
 Environment=VEIL_HELPER_SOCKET=/run/veil/helper.sock
 Environment=` + systemdAssign("VEIL_STATE_PATH", statePath) + `
-Environment=` + systemdAssign("VEIL_KEY_PATH", keyPath) + `
 Environment=` + systemdAssign("VEIL_APPLY_ROOT", applyRoot) + `
 Environment=` + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + `
 ExecStart=` + veilBin + ` serve
@@ -310,8 +307,10 @@ RestrictRealtime=true
 MemoryDenyWriteExecute=true
 UMask=0077
 Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+# VEIL_KEY_PATH comes from veil.env like the panel's, so a rotation that
+# repoints the key is seen by the helper too (#1471).
+EnvironmentFile=-` + envFile + `
 Environment=` + systemdAssign("VEIL_STATE_PATH", statePath) + `
-Environment=` + systemdAssign("VEIL_KEY_PATH", keyPath) + `
 Environment=` + systemdAssign("VEIL_APPLY_ROOT", applyRoot) + `
 Environment=` + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + `
 ReadWritePaths=` + etcDir + ` ` + varDir + ` /usr/local/bin /etc/ufw
@@ -525,7 +524,7 @@ After=local-fs.target
 [Service]
 Type=oneshot
 EnvironmentFile=-` + envFile + `
-ExecStart=` + veilBin + ` backup create --state ` + quotedState + ` --key-path ` + stateKey + ` --passphrase-file ` + passphraseFileExec + ` --output-dir ` + quotedBackupDir + ` --prune --daily 7 --weekly 4 --monthly 12
+ExecStart=` + veilBin + ` backup create --state ` + quotedState + ` --passphrase-file ` + passphraseFileExec + ` --output-dir ` + quotedBackupDir + ` --prune --daily 7 --weekly 4 --monthly 12
 User=root
 Group=root
 NoNewPrivileges=true
@@ -671,10 +670,15 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 	veilBin := systemdQuoteExec(cfg.VeilBinary)
 	envFile := systemdQuote(path.Join(cfg.EtcDir, "veil.env"))
 	writePanelEnvironment := func() {
+		// VEIL_KEY_PATH is deliberately absent: it lives only in veil.env, so
+		// a key rotation to another path is seen by every consumer (#1471).
 		b.WriteString("Environment=" + systemdAssign("VEIL_STATE_PATH", path.Join(cfg.VarDir, "state.json")) + "\n")
-		b.WriteString("Environment=" + systemdAssign("VEIL_KEY_PATH", path.Join(cfg.EtcDir, "state.key")) + "\n")
 		b.WriteString("Environment=" + systemdAssign("VEIL_APPLY_ROOT", path.Join(cfg.VarDir, "staging")) + "\n")
 		b.WriteString("Environment=" + systemdAssign("VEIL_LIVE_ROOT", path.Join(cfg.EtcDir, "generated")) + "\n")
+	}
+	writeEnvironmentFile := func() {
+		b.WriteString("EnvironmentFile=\n")
+		b.WriteString("EnvironmentFile=-" + envFile + "\n")
 	}
 	switch name {
 	case UnitVeil:
@@ -690,6 +694,7 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 	case UnitHelperService:
 		b.WriteString("ExecStart=\n")
 		b.WriteString("ExecStart=" + veilBin + " helper serve --systemd-socket-activation\n")
+		writeEnvironmentFile()
 		writePanelEnvironment()
 		// Match the packaged unit and the full renderer: no writable /run
 		// path. The socket-activated helper adopts FD3 and must not be able
@@ -699,7 +704,7 @@ func dropInServiceOverrides(name string, cfg SystemdConfig) string {
 	case UnitBackupService:
 		passphraseFile := systemdQuoteExec(path.Join(cfg.EtcDir, "backup.passphrase"))
 		b.WriteString("ExecStart=\n")
-		b.WriteString("ExecStart=" + veilBin + " backup create --state " + systemdQuoteExec(path.Join(cfg.VarDir, "state.json")) + " --key-path " + systemdQuoteExec(path.Join(cfg.EtcDir, "state.key")) + " --passphrase-file " + passphraseFile + " --output-dir " + systemdQuoteExec(path.Join(cfg.VarDir, "backups")) + " --prune --daily 7 --weekly 4 --monthly 12\n")
+		b.WriteString("ExecStart=" + veilBin + " backup create --state " + systemdQuoteExec(path.Join(cfg.VarDir, "state.json")) + " --passphrase-file " + passphraseFile + " --output-dir " + systemdQuoteExec(path.Join(cfg.VarDir, "backups")) + " --prune --daily 7 --weekly 4 --monthly 12\n")
 		b.WriteString("EnvironmentFile=\n")
 		b.WriteString("EnvironmentFile=-" + envFile + "\n")
 		b.WriteString("ReadWritePaths=\n")
