@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -346,5 +347,73 @@ func TestRotateKeyRestartsThePanelBeforeTheHelper(t *testing.T) {
 	}
 	if panel > helper {
 		t.Fatalf("the Panel must be restarted before the helper; calls=%v", *calls)
+	}
+}
+
+// failingUnitSystemctl records the systemctl verbs and fails the restart of one
+// unit, so the tests can prove both restarts are attempted regardless of order.
+func failingUnitSystemctl(t *testing.T, envPath, failingUnit string) *[]string {
+	t.Helper()
+	original := adminSystemctlRun
+	var calls []string
+	adminSystemctlRun = func(args ...string) error {
+		calls = append(calls, strings.Join(args, " "))
+		if len(args) > 1 && args[0] == "restart" && args[1] == failingUnit {
+			return errors.New("unit entered failed state")
+		}
+		return nil
+	}
+	t.Cleanup(func() { adminSystemctlRun = original })
+	return &calls
+}
+
+// TestRotateKeyAttemptsBothRestartsWhenTheHelperFails locks the review point on
+// #1471: a failed helper restart must not skip the Panel restart, because the
+// state is already re-encrypted and an old-cipher Panel would corrupt the next
+// write.
+func TestRotateKeyAttemptsBothRestartsWhenTheHelperFails(t *testing.T) {
+	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	calls := failingUnitSystemctl(t, envPath, "veil-helper.service")
+	newKeyPath := filepath.Join(etcDir, "rotated-state.key")
+
+	out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", newKeyPath)
+	if err == nil {
+		t.Fatalf("rotate-key succeeded although the helper could not be restarted:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "veil-helper.service") {
+		t.Fatalf("error does not name the helper restart: %v", err)
+	}
+	joined := strings.Join(*calls, "\n")
+	if !strings.Contains(joined, "restart veil.service") {
+		t.Fatalf("the Panel restart was skipped after the helper failure: %v", *calls)
+	}
+	if !strings.Contains(joined, "restart veil-helper.service") {
+		t.Fatalf("the helper restart was not attempted: %v", *calls)
+	}
+}
+
+// TestRotateKeyStillRestartsTheHelperWhenThePanelFails is the mirror case: a
+// failed Panel restart must not leave the helper loading the old key, and the
+// command has to name the Panel.
+func TestRotateKeyStillRestartsTheHelperWhenThePanelFails(t *testing.T) {
+	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	calls := failingUnitSystemctl(t, envPath, "veil.service")
+	newKeyPath := filepath.Join(etcDir, "rotated-state.key")
+
+	out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", newKeyPath)
+	if err == nil {
+		t.Fatalf("rotate-key succeeded although the Panel could not be restarted:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), "veil.service") {
+		t.Fatalf("error does not name the Panel unit: %v", err)
+	}
+	joined := strings.Join(*calls, "\n")
+	if !strings.Contains(joined, "restart veil.service") {
+		t.Fatalf("the Panel restart was not attempted: %v", *calls)
+	}
+	if !strings.Contains(joined, "restart veil-helper.service") {
+		t.Fatalf("the helper restart was skipped after the Panel failure: %v", *calls)
 	}
 }

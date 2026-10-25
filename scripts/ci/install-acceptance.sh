@@ -774,6 +774,9 @@ ${SUDO} systemctl cat veil-helper.service > "${CI_ARTIFACT_DIR}/veil-helper-cust
 # custom veil.env instead.
 grep -q "EnvironmentFile=-${CUSTOM_ETC}/veil.env" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt" \
   || ci_die "veil-helper.service does not reference the custom etc dir"
+if grep -q "VEIL_KEY_PATH=" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt"; then
+  ci_die "veil-helper.service pins VEIL_KEY_PATH instead of reading the environment file"
+fi
 grep -q "ReadWritePaths=${CUSTOM_ETC} ${CUSTOM_VAR}" "${CI_ARTIFACT_DIR}/veil-helper-custom-unit.txt" \
   || ci_die "veil-helper.service does not grant the custom roots"
 # The edge units must mask the CUSTOM var dir, not the packaged default.

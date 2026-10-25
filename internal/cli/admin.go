@@ -470,18 +470,21 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 						targetKeyPath, err, targetKeyPath, pending.Path())
 				}
 			}
-			if err := afterAdminCredentialWrite(resolvedState, nil, true, pending != nil, cmd.ErrOrStderr()); err != nil {
-				return fmt.Errorf("state key was rotated but the running Panel was not updated: %w", err)
-			}
 			// The Panel goes first: it is the process that writes state, so it
 			// must never keep the pre-rotation cipher after the environment
-			// moved. The helper is second because it only reads state; if its
-			// restart fails the command fails loudly instead of reporting
-			// success with a helper on the old key (#1471).
+			// moved. The helper is second because it only reads state. Both are
+			// attempted even when the first one fails — a failed helper restart
+			// must not skip the Panel restart, and a failed Panel restart must
+			// not leave the helper on the old key — and the errors are reported
+			// together so the operator knows exactly what still needs a manual
+			// restart (#1471 review).
+			panelErr := afterAdminCredentialWrite(resolvedState, nil, true, pending != nil, cmd.ErrOrStderr())
+			var helperErr error
 			if pending != nil {
-				if err := adminRestartHelper(); err != nil {
-					return err
-				}
+				helperErr = adminRestartHelper()
+			}
+			if panelErr != nil || helperErr != nil {
+				return fmt.Errorf("state key was rotated but not every process was updated: %w", errors.Join(panelErr, helperErr))
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Key successfully rotated.\n")
