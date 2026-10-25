@@ -16,6 +16,7 @@ import (
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/syspath"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -64,6 +65,57 @@ func archiveCarriesDatabase(backupFile, passphrase string, maxBytes int64, allow
 		}
 	}
 	return false, nil
+}
+
+// resolveRestorePaths resolves where a restore writes state and key. The
+// installed veil.env is the live configuration the Panel, the privileged helper
+// and the backup timer read, so it outranks the process environment; an
+// explicit flag still beats both (#1474). The second result is the key path the
+// Panel will read after the restore, which is what a path-moving restore has to
+// keep in sync with the environment.
+func resolveRestorePaths(flagState, flagKey string) (statePath, keyPath, liveKeyPath, envPath string) {
+	env := serveflow.NewEnvironment()
+	envPath = veilenv.Resolve(veilenv.DefaultSystemdDir)
+	envKey := ""
+	if body, err := os.ReadFile(envPath); err == nil {
+		envKey = veilenv.Value(body, veilenv.KeyPathKey)
+		if state := veilenv.Value(body, "VEIL_STATE_PATH"); state != "" && strings.TrimSpace(flagState) == "" {
+			statePath = state
+		}
+	}
+	if statePath == "" {
+		statePath, _ = env.StatePath(flagState)
+	}
+	switch {
+	case strings.TrimSpace(flagKey) != "":
+		keyPath = flagKey
+	case envKey != "":
+		keyPath = envKey
+	default:
+		keyPath, _ = env.KeyPath("")
+	}
+	liveKeyPath = envKey
+	if liveKeyPath == "" {
+		liveKeyPath, _ = env.KeyPath("")
+	}
+	return statePath, keyPath, liveKeyPath, envPath
+}
+
+// envOwnsRestoreLayout reports whether the installed environment file defines
+// the layout this restore writes to. Explicit flags that point at a different
+// state tree (a test fixture, a secondary install) manage their own key path;
+// only a restore into the managed tree has to keep VEIL_KEY_PATH in sync
+// (#1474).
+func envOwnsRestoreLayout(envPath, statePath string) bool {
+	body, err := os.ReadFile(envPath)
+	if err != nil {
+		return false
+	}
+	envState := veilenv.Value(body, "VEIL_STATE_PATH")
+	if envState == "" {
+		return false
+	}
+	return sameKeyPath(envState, statePath)
 }
 
 func reloadRunningPanelAfterRestore() (bool, error) {
@@ -231,14 +283,28 @@ func newBackupCommand(version string) *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			backupFile := args[0]
 
-			env := serveflow.NewEnvironment()
-			resolvedState, _ := env.StatePath(statePath)
-			resolvedKey, _ := env.KeyPath(keyPath)
+			resolvedState, resolvedKey, liveKeyPath, envPath := resolveRestorePaths(statePath, keyPath)
 
 			// Resolve passphrase
 			resolvedPass, err := resolvePassphrase(passphrase, passphraseFile)
 			if err != nil {
 				return err
+			}
+
+			// A restore to a key path the installed environment does not name
+			// would leave the Panel reading the old path (GCM failure on the
+			// next load), so the environment rewrite is staged before anything
+			// is written: if it cannot be staged the command refuses untouched
+			// (#1474).
+			var pending *veilenv.PreparedUpdate
+			if !sameKeyPath(resolvedKey, liveKeyPath) && envOwnsRestoreLayout(envPath, resolvedState) {
+				if !checkOnly {
+					pending, err = veilenv.PrepareKeyPath(envPath, resolvedKey)
+					if err != nil {
+						return fmt.Errorf("refusing to restore to %s: the Panel reads its key from %s, and that file cannot be repointed: %w; omit --key-path to restore onto the installed path", resolvedKey, envPath, err)
+					}
+					defer pending.Abort()
+				}
 			}
 
 			if !checkOnly && !yes {
@@ -302,13 +368,34 @@ func newBackupCommand(version string) *cobra.Command {
 			if err := api.InvalidatePersistedSessions(resolvedState); err != nil {
 				return fmt.Errorf("restored backup but failed to invalidate browser sessions: %w", err)
 			}
-			reloaded, err := reloadRunningPanelAfterRestore()
-			if err != nil {
-				return fmt.Errorf("restored backup but failed to reload the running Panel: %w", err)
-			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Backup successfully restored.")
-			if reloaded {
-				fmt.Fprintln(cmd.OutOrStdout(), "Signaled the running Panel to reload restored state.")
+			if pending != nil {
+				// The restored key now lives where the environment points.
+				// Restart instead of SIGHUP — the Panel resolves the key path
+				// at startup — and report both restarts even when one fails
+				// (#1474).
+				if err := pending.Commit(); err != nil {
+					return fmt.Errorf("state was restored with %s but the Panel environment could not be repointed: %w; set VEIL_KEY_PATH=%s in %s and restart the Panel", resolvedKey, err, resolvedKey, envPath)
+				}
+				panelErr := adminRestartPanel()
+				if errors.Is(panelErr, errPanelNotActive) {
+					fmt.Fprintln(cmd.ErrOrStderr(), "warning: veil.service is not active, so no running Panel was reloaded; it will read the restored key from "+envPath+" on its next start.")
+					panelErr = nil
+				}
+				helperErr := adminRestartHelper()
+				if panelErr != nil || helperErr != nil {
+					return fmt.Errorf("state was restored but not every process was updated: %w", errors.Join(panelErr, helperErr))
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "Backup successfully restored.")
+				fmt.Fprintf(cmd.OutOrStdout(), "VEIL_KEY_PATH in %s now points at the restored key; the Panel and helper were restarted.\n", envPath)
+			} else {
+				reloaded, err := reloadRunningPanelAfterRestore()
+				if err != nil {
+					return fmt.Errorf("restored backup but failed to reload the running Panel: %w", err)
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "Backup successfully restored.")
+				if reloaded {
+					fmt.Fprintln(cmd.OutOrStdout(), "Signaled the running Panel to reload restored state.")
+				}
 			}
 			if result.SafetyStatePath != "" {
 				fmt.Fprintf(cmd.OutOrStdout(), "Previous state preserved at: %s\n", result.SafetyStatePath)

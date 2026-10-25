@@ -6,6 +6,19 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil backup restore` now resolves `state.json` and the encryption key from
+  the installed `veil.env` — the same file the Panel, the privileged helper and
+  the backup timer read — instead of the packaged `/etc/veil/state.key`
+  default. After `rotate-key --new-key-path`, restoring a pre-rotation archive
+  used to write the archive's key to the old path while the Panel read the
+  rotated path, so the restored state failed to decrypt (`503 management state
+  unavailable`) although the CLI reported success; post-rotation archives
+  worked, which made the failure look intermittent. Explicit `--state`/
+  `--key-path` flags still win, and when the key flag points elsewhere inside
+  the managed layout the restore rewrites `VEIL_KEY_PATH` and restarts
+  `veil.service` and `veil-helper.service` (Panel first, errors reported
+  together) instead of leaving state and environment on different keys
+  (#1474).
 - `veil backup restore` no longer reports success while leaving the running
   Panel on the old database. The CLI signalled `veil.service` with SIGHUP when
   the unit was active, but a reload re-reads `state.json`/`state.key` and keeps
