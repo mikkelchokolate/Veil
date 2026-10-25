@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/api"
-	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/model"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
@@ -422,9 +421,12 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 		Use:   "rotate-key",
 		Short: "Rotate the AES encryption key and re-encrypt the state file",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			env := serveflow.NewEnvironment()
-			resolvedState, _ := env.StatePath(statePath)
-			resolvedKey, _ := env.KeyPath(keyPath)
+			// Same installed-layout resolution as the rest of the root CLI:
+			// after a path-moving rotation the state is encrypted with the key
+			// veil.env names, so the next --new-key-path call (and an in-place
+			// rotation) has to read from there, not from the packaged default
+			// (#1477).
+			resolvedState, resolvedKey, liveKeyPath, _ := resolveInstalledPaths(statePath, keyPath)
 
 			targetKeyPath := newKeyPath
 			if targetKeyPath == "" {
@@ -436,11 +438,17 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 
 			// The Panel, the privileged helper and the backup unit load their
 			// key from VEIL_KEY_PATH in the installed environment file. A
-			// rotation to another path has to repoint that file, and the
-			// rewrite is staged before anything is rotated: if it cannot be
-			// prepared, the command fails while state and Panel still agree
-			// (#1453).
-			pending, err := prepareRotatedKeyEnv(resolvedKey, targetKeyPath)
+			// rotation that moves the key the units read has to repoint that
+			// file, and the rewrite is staged before anything is rotated: if it
+			// cannot be prepared, the command fails while state and Panel still
+			// agree (#1453). Explicit flags that select a different layout
+			// (resolvedKey != liveKeyPath) manage their own key path and leave
+			// the managed environment alone.
+			var pending *veilenv.PreparedUpdate
+			var err error
+			if !sameKeyPath(resolvedKey, targetKeyPath) && sameKeyPath(liveKeyPath, resolvedKey) {
+				pending, err = prepareRotatedKeyEnv(resolvedKey, targetKeyPath)
+			}
 			if err != nil {
 				return err
 			}

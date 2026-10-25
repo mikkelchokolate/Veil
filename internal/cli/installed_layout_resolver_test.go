@@ -120,3 +120,47 @@ func TestInstalledLayoutResolverFallsBackWithoutEnvironmentFile(t *testing.T) {
 		t.Fatalf("admin show did not list the account through the process environment:\n%s", out.String())
 	}
 }
+
+// TestRotateKeySecondRotationUsesInstalledVeilEnvKeyPath locks the missing half
+// of #1477: after a path-moving rotation the state is encrypted with the key
+// veil.env names, so a second `rotate-key` (with or without --new-key-path)
+// has to read from there. Otherwise it decrypts with the packaged default and
+// fails with "decrypt current state: … GCM decrypt …".
+func TestRotateKeySecondRotationUsesInstalledVeilEnvKeyPath(t *testing.T) {
+	etcDir, envPath, keyPath, statePath := restoreEnvFixture(t)
+	stubAdminSystemctl(t, envPath)
+
+	first := filepath.Join(etcDir, "rotated-state.key")
+	if out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", first); err != nil {
+		t.Fatalf("first rotation: %v\n%s", err, out)
+	}
+	second := filepath.Join(etcDir, "second-state.key")
+	if out, err := runRotateKey(t, "--new-key-path", second); err != nil {
+		t.Fatalf("second rotation must read the key from veil.env: %v\n%s", err, out)
+	}
+	body, err := os.ReadFile(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := veilenv.Value(body, veilenv.KeyPathKey); got != second {
+		t.Fatalf("VEIL_KEY_PATH = %q, want %q", got, second)
+	}
+	keyBytes, err := os.ReadFile(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := cipherFromRawKey(keyBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, ok, err := managementstate.NewStore(statePath, cipher).Load()
+	if err != nil || !ok || len(snapshot.Users) != 1 {
+		t.Fatalf("state does not load with the key veil.env names: ok=%t users=%d err=%v", ok, len(snapshot.Users), err)
+	}
+
+	// An in-place rotation after the path moved must also resolve from the
+	// environment rather than the packaged default.
+	if out, err := runRotateKey(t, "--state", statePath); err != nil {
+		t.Fatalf("in-place rotation after a path-moving one: %v\n%s", err, out)
+	}
+}
