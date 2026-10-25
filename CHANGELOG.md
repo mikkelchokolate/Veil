@@ -22,12 +22,21 @@ All notable changes to Veil will be documented in this file.
   the RPM install counters `1`/`2` (RPM passes the counter as `$1`) and the
   APK invocation, which passes the package version as `$1` and the old version
   as `$2` on an upgrade; the abort
-  arguments exit without touching host state, and `abort-remove` only starts
-  the units `preremove` stopped (`systemctl try-restart` is a no-op for a
-  stopped unit) and re-enables `veil-helper.socket`, which `preremove` disables
-  unconditionally — without the migration either way. A new test executes
-  the argument gate for every dpkg/RPM argument, so all three maintainer
-  scripts are locked by one contract (#1463).
+  arguments exit without touching host state. `abort-remove` restores what
+  `preremove` stopped and disabled, without the migration: it re-enables the
+  same unit set `preremove` disables (`veil.service`, `veil-helper.socket`,
+  `veil-caddy`, `veil-mieru`, `veil-warp`, `veil-backup.timer` and every
+  installed `veil-hysteria2@*`/`veil-olcrtc@*`/legacy `veil-caddy@*` instance —
+  re-enabling only the helper socket left the panel, the proxies and the backup
+  timer off after the next reboot, #1466), then starts those units with
+  `systemctl start` (`try-restart` does nothing to a stopped unit). It never
+  starts the `veil-backup.service` oneshot, which would run a real backup and
+  prune during the rollback, and a unit that cannot start or be enabled is
+  logged instead of failing the package, so an already-aborted removal cannot
+  turn into a dpkg error (#1465). A new test executes the argument gate for
+  every dpkg/RPM argument and another runs `preremove remove` and `postinstall
+  abort-remove` against a fake `systemctl` and compares the disable and enable
+  sets, including template instances (#1463, #1465, #1466).
 - The Hysteria2 runtime install no longer fails with `no assets found` when
   the unauthenticated GitHub API is rate-limited and Veil falls back to
   reading the release page. Upstream renamed `apernet/hysteria` to
