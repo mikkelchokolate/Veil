@@ -226,6 +226,14 @@ func TestPostremoveCleansPackagedLeftovers(t *testing.T) {
 // grepping for a case list that may have gone stale (#1451).
 func extractUpgradeGate(t *testing.T, path string) string {
 	t.Helper()
+	return extractShellFunc(t, path, "is_upgrade")
+}
+
+// extractShellFunc returns a shell function defined at column 0 in path, so a
+// test can execute the real classification instead of grepping for a case
+// list that may have gone stale (#1451, #1463).
+func extractShellFunc(t *testing.T, path, name string) string {
+	t.Helper()
 	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
@@ -233,20 +241,20 @@ func extractUpgradeGate(t *testing.T, path string) string {
 	lines := strings.Split(strings.ReplaceAll(string(body), "\r\n", "\n"), "\n")
 	start := -1
 	for i, line := range lines {
-		if line == "is_upgrade() {" {
+		if line == name+"() {" {
 			start = i
 			break
 		}
 	}
 	if start < 0 {
-		t.Fatalf("%s: is_upgrade() not found at column 0", path)
+		t.Fatalf("%s: %s() not found at column 0", path, name)
 	}
 	for j := start + 1; j < len(lines); j++ {
 		if lines[j] == "}" {
 			return strings.Join(lines[start:j+1], "\n")
 		}
 	}
-	t.Fatalf("%s: is_upgrade() is not terminated", path)
+	t.Fatalf("%s: %s() is not terminated", path, name)
 	return ""
 }
 
@@ -302,5 +310,87 @@ func TestPackageUpgradeGateCoversAbortedOperations(t *testing.T) {
 					filepath.Base(path), arg)
 			}
 		}
+	}
+}
+
+// runShellFunc executes one extracted shell function with a single argument
+// under the interpreter the maintainer scripts declare, returning its stdout.
+func runShellFunc(t *testing.T, fn, name, arg string) string {
+	t.Helper()
+	script := filepath.Join(t.TempDir(), "func.sh")
+	if err := os.WriteFile(script, []byte(fn+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", "-c", `. "$1"; "$2" "$3"`, "sh", script, name, arg)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("running %s with %q: %v\n%s", name, arg, err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// TestPostinstallSkipsInstallBodyOnAbortedOperations locks #1463: dpkg runs
+// postinst as abort-upgrade/abort-remove/abort-deconfigure/triggered when it
+// rolls an operation back or processes triggers. The script used to run its
+// whole install body for those arguments — `veil helper migrate` (which writes
+// a fresh migration-backups snapshot holding copies of state.key/state.json)
+// plus a try-restart of every managed unit — although dpkg asked for nothing.
+// Only configure, a bare invocation (APK) and the RPM install counters run the
+// install body; abort-remove only restarts the units preremove stopped.
+func TestPostinstallSkipsInstallBodyOnAbortedOperations(t *testing.T) {
+	const script = "../../packaging/scripts/postinstall.sh"
+	fn := extractShellFunc(t, script, "postinstall_mode")
+	for _, tc := range []struct {
+		arg  string
+		want string
+	}{
+		{"configure", "install"},
+		{"configure 0.7.3", "install"}, // $1 only; Debian passes the old version as $2
+		{"", "install"},
+		{"1", "install"},
+		{"2", "install"},
+		{"abort-remove", "restart"},
+		{"abort-upgrade", "skip"},
+		{"abort-deconfigure", "skip"},
+		{"triggered", "skip"},
+		{"unexpected-argument", "skip"},
+	} {
+		want := tc.want
+		if strings.Contains(tc.arg, " ") {
+			// A multi-word entry just documents the $1-only contract; the
+			// function receives the first word, as dpkg invokes it.
+			tc.arg = strings.Fields(tc.arg)[0]
+		}
+		if got := runShellFunc(t, fn, "postinstall_mode", tc.arg); got != want {
+			t.Errorf("postinstall_mode %q = %q, want %q", tc.arg, got, want)
+		}
+	}
+
+	// The gate must run before the first mutating command, not merely exist.
+	body, err := os.ReadFile(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := stripHashComments(t, strings.ReplaceAll(string(body), "\r\n", "\n"))
+	gate := strings.Index(code, `MODE="$(postinstall_mode`)
+	if gate < 0 {
+		t.Fatalf("postinstall.sh does not read its maintainer-script argument:\n%s", code)
+	}
+	if !strings.Contains(code[gate:], `if [ "$MODE" = install ]; then`) {
+		t.Fatal("postinstall.sh must guard the install body on the resolved mode")
+	}
+	for _, mutation := range []string{
+		"\nensure_system_account veil\n",
+		"/usr/local/bin/veil helper migrate",
+		"systemctl try-restart ",
+	} {
+		if idx := strings.Index(code, mutation); idx >= 0 && idx < gate {
+			t.Fatalf("postinstall.sh runs %q before the argument gate", strings.TrimSpace(mutation))
+		}
+	}
+	// abort-remove must not re-run the migration, but must bring back the
+	// units preremove stopped.
+	if !strings.Contains(code, `if [ "$MODE" = restart ]`) && !strings.Contains(code, `[ "$MODE" = install ] || [ "$MODE" = restart ]`) {
+		t.Fatal("postinstall.sh must restart the units preremove stopped on abort-remove")
 	}
 }
