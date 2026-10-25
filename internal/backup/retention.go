@@ -83,6 +83,42 @@ func ResolveRetentionPolicy(daily, weekly, monthly int) (RetentionPolicy, bool, 
 	return RetentionPolicy{Daily: daily, Weekly: weekly, Monthly: monthly}, false, nil
 }
 
+// ResolveRequestedRetention applies the documented per-field defaults to a
+// request whose fields may have been omitted, which a plain int cannot tell
+// apart from an explicit 0. A nil field means the caller omitted it and takes
+// its default from DefaultRetentionPolicy; an explicit 0 means "keep none of
+// that bucket". Sending all three as an explicit zero keeps the #1412 meaning
+// of "use the defaults" for callers that predate this rule. The second result
+// reports whether the whole default policy was substituted (#1460).
+func ResolveRequestedRetention(daily, weekly, monthly *int) (RetentionPolicy, bool, error) {
+	defaults := DefaultRetentionPolicy()
+	policy := defaults
+	explicitZeros := 0
+	for _, field := range []struct {
+		value  *int
+		target *int
+	}{
+		{daily, &policy.Daily},
+		{weekly, &policy.Weekly},
+		{monthly, &policy.Monthly},
+	} {
+		if field.value == nil {
+			continue
+		}
+		*field.target = *field.value
+		if *field.value == 0 {
+			explicitZeros++
+		}
+	}
+	if explicitZeros == 3 {
+		return defaults, true, nil
+	}
+	if err := ValidateRetentionCounts(policy.Daily, policy.Weekly, policy.Monthly); err != nil {
+		return RetentionPolicy{}, false, err
+	}
+	return policy, false, nil
+}
+
 func ListArchives(dir string) ([]ArchiveEntry, error) {
 	entries, err := os.ReadDir(dir)
 	if errors.Is(err, os.ErrNotExist) {

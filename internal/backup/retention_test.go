@@ -138,3 +138,47 @@ func TestResolveRetentionPolicyAllZeroMeansDefault(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveRequestedRetentionSeparatesOmittedFromExplicitZero locks #1460:
+// the API decodes a retention body whose fields may be absent. An absent field
+// takes its documented default (7/4/12) instead of silently disabling that
+// bucket, while an explicit 0 still means "keep none of this bucket". The
+// all-zero triple keeps the #1412 contract so three explicit zeros stay a
+// request for the defaults, not a full purge.
+func TestResolveRequestedRetentionSeparatesOmittedFromExplicitZero(t *testing.T) {
+	intPtr := func(value int) *int { return &value }
+	defaults := DefaultRetentionPolicy()
+	for _, tc := range []struct {
+		name                   string
+		daily, weekly, monthly *int
+		want                   RetentionPolicy
+		wantDefaulted          bool
+	}{
+		{"nothing sent", nil, nil, nil, defaults, false},
+		{"daily only", intPtr(7), nil, nil, RetentionPolicy{Daily: 7, Weekly: 4, Monthly: 12}, false},
+		{"weekly only", nil, intPtr(2), nil, RetentionPolicy{Daily: 7, Weekly: 2, Monthly: 12}, false},
+		{"explicit zero keeps none of that bucket", intPtr(0), nil, nil, RetentionPolicy{Daily: 0, Weekly: 4, Monthly: 12}, false},
+		{"full triple is taken verbatim", intPtr(2), intPtr(1), intPtr(0), RetentionPolicy{Daily: 2, Weekly: 1, Monthly: 0}, false},
+		{"all zero triple keeps the #1412 defaults", intPtr(0), intPtr(0), intPtr(0), defaults, true},
+	} {
+		policy, defaulted, err := ResolveRequestedRetention(tc.daily, tc.weekly, tc.monthly)
+		if err != nil {
+			t.Fatalf("%s: unexpected error: %v", tc.name, err)
+		}
+		if policy != tc.want || defaulted != tc.wantDefaulted {
+			t.Fatalf("%s: policy=%+v defaulted=%t, want %+v defaulted=%t", tc.name, policy, defaulted, tc.want, tc.wantDefaulted)
+		}
+	}
+	for _, tc := range []struct {
+		daily, weekly, monthly *int
+		want                   string
+	}{
+		{intPtr(-1), nil, nil, "daily retention must be between 0 and 365"},
+		{nil, intPtr(105), nil, "weekly retention must be between 0 and 104"},
+		{nil, nil, intPtr(121), "monthly retention must be between 0 and 120"},
+	} {
+		if _, _, err := ResolveRequestedRetention(tc.daily, tc.weekly, tc.monthly); err == nil || err.Error() != tc.want {
+			t.Fatalf("out-of-range err=%v, want %q", err, tc.want)
+		}
+	}
+}
