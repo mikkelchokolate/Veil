@@ -16,12 +16,11 @@ All notable changes to Veil will be documented in this file.
   operator repointed the variable by hand. The command now stages an atomic
   rewrite of `VEIL_KEY_PATH` in the installed environment file (same
   directory, owner and 0640 mode preserved, every other line kept) before it
-  rotates anything, installs it before signalling the Panel, and refuses with
-  an instruction when the file cannot be repointed — in-place rotation
-  A rotation that moves the key path now **restarts** `veil.service` instead of
-  sending SIGHUP: the Panel resolves `VEIL_KEY_PATH` from its process
-  environment at startup, so a SIGHUP would keep loading the old key and leave
-  the API answering `503 management state unavailable` after
+  rotates anything, installs it, and refuses with an instruction when the file
+  cannot be repointed. A rotation that moves the key path then **restarts**
+  `veil.service` instead of sending SIGHUP: the Panel resolves `VEIL_KEY_PATH`
+  from its process environment at startup, so a SIGHUP would keep loading the
+  old key and leave the API answering `503 management state unavailable` after
   "Key successfully rotated". In-place rotation (`rotate-key` without the flag)
   still leaves `veil.env` untouched and keeps the SIGHUP reload (#1453).
 - A stable backport tag no longer moves the GHCR `:latest` image. The
