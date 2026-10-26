@@ -76,6 +76,27 @@ assert_no_veil_firewall_rules() {
   fi
 }
 
+# panel_tls_issuer prints the issuer of the certificate the panel serves on
+# port $1, retrying until the listener answers (SNI defaults to 127.0.0.1). A
+# single probe right after `systemctl restart veil.service` raced the restart on
+# slower runners: the panel was still cycling, `openssl s_client` produced an
+# empty stream and `pipefail` failed the whole job with "Could not read
+# certificate from <stdin>". Poll for a bounded time instead, and fail with the
+# listener named.
+panel_tls_issuer() { # $1 = port, $2 = SNI server name (optional)
+  local port="$1" servername="${2:-127.0.0.1}" issuer=""
+  for _ in $(seq 1 60); do
+    issuer="$(openssl s_client -connect "127.0.0.1:${port}" -servername "${servername}" </dev/null 2>/dev/null \
+      | openssl x509 -noout -issuer 2>/dev/null || true)"
+    if [ -n "${issuer}" ]; then
+      printf '%s\n' "${issuer}"
+      return 0
+    fi
+    sleep 1
+  done
+  ci_die "nothing is serving a TLS certificate on 127.0.0.1:${port} (sn ${servername}) within 60s"
+}
+
 # A full uninstall removes the runtime binaries `veil runtime install` wrote
 # (issue #1289). The caddy leg after the custom-root teardown still needs
 # them, so stash them first, prove the uninstall removed every one, then
@@ -271,8 +292,7 @@ caddy_route_leg() {
     || ci_die "public route returned 200 but not the panel SPA: $(head -c 400 "${CI_ARTIFACT_DIR}/caddy-route.out" 2>/dev/null)"
   # --cacert proved the chain verifies; also assert the served certificate's
   # issuer explicitly, at the same strength as the direct IP-cert leg.
-  openssl s_client -connect "127.0.0.1:443" -servername "${domain}" </dev/null 2>/dev/null \
-    | openssl x509 -noout -issuer | tee "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" || true
+  panel_tls_issuer 443 "${domain}" | tee "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt"
   grep -qi "pebble" "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt" \
     || ci_die "public route is not serving a pebble-issued certificate: $(cat "${CI_ARTIFACT_DIR}/caddy-served-issuer.txt")"
 }
@@ -732,9 +752,7 @@ ${SUDO} openssl x509 -in /etc/veil/panel/tls.crt -noout -issuer | tee "${CI_ARTI
 grep -qi "pebble" "${CI_ARTIFACT_DIR}/panel-cert-issuer.txt" \
   || ci_die "panel certificate was not issued by the controlled CA: $(cat "${CI_ARTIFACT_DIR}/panel-cert-issuer.txt")"
 ${SUDO} systemctl restart veil.service
-sleep 2
-openssl s_client -connect "127.0.0.1:${PANEL_PORT}" -servername 127.0.0.1 </dev/null 2>/dev/null \
-  | openssl x509 -noout -issuer | tee "${CI_ARTIFACT_DIR}/panel-served-issuer.txt"
+panel_tls_issuer "${PANEL_PORT}" | tee "${CI_ARTIFACT_DIR}/panel-served-issuer.txt"
 grep -qi "pebble" "${CI_ARTIFACT_DIR}/panel-served-issuer.txt" \
   || ci_die "panel is not serving the pebble-issued certificate"
 systemctl is-active --quiet veil.service || ci_die "veil.service not active after controlled-CA reinstall"
