@@ -34,34 +34,36 @@ func newInstallCommand() *cobra.Command {
 	var backupDir string
 	var leIPCert bool
 	var leIPCertPort int
+	var resetInstallState bool
 
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install the Veil panel; protocol runtimes are installed on demand",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
-				Profile:         profile,
-				Domain:          domain,
-				Email:           email,
-				DryRun:          dryRun,
-				CheckOnly:       checkOnly,
-				Yes:             yes,
-				EtcDir:          etcDir,
-				VarDir:          varDir,
-				SystemdDir:      systemdDir,
-				PanelPort:       panelPort,
-				PanelPortSet:    cmd.Flags().Changed("panel-port"),
-				PanelAccess:     panelAccess,
-				PanelAccessSet:  cmd.Flags().Changed("panel-access"),
-				PublicIP:        publicIP,
-				Interactive:     interactive,
-				AuditLog:        auditLog,
-				BackupDir:       backupDir,
-				BackupDirSet:    cmd.Flags().Changed("backup-dir"),
-				LEIPCert:        leIPCert,
-				LEIPCertSet:     cmd.Flags().Changed("le-ip-cert"),
-				LEIPCertPort:    leIPCertPort,
-				LEIPCertPortSet: cmd.Flags().Changed("le-ip-cert-port"),
+				Profile:           profile,
+				Domain:            domain,
+				Email:             email,
+				DryRun:            dryRun,
+				CheckOnly:         checkOnly,
+				Yes:               yes,
+				EtcDir:            etcDir,
+				VarDir:            varDir,
+				SystemdDir:        systemdDir,
+				PanelPort:         panelPort,
+				PanelPortSet:      cmd.Flags().Changed("panel-port"),
+				PanelAccess:       panelAccess,
+				PanelAccessSet:    cmd.Flags().Changed("panel-access"),
+				PublicIP:          publicIP,
+				Interactive:       interactive,
+				AuditLog:          auditLog,
+				BackupDir:         backupDir,
+				BackupDirSet:      cmd.Flags().Changed("backup-dir"),
+				LEIPCert:          leIPCert,
+				LEIPCertSet:       cmd.Flags().Changed("le-ip-cert"),
+				LEIPCertPort:      leIPCertPort,
+				LEIPCertPortSet:   cmd.Flags().Changed("le-ip-cert-port"),
+				ResetInstallState: resetInstallState,
 			})
 		},
 	}
@@ -79,6 +81,7 @@ func newInstallCommand() *cobra.Command {
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP for DNS validation; use auto to detect it")
 	cmd.Flags().BoolVar(&leIPCert, "le-ip-cert", true, "obtain a Let's Encrypt IP certificate in direct mode")
 	cmd.Flags().IntVar(&leIPCertPort, "le-ip-cert-port", 80, "port used for Let's Encrypt HTTP-01 validation")
+	cmd.Flags().BoolVar(&resetInstallState, "reset-install-state", false, "ignore the state key and state file recorded in an existing veil.env and install against --etc-dir/--var-dir; the recorded files are left on disk")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "prompt for missing ru-recommended install options")
 	cmd.Flags().StringVar(&auditLog, "audit-log", "", "optional path for JSONL audit log")
 	cmd.Flags().StringVar(&backupDir, "backup-dir", "", "backup directory for files before overwrite (optional; defaults to var-dir/backups; pass empty string to disable)")

@@ -9,6 +9,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/systemdunits"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 )
 
 type Paths struct {
@@ -167,7 +168,13 @@ func (m ManagedMaterial) EnvContent() (string, error) {
 		if strings.ContainsAny(kv.key, "\n\r\x00=") || strings.ContainsAny(kv.value, "\n\r\x00") {
 			return "", fmt.Errorf("%s contains a control character; refusing to write veil.env", kv.key)
 		}
-		env.WriteString(kv.key + "=" + kv.value + "\n")
+		// Same encoding the veil.env rewrites use, so a value with a space, '#'
+		// or a quote survives both directions (#1485 review).
+		value, err := veilenv.EncodeValue(kv.value)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", kv.key, err)
+		}
+		env.WriteString(kv.key + "=" + value + "\n")
 	}
 	return env.String(), nil
 }

@@ -45,6 +45,19 @@ type ruRecommendedInstallOptions struct {
 	LEIPCertSet     bool
 	LEIPCertPort    int
 	LEIPCertPortSet bool
+	// ResetInstallState ignores the state key and state file recorded in an
+	// existing veil.env and installs against --etc-dir/--var-dir instead. It is
+	// the explicit opt-in for hosts whose recorded state lives outside the
+	// target tree; without it install refuses instead of starting a fresh panel
+	// next to the real state (#1498).
+	ResetInstallState bool
+	// StatePath and KeyPath are the resolved state file and state key
+	// (installStatePaths). The workflow fills them before it provisions
+	// anything, so every later step — the key load, the state save, the LE
+	// IP-certificate snapshot and domain update, the rendered environment —
+	// uses one pair (#1498).
+	StatePath string
+	KeyPath   string
 }
 
 type RURecommendedInstallWorkflow struct {
@@ -110,6 +123,14 @@ func (w RURecommendedInstallWorkflow) Run() error {
 	if err := validateRURecommendedInstallRequirements(opts); err != nil {
 		return err
 	}
+	// Resolve the state pair before the host is touched at all: an environment
+	// that records a different tree must fail here, not after ufw and the
+	// runtimes were installed (#1498).
+	statePath, keyPath, err := installStatePaths(opts)
+	if err != nil {
+		return err
+	}
+	opts.StatePath, opts.KeyPath = statePath, keyPath
 	parsedPublicIP, err := hostenv.ResolvePublicIP(cmd.Context(), opts.PublicIP, installPublicIPClient, installPublicIPEndpoints)
 	if err != nil {
 		return err

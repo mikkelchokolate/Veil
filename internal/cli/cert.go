@@ -255,6 +255,13 @@ func loadCertSnapshot(etcDir, varDir string) (model.ManagementSnapshot, bool) {
 	if v := strings.TrimSpace(os.Getenv("VEIL_KEY_PATH")); v != "" {
 		keyPath = v
 	}
+	return loadCertSnapshotAt(statePath, keyPath)
+}
+
+// loadCertSnapshotAt reads the snapshot with an explicit pair, for callers that
+// already resolved the installed state paths (install reads veil.env, so the
+// packaged names are not authoritative after a path-moving rotate-key, #1498).
+func loadCertSnapshotAt(statePath, keyPath string) (model.ManagementSnapshot, bool) {
 	if _, err := os.Stat(statePath); err != nil {
 		return model.ManagementSnapshot{}, false
 	}

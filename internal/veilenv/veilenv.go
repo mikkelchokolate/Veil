@@ -195,6 +195,14 @@ func setValue(body, key, value string) (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
+// EncodeValue renders value the way this file writes it: plain when it holds
+// nothing special, quoted and escaped otherwise. Environments written by
+// install/repair must use the same encoding as the rewrites staged here,
+// otherwise a value the reader unquotes cannot round-trip (#1485 review).
+func EncodeValue(value string) (string, error) {
+	return envValue(value)
+}
+
 // envValue renders value as an environment-file assignment, quoting and
 // escaping when needed. A newline or NUL cannot be represented in one line and
 // is refused before anything is staged, so an operator-supplied path can never

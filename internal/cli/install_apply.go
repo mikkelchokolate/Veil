@@ -111,6 +111,11 @@ var provisionUFWCommandFunc = func(ctx context.Context, name string, args ...str
 
 var provisionUFWFunc = provisionUFW
 
+// installLoadCertSnapshot is a test seam over the snapshot read that decides
+// whether the stand-alone HTTP-01 listener can share :80 with veil-caddy
+// (#1181). It takes the resolved state pair, not the packaged names (#1498).
+var installLoadCertSnapshot = loadCertSnapshotAt
+
 // ensureInstallFirewallBackend chooses and validates the firewall strategy
 // before state, runtimes, or downloads touch the host. Direct/caddy installs
 // produce a ufw plan; when ufw is absent it is provisioned through the distro
@@ -180,6 +185,22 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		veilBinary = ""
 	}
 
+	// Refuse before anything is created when the installed environment points
+	// the state key or state file outside the tree this install writes to: a
+	// fresh Panel next to the real state would look like a success while the
+	// operator's data stayed elsewhere (#1498). The packaged layout is used when
+	// there is no installed environment or the operator passed
+	// --reset-install-state. The workflow resolves the pair before it provisions
+	// anything; a direct caller still gets the same check here.
+	if opts.StatePath == "" || opts.KeyPath == "" {
+		statePath, keyPath, resolveErr := installStatePaths(opts)
+		if resolveErr != nil {
+			return resolveErr
+		}
+		opts.StatePath, opts.KeyPath = statePath, keyPath
+	}
+	resolvedStatePath, resolvedKeyPath := opts.StatePath, opts.KeyPath
+
 	// 1. Ensure configuration and state directories exist before running install and writing files
 	if err := os.MkdirAll(opts.EtcDir, 0755); err != nil {
 		return fmt.Errorf("create etc directory: %w", err)
@@ -217,9 +238,6 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	applyInstallEnvToProfile(&profile, opts, existingEnv)
 
 	// 2. Initialize state.key and encrypted state.json with generated credentials
-	resolvedKeyPath := filepath.Join(opts.EtcDir, "state.key")
-	resolvedStatePath := filepath.Join(opts.VarDir, "state.json")
-
 	key, err := secrets.LoadOrCreateKey(resolvedKeyPath)
 	if err != nil {
 		return fmt.Errorf("initialize encryption key: %w", err)
@@ -374,6 +392,8 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		BackupDir:   actualBackupDir,
 		VeilBinary:  veilBinary,
 		CaddyBinary: opts.CaddyBinary,
+		KeyPath:     resolvedKeyPath,
+		StatePath:   resolvedStatePath,
 	})
 	if err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)
@@ -557,7 +577,7 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 	// Caddy-fronted challenge route, the same contract `cert renew` uses
 	// (#1181). Fresh installs have no snapshot and stay on the public port.
 	viaCaddy := false
-	if snapshot, hasSnapshot := loadCertSnapshot(opts.EtcDir, opts.VarDir); hasSnapshot {
+	if snapshot, hasSnapshot := installLoadCertSnapshot(opts.StatePath, opts.KeyPath); hasSnapshot {
 		viaCaddy = caddyassembly.PanelIPCertCaddyFronted(snapshot.Settings, snapshot.Inbounds)
 	}
 	cert, err := leIPCertIssueFunc(ctx, acmeip.IssueOptions{
@@ -619,9 +639,17 @@ func issueLEIPCertForProfile(ctx context.Context, profile *installer.RURecommend
 }
 
 func updateInstalledStateDomain(opts ruRecommendedInstallOptions, domain string) error {
+	// The resolved pair, so a rotated key inside the tree is used instead of the
+	// pre-rotation <etc>/state.key (#1498). Direct callers without a resolution
+	// keep the packaged layout.
+	statePath, keyPath := opts.StatePath, opts.KeyPath
+	if statePath == "" || keyPath == "" {
+		statePath = filepath.Join(opts.VarDir, "state.json")
+		keyPath = filepath.Join(opts.EtcDir, "state.key")
+	}
 	_, err := statecommit.Update(statecommit.UpdateOptions{
-		StatePath: filepath.Join(opts.VarDir, "state.json"),
-		KeyPath:   filepath.Join(opts.EtcDir, "state.key"),
+		StatePath: statePath,
+		KeyPath:   keyPath,
 	}, func(current *model.ManagementSnapshot) error {
 		current.Settings.Domain = domain
 		return nil

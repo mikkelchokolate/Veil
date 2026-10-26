@@ -313,6 +313,35 @@ instead of a hardcoded literal or `--key-path`). Upgraded custom installs keep
 their pre-0.7.3 drop-ins until that command runs, and `veil admin rotate-key`
 refuses to rotate while such a drop-in is still present.
 
+### Install state paths and reinstalls
+
+`veil install` takes the state key and state file from the installed `veil.env`
+(`VEIL_KEY_PATH`, `VEIL_STATE_PATH`) when they point inside the tree it writes,
+so the documented path-moving `veil admin rotate-key --new-key-path` survives a
+re-install: the rendered `veil.env` keeps the rotated paths and the existing
+panel state is read with the matching key. Without that, a re-install failed on
+the pre-rotation key or, when the state had moved, silently started a fresh
+panel next to the real one.
+
+When the recorded path lies outside `--etc-dir`/`--var-dir` — or an existing
+leaf there is a symlink that resolves outside the tree — the command stops
+before creating anything (no key, no state file, no `veil.env` rewrite) and
+prints the recorded path with two ways forward:
+
+- re-run with the `--etc-dir`/`--var-dir` that hold the real tree, or
+- pass `--reset-install-state` to install a fresh panel against the packaged
+  layout on purpose. The flag only ignores the recorded paths: the key and state
+  files on disk are left untouched, so take a backup first if you still need
+  them.
+
+```bash
+# keep the installed (= rotated) state paths
+sudo veil install --etc-dir /opt/veil/etc --var-dir /opt/veil/var
+
+# deliberately start fresh on the packaged layout, leaving the old files on disk
+sudo veil install --reset-install-state
+```
+
 ### Check the upgraded installation
 
 Sign in and run one confirmed live Apply to refresh generated runtime
