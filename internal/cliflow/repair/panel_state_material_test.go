@@ -1,6 +1,7 @@
 package repair
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,4 +73,32 @@ func repairPlanHasAction(plan installer.RepairPlan, path string) bool {
 		}
 	}
 	return false
+}
+
+// TestPanelStateRepairMaterialFallsBackWhenTheBinaryCannotBeResolved keeps the
+// packaged default when the executable resolver fails, so a failing resolver
+// cannot render an empty ExecStart (#1437 review).
+func TestPanelStateRepairMaterialFallsBackWhenTheBinaryCannotBeResolved(t *testing.T) {
+	dir := t.TempDir()
+	opts := Options{
+		EtcDir:     filepath.Join(dir, "etc", "veil"),
+		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
+		SystemdDir: filepath.Join(dir, "etc", "systemd", "system"),
+	}
+	material := newPanelStateRepairMaterial(opts, panelStateRepairSnapshot{
+		Settings: api.Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "local", Mode: "server"},
+		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
+	}, PlanDependencies{
+		Secret:     func(label string) string { return "repair-" + label },
+		Executable: func() (string, error) { return "", errors.New("no executable") },
+	})
+
+	plan, err := material.Apply(installer.RepairPlan{})
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	mieru := repairPlanActionContent(t, plan, filepath.Join(opts.SystemdDir, renderer.UnitMieru))
+	if !strings.Contains(mieru, "/usr/local/bin/veil") {
+		t.Fatalf("unresolvable binary did not fall back to the packaged default:\n%s", mieru)
+	}
 }

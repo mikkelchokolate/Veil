@@ -157,19 +157,22 @@ if [ "$MODE" = install ]; then
             _quic_key="$1"
             shift
             _quic_best=0
-            # Directories are passed in systemd's precedence order. A name seen
-            # in a higher-priority directory shadows the copies below it, and a
-            # file masked with a symlink to /dev/null counts as seen but empty —
-            # the same rules as systemd and as the Go scanner (#1508 review).
+            # Paths (already expanded globs) are passed in systemd's precedence
+            # order. A name seen in a higher-priority directory shadows the copies
+            # below it, and a file masked with a symlink to /dev/null counts as
+            # seen but empty — the same rules as systemd and as the Go scanner
+            # (#1508 review). An unmatched glob matches nothing and is ignored.
             _quic_seen=" "
             for _quic_path in "$@"; do
                 _quic_base="${_quic_path##*/}"
                 case "${_quic_seen}" in
                 *" ${_quic_base} "*) continue ;;
                 esac
-                _quic_seen="${_quic_seen}${_quic_base} "
-                # A masked file and an unmatched glob both fail this test; the
-                # former must still shadow, so the name is recorded above.
+                # Only an existing path (or a mask symlink) shadows lower copies;
+                # a literal glob for a missing directory must not.
+                if [ -e "${_quic_path}" ] || [ -L "${_quic_path}" ]; then
+                    _quic_seen="${_quic_seen}${_quic_base} "
+                fi
                 [ -f "${_quic_path}" ] || continue
                 # The last line may lack a trailing newline; read it too.
                 while IFS= read -r _quic_line || [ -n "${_quic_line}" ]; do
