@@ -6,6 +6,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The Let's Encrypt IP-certificate issuer no longer runs its helpers
+  (`env`, `sh`, `rm`, the package managers, `curl`, `socat`, `openssl`,
+  `crontab`) through the invoking shell's `PATH`. It runs as root from
+  `veil install` and `veil repair`, so the same trigger as #1262 applied: a
+  `PATH` prepared by `sudo -E` or a provisioning script could make a planted
+  binary run as root. Every helper now resolves through the trusted system
+  directories and the child processes receive the trusted `PATH` (#1429).
 - One unit-directory resolution for every command that touches units:
   `veil uninstall`, `veil backup schedule`, the default `veil rollback` restore
   roots and `veil repair`'s environment discovery now read `VEIL_SYSTEMD_DIR`
