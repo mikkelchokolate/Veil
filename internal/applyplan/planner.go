@@ -147,8 +147,20 @@ func Build(input Input) model.ApplyPlanResponse {
 		switch rule.Outbound {
 		case "direct", "proxy":
 		case "warp":
+			// While WARP is off the sidecar is not rendered, so a warp rule is
+			// inert rather than inconsistent: disabling WARP keeps the rules
+			// (the operator gets them back on re-enable) and stops applying
+			// them. Failing here made every disable impossible (#1416). The
+			// warning keeps the visibility the old plan error gave.
 			if !input.Warp.Enabled {
-				plan.Errors = append(plan.Errors, "routing rule "+rule.Name+" requires WARP to be enabled")
+				plan.Issues = append(plan.Issues, model.ValidationIssue{
+					Code:        "routing_warp_disabled",
+					Severity:    "warning",
+					Field:       "outbound",
+					Message:     fmt.Sprintf("routing rule %q targets WARP, which is disabled; the rule is kept but not applied until WARP is enabled", rule.Name),
+					Remediation: "Enable WARP, or point the rule at another outbound if it should take effect now.",
+					Source:      "routing",
+				})
 			}
 		default:
 			plan.Errors = append(plan.Errors, "unsupported routing outbound: "+rule.Outbound)

@@ -2535,7 +2535,7 @@ type RoutingRule struct {
 	Match   string `json:"match"`
 	Name    string `json:"name"`
 
-	// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.
+	// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400. `warp` rules are kept but not applied while WARP is disabled; re-enabling WARP restores them.
 	//
 	// Examples: direct, warp, proxy
 	Outbound string `json:"outbound"`
@@ -19717,7 +19717,7 @@ type PostApiRoutingRulesResponse struct {
 		Match    string    `json:"match"`
 		Name     string    `json:"name"`
 
-		// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.
+		// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400. `warp` rules are kept but not applied while WARP is disabled; re-enabling WARP restores them.
 		//
 		// Examples: direct, warp, proxy
 		Outbound string       `json:"outbound"`
@@ -19743,7 +19743,7 @@ func (r PostApiRoutingRulesResponse) GetJSON201() *struct {
 	Match    string    `json:"match"`
 	Name     string    `json:"name"`
 
-	// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.
+	// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400. `warp` rules are kept but not applied while WARP is disabled; re-enabling WARP restores them.
 	//
 	// Examples: direct, warp, proxy
 	Outbound string       `json:"outbound"`
@@ -19951,7 +19951,7 @@ type PutApiRoutingRulesNameResponse struct {
 		Match    string    `json:"match"`
 		Name     string    `json:"name"`
 
-		// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.
+		// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400. `warp` rules are kept but not applied while WARP is disabled; re-enabling WARP restores them.
 		//
 		// Examples: direct, warp, proxy
 		Outbound string       `json:"outbound"`
@@ -19979,7 +19979,7 @@ func (r PutApiRoutingRulesNameResponse) GetJSON200() *struct {
 	Match    string    `json:"match"`
 	Name     string    `json:"name"`
 
-	// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.
+	// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400. `warp` rules are kept but not applied while WARP is disabled; re-enabling WARP restores them.
 	//
 	// Examples: direct, warp, proxy
 	Outbound string       `json:"outbound"`
@@ -30620,7 +30620,7 @@ func ParsePostApiRoutingRulesResponse(rsp *http.Response) (*PostApiRoutingRulesR
 			Match    string    `json:"match"`
 			Name     string    `json:"name"`
 
-			// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.
+			// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400. `warp` rules are kept but not applied while WARP is disabled; re-enabling WARP restores them.
 			//
 			// Examples: direct, warp, proxy
 			Outbound string       `json:"outbound"`
@@ -30792,7 +30792,7 @@ func ParsePutApiRoutingRulesNameResponse(rsp *http.Response) (*PutApiRoutingRule
 			Match    string    `json:"match"`
 			Name     string    `json:"name"`
 
-			// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400; `warp` additionally requires WARP to be enabled at apply time.
+			// Outbound Exactly one of `direct`, `proxy` or `warp` (case-sensitive). Create, update, import and rollback reject any other value with 400. `warp` rules are kept but not applied while WARP is disabled; re-enabling WARP restores them.
 			//
 			// Examples: direct, warp, proxy
 			Outbound string       `json:"outbound"`

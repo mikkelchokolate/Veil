@@ -146,6 +146,7 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 		name      string
 		input     Input
 		wantErr   []string
+		wantIssue string
 		wantValid bool
 	}{
 		{
@@ -185,13 +186,17 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 			wantValid: true,
 		},
 		{
-			name: "warp outbound without warp enabled",
+			// #1416: disabling WARP keeps the rules but stops applying them — the
+			// sidecar is not rendered, so an enabled warp rule is inert, not an
+			// inconsistency that blocks every disable.
+			name: "warp outbound while warp is disabled is inert",
 			input: Input{
 				Rules: []model.RoutingRule{{Name: "warp-rule", Match: "geosite:test", Outbound: "warp", Enabled: true}},
 				Warp:  model.WarpConfig{Enabled: false},
 			},
-			wantErr:   []string{"routing rule warp-rule requires WARP to be enabled"},
-			wantValid: false,
+			wantErr:   nil,
+			wantValid: true,
+			wantIssue: "targets WARP, which is disabled",
 		},
 		{
 			name: "unsupported routing outbound",
@@ -227,6 +232,17 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 				t.Errorf("Valid = %v, want %v", plan.Valid, tt.wantValid)
 			}
 			assertExactErrorMultiset(t, plan.Errors, tt.wantErr)
+			if tt.wantIssue != "" {
+				found := false
+				for _, issue := range plan.Issues {
+					if strings.Contains(issue.Message, tt.wantIssue) {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("issues = %+v, want one containing %q", plan.Issues, tt.wantIssue)
+				}
+			}
 		})
 	}
 }

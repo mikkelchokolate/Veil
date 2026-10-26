@@ -101,16 +101,13 @@ func TestBuildApplyPlanUsesPerInboundRuntimeActions(t *testing.T) {
 	}
 }
 
-func TestBuildApplyPlanRejectsRoutingRuleUsingDisabledWarp(t *testing.T) {
+func TestBuildApplyPlanAcceptsRoutingRulesWhileWarpIsDisabled(t *testing.T) {
 	plan := BuildApplyPlan(ApplyPlanInput{
 		Settings: Settings{},
 		Rules:    []RoutingRule{{Name: "non-ru", Match: "geosite:ru-blocked", Outbound: "warp", Enabled: true}},
 	})
-	if plan.Valid {
-		t.Fatalf("plan should be invalid: %+v", plan)
-	}
-	if !containsApplyPlanString(plan.Errors, "routing rule non-ru requires WARP to be enabled") {
-		t.Fatalf("plan errors = %+v", plan.Errors)
+	if !plan.Valid || len(plan.Errors) != 0 {
+		t.Fatalf("kept warp rules must not invalidate the plan while WARP is off (#1416): %+v", plan)
 	}
 }
 

@@ -19,9 +19,9 @@ function renderRouting() {
 }
 
 describe("RoutingPage WARP-disabled outbound guard", () => {
-	// #711: an enabled rule with outbound "warp" fails the apply planner when
-	// WARP is disabled — the SPA must not even POST/PUT it.
-	it("blocks saving an enabled warp outbound while WARP is disabled", async () => {
+	// #1416: disabling WARP keeps the rules and the planner treats them as
+	// inert, so the SPA must let the operator save (and edit) them.
+	it("allows saving an enabled warp outbound while WARP is disabled", async () => {
 		const posts: unknown[] = [];
 		server.use(
 			http.get("/api/warp", () => HttpResponse.json({ enabled: false })),
@@ -43,10 +43,12 @@ describe("RoutingPage WARP-disabled outbound guard", () => {
 			target: { value: "warp" },
 		});
 		const save = screen.getByRole("button", { name: /^save$/i });
-		expect(save).toBeDisabled();
-		expect(screen.getByText(/fails apply/i)).toBeInTheDocument();
+		expect(save).toBeEnabled();
+		expect(
+			screen.getByText(/kept but not applied while WARP is disabled/i),
+		).toBeInTheDocument();
 		fireEvent.click(save);
-		expect(posts).toEqual([]);
+		await waitFor(() => expect(posts).toHaveLength(1));
 	});
 
 	// #711: a *disabled* warp rule is skipped by the apply planner, so the
@@ -79,18 +81,18 @@ describe("RoutingPage WARP-disabled outbound guard", () => {
 		await waitFor(() => expect(posts).toHaveLength(1));
 	});
 
-	// #721: the banner must not claim warp rules merely "have no effect" —
-	// an enabled warp rule is a hard plan error while WARP is off.
-	it("says warp rules fail apply instead of claiming no effect", async () => {
+	// #1416: the banner tells the operator the rules survive the disable and are
+	// inert until WARP is re-enabled.
+	it("explains that warp rules are kept while WARP is off", async () => {
 		server.use(
 			http.get("/api/warp", () => HttpResponse.json({ enabled: false })),
 			http.get("/api/routing/rules", () => HttpResponse.json([])),
 		);
 		renderRouting();
 		expect(
-			await screen.findByText(/fails the apply plan/i),
+			await screen.findByText(/kept but not applied until WARP is enabled/i),
 		).toBeInTheDocument();
-		expect(screen.queryByText(/no effect/i)).not.toBeInTheDocument();
+		expect(screen.queryByText(/fails the apply plan/i)).not.toBeInTheDocument();
 	});
 
 	it("keeps warp saves working while WARP is enabled", async () => {
@@ -119,4 +121,36 @@ describe("RoutingPage WARP-disabled outbound guard", () => {
 		fireEvent.click(save);
 		await waitFor(() => expect(posts).toHaveLength(1));
 	});
+});
+
+// #1416: a rule that survived a WARP disable must stay editable while WARP is
+// still off — otherwise the operator is stuck with a hidden rule.
+it("lets an existing warp rule be edited while WARP is disabled", async () => {
+	const puts: unknown[] = [];
+	server.use(
+		http.get("/api/warp", () => HttpResponse.json({ enabled: false })),
+		http.get("/api/routing/rules", () =>
+			HttpResponse.json([
+				{
+					name: "warp-openai",
+					match: "geosite:openai",
+					outbound: "warp",
+					enabled: true,
+				},
+			]),
+		),
+		http.put("/api/routing/rules/:name", async ({ request }) => {
+			puts.push(await request.json());
+			return HttpResponse.json({ success: true });
+		}),
+	);
+	renderRouting();
+	fireEvent.click(await screen.findByRole("button", { name: /^edit$/i }));
+	fireEvent.change(await screen.findByLabelText(/match/i), {
+		target: { value: "geosite:openai,geosite:anthropic" },
+	});
+	const save = screen.getByRole("button", { name: /^save$/i });
+	expect(save).toBeEnabled();
+	fireEvent.click(save);
+	await waitFor(() => expect(puts).toHaveLength(1));
 });

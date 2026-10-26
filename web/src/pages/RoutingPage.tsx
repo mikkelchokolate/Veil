@@ -140,13 +140,11 @@ export function RoutingPage() {
 		setForm({ name: "", match: "", outbound: "", enabled: true });
 	}
 
-	// The apply planner hard-fails an *enabled* rule whose outbound is "warp"
-	// while WARP is disabled ("routing rule <name> requires WARP to be
-	// enabled"). A disabled rule is skipped by the planner, so saving it is
-	// still legal — the block applies only when the rule would be enabled.
+	// #1416: disabling WARP keeps the routing rules — the apply planner treats a
+	// warp rule as inert while the outbound is down. Saving (including editing a
+	// rule that survived a disable) must stay possible; the form only hints that
+	// the rule will not take effect until WARP is re-enabled.
 	const warpDisabled = warp.data != null && !warp.data.enabled;
-	const warpOutboundBlocked =
-		warpDisabled && form.enabled && form.outbound.trim() === "warp";
 
 	return (
 		<>
@@ -220,9 +218,6 @@ export function RoutingPage() {
 										? t("routing.outboundHintWarpOff")
 										: t("routing.outboundHint")}
 								</FormDescription>
-								{warpOutboundBlocked ? (
-									<FormMessage>{t("routing.warpOutboundBlocked")}</FormMessage>
-								) : null}
 							</FormItem>
 							<FormItem>
 								<Label
@@ -247,8 +242,7 @@ export function RoutingPage() {
 										save.isPending ||
 										!form.name ||
 										!form.match ||
-										!form.outbound ||
-										warpOutboundBlocked
+										!form.outbound
 									}
 									onClick={() =>
 										save.mutate({
