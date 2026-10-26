@@ -157,9 +157,23 @@ if [ "$MODE" = install ]; then
             _quic_key="$1"
             shift
             _quic_best=0
+            # Directories are passed in systemd's precedence order. A name seen
+            # in a higher-priority directory shadows the copies below it, and a
+            # file masked with a symlink to /dev/null counts as seen but empty —
+            # the same rules as systemd and as the Go scanner (#1508 review).
+            _quic_seen=" "
             for _quic_path in "$@"; do
+                _quic_base="${_quic_path##*/}"
+                case "${_quic_seen}" in
+                *" ${_quic_base} "*) continue ;;
+                esac
+                _quic_seen="${_quic_seen}${_quic_base} "
+                # A masked file and an unmatched glob both fail this test; the
+                # former must still shadow, so the name is recorded above.
                 [ -f "${_quic_path}" ] || continue
-                while IFS= read -r _quic_line; do
+                # The last line may lack a trailing newline; read it too.
+                while IFS= read -r _quic_line || [ -n "${_quic_line}" ]; do
+                    _quic_line="${_quic_line#"${_quic_line%%[![:space:]]*}"}"
                     case "${_quic_line}" in '' | '#'* | ';'*) continue ;; esac
                     _quic_line="${_quic_line#-}"
                     _quic_name="${_quic_line%%=*}"
@@ -169,6 +183,9 @@ if [ "$MODE" = install ]; then
                     _quic_value="${_quic_line#*=}"
                     _quic_value="$(printf '%s' "${_quic_value}" | tr -d '[:space:]')"
                     case "${_quic_value}" in '' | *[!0-9]*) continue ;; esac
+                    # dash refuses integers wider than the shell's arithmetic and
+                    # prints an error; a value that wide is not a kernel limit.
+                    [ "${#_quic_value}" -le 18 ] || continue
                     if [ "${_quic_value}" -gt "${_quic_best}" ]; then
                         _quic_best="${_quic_value}"
                     fi
@@ -176,6 +193,7 @@ if [ "$MODE" = install ]; then
             done
             echo "${_quic_best}"
         }
+        # end: quic_explicit_max
         quic_floor=16777216
         quic_rmem="$(cat /proc/sys/net/core/rmem_max 2>/dev/null || true)"
         quic_wmem="$(cat /proc/sys/net/core/wmem_max 2>/dev/null || true)"
