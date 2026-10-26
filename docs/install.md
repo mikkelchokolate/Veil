@@ -294,11 +294,19 @@ owns the file. Upgrade such hosts with the package manager, which refreshes the
 units and runs the hooks.
 
 To move a host from the package to the standalone distribution instead, take a
-backup first (`sudo veil backup create`), then remove the package
-(`apt remove veil`, `dnf remove veil` or `apk del veil`) and install from the
+backup first. A bare `sudo veil backup create` prompts for a passphrase and
+writes the archive into the current directory, so use the
+`--passphrase-file`/`--output-dir` form from
+[Create and Verify](disaster-recovery.md#create-and-verify). Then remove the
+package (`apt remove veil`, `dnf remove veil` or `apk del veil`) and install
+from the
 [automated installation quick start](#1-automated-installation-quick-start);
 `veil update` cannot perform that migration, because it can only replace a
 binary it owns.
+
+The archive holds `state.json`, `state.key` and `veil.db`. The rendered
+configuration under `/etc/veil` (environment file, panel TLS material) and the
+units under `/etc/systemd/system` are not in it and stay on disk.
 
 The package manager takes the packaged binary (`/usr/local/bin/veil`), the
 packaged units under `/lib/systemd/system`, the QUIC `sysctl.d` drop-in and the
