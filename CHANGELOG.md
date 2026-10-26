@@ -6,6 +6,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil repair` no longer fails on a host whose recorded unit directory is a
+  staging tree: it writes the unit files and prints that it skipped the systemd
+  actions, instead of running `systemctl` against a directory the live systemd
+  does not load — the same directories for which `veil install` skips host
+  preparation (#1503 review). An explicitly empty `--systemd-dir ""` is refused
+  with an explanation rather than silently planning a repair with no unit
+  actions.
 - A custom `--systemd-dir` install now records its unit directory in `veil.env`
   (`VEIL_SYSTEMD_DIR`), and `veil repair`, the `veil admin rotate-key` preflight
   and `veil doctor` read it instead of assuming `/etc/systemd/system`. Before,

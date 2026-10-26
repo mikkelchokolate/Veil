@@ -95,3 +95,24 @@ func TestStaleKeyPinsIgnoreARelativeEnvironmentFile(t *testing.T) {
 		t.Fatalf("staleKeyPins = %+v, want the literal pin %q", pins, pinned)
 	}
 }
+
+// TestRepairRefusesAnEmptySystemdDir replaces the silent behaviour where
+// --systemd-dir "" planned a repair without any unit action: the operator gets
+// an explanation instead of a plan that quietly ignores the units.
+func TestRepairRefusesAnEmptySystemdDir(t *testing.T) {
+	cmd := newFastRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{
+		"repair", "--dry-run", "--systemd-dir", "",
+		"--etc-dir", t.TempDir(), "--var-dir", t.TempDir(),
+	})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("repair accepted an empty --systemd-dir:\n%s", out.String())
+	}
+	if !strings.Contains(err.Error(), "--systemd-dir is empty") {
+		t.Fatalf("error %v does not explain the empty unit directory", err)
+	}
+}
