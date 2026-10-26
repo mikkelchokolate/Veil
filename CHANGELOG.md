@@ -15,11 +15,15 @@ All notable changes to Veil will be documented in this file.
   /etc/systemd/system/veil.service is outside the allowed roots" and restored
   nothing. The defaults now include the configured unit directory, so the
   product's own backups restore. The allowlist stays narrow: inside the unit
-  directory only Veil's own units and drop-ins (`veil*.service|socket|timer` and
-  `<unit>.d/*.conf`) may be written, so a tampered manifest cannot turn a
-  restore into root-executed code; a custom `--systemd-dir` install still needs
-  `--restore-root` for that tree, and unmanaged destinations are still refused
-  (#1446).
+  directory a manifest may only name Veil's own units and drop-ins
+  (`veil*.service|socket|timer` and `<unit>.d/*.conf`), so it cannot introduce
+  an arbitrary unit name. That is not a trust boundary for the archive itself:
+  a configuration backup contains `state.key`, `veil.env` and the units, it is
+  restored as root, and a forged manifest can still point a legitimate
+  `veil*.service` at content of its choosing or rewrite `/etc/veil` — restore a
+  backup only when you trust where it came from. A custom `--systemd-dir`
+  install still needs `--restore-root` for that tree, and unmanaged destinations
+  are still refused (#1446).
 - `veil admin rotate-key` now refuses to rotate while a pre-#1472 unit drop-in
   still pins the state key path (an `Environment=VEIL_KEY_PATH=` literal in the
   helper override without `EnvironmentFile=`, or `--key-path` in the backup
