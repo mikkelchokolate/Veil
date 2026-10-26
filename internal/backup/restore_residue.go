@@ -53,7 +53,7 @@ func sweepBackupWorkspaceResidue(dirPath string) {
 // removed, and a fresh workspace (younger than restoreResidueMinAge) may belong
 // to a live operation and is kept.
 func sweepInspectWorkspaceResidue() {
-	root, err := safefs.OpenDir(os.TempDir())
+	root, err := safefs.OpenDir(inspectWorkspaceParent())
 	if err != nil {
 		return
 	}

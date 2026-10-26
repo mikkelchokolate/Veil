@@ -54,8 +54,11 @@ func preflightBackupSpace(destinationDir string, sourcePaths []string, maxBytes 
 	// Checking the workspace before anything is written keeps a create from
 	// losing its pending archive to an ENOSPC halfway through verification.
 	requirements := map[string][]int64{
-		destinationDir: {sourceBytes * 2},
-		os.TempDir():   {sourceBytes * 2},
+		// The destination holds the pending archive and the final link; the
+		// workspace holds the decrypted tarball plus the extracted members.
+		// Peak on a shared filesystem is roughly three copies of the sources.
+		destinationDir:           {sourceBytes},
+		inspectWorkspaceParent(): {2 * sourceBytes},
 	}
 	if err := requireBackupSpaceByFilesystem(requirements); err != nil {
 		return fmt.Errorf("backup space preflight: %w", err)
@@ -92,7 +95,7 @@ func preflightBackupOperationSpace(archivePath, statePath, keyPath, databasePath
 		// tmpfs — the privileged helper runs with PrivateTmp=true — refused
 		// ordinary verifies on hosts with gigabytes of free RAM (#1254 review).
 		// Reading the archive itself needs no room on the archive filesystem.
-		os.TempDir(): {2 * archiveInfo.Size()},
+		inspectWorkspaceParent(): {2 * archiveInfo.Size()},
 	}
 	if restoring {
 		stateDir := filepath.Dir(statePath)
@@ -533,6 +536,13 @@ var inspectWorkspaceParent = func() string {
 // a TMPDIR inside the service-owned state tree would restore the window F2
 // closes. Sticky roots (/tmp, /var/tmp) and roots writable by this user alone
 // pass.
+//
+// The check is not atomic with the MkdirTemp below: an operator-configured
+// TMPDIR whose *parent* is service-writable could still be swapped in between.
+// That is why the packaged helper keeps its TMPDIR under a root-owned directory
+// (`docs/disaster-recovery.md`); a pinned-directory openat() would close the
+// residual window, but the helper runs as root and the CLI's temp root is the
+// caller's own, so it is not part of this fix.
 func privateWorkspaceRoot(path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
