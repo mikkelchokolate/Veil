@@ -531,17 +531,21 @@ var inspectWorkspaceParent = func() string {
 	return os.TempDir()
 }
 
-// privateWorkspaceRoot rejects a temp root someone else can write: entries in a
-// world-writable directory are only protected from rename by the sticky bit, so
-// a TMPDIR inside the service-owned state tree would restore the window F2
-// closes. Sticky roots (/tmp, /var/tmp) and roots writable by this user alone
-// pass.
+// privateWorkspaceRoot rejects a temp root someone else can write or own:
+// entries in a world-writable directory are only protected from rename by the
+// sticky bit, and a directory someone else owns can be renamed away and
+// replaced, so either would restore the window F2 closes. Sticky roots (/tmp,
+// /var/tmp) and directories owned by this user pass.
 //
-// The check is not atomic with the MkdirTemp below: an operator-configured
-// TMPDIR whose *parent* is service-writable could still be swapped in between.
-// That is why the packaged helper keeps its TMPDIR under a root-owned directory
-// (`docs/disaster-recovery.md`); a pinned-directory openat() would close the
-// residual window, but the helper runs as root and the CLI's temp root is the
+// Ownership is checked because the documented disk-backed TMPDIR may sit below
+// a service-owned parent: /var/lib/veil is owned by the panel user, so a
+// root-owned workspace directory there stays swappable. Point TMPDIR outside the
+// service-writable trees (`docs/disaster-recovery.md`).
+//
+// The check is not atomic with the MkdirTemp below: a TMPDIR whose *parent* is
+// service-writable could still be swapped in between. A root-owned parent
+// removes that residual window; a pinned-directory openat() would close it
+// regardless, but the helper runs as root and the CLI's temp root is the
 // caller's own, so it is not part of this fix.
 func privateWorkspaceRoot(path string) error {
 	info, err := os.Stat(path)
@@ -553,6 +557,13 @@ func privateWorkspaceRoot(path string) error {
 	}
 	if info.Mode().Perm()&0o022 != 0 && info.Mode()&os.ModeSticky == 0 {
 		return fmt.Errorf("refusing to stage decrypted backup material in %s: group/other-writable directory without the sticky bit; point TMPDIR at a private directory", path)
+	}
+	// The directory owner can rename entries in it even with the sticky bit, so
+	// only this user and root are acceptable owners. /tmp is root-owned and
+	// accepted for an unprivileged CLI; a service-owned TMPDIR is not, because
+	// that user could replace the workspace. POSIX ownership only.
+	if uid, _ := fileOwnerIDs(info); uid != os.Geteuid() && uid != 0 {
+		return fmt.Errorf("refusing to stage decrypted backup material in %s: directory is owned by uid %d, not by this user or root; point TMPDIR at a directory this service owns", path, uid)
 	}
 	return nil
 }

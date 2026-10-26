@@ -119,3 +119,33 @@ func TestInspectWorkspaceRejectsASharedTempRoot(t *testing.T) {
 		t.Fatalf("shared temp root accepted: %v", err)
 	}
 }
+
+// TestInspectWorkspaceRejectsAForeignOwnedTempRoot keeps the F2 window closed
+// when TMPDIR points at a directory another user owns: such a directory can be
+// renamed away and replaced between the check and the workspace creation, even
+// though it is not group/other-writable.
+func TestInspectWorkspaceRejectsAForeignOwnedTempRoot(t *testing.T) {
+	if os.Geteuid() != 0 {
+		t.Skip("changing ownership needs root")
+	}
+	statePath, keyPath := writeValidBackupSource(t)
+	archiveDir := t.TempDir()
+	archivePath := filepath.Join(archiveDir, "backup.tar.gz.enc")
+	passphrase := strings.Repeat("inspect-foreign-", 2)
+	if err := CreateBackupFileWithOptions(archivePath, statePath, keyPath, passphrase, ArchiveOptions{}); err != nil {
+		t.Fatalf("create backup: %v", err)
+	}
+
+	foreign := t.TempDir()
+	if err := os.Chown(foreign, 65534, 65534); err != nil {
+		t.Skipf("chown unsupported here: %v", err)
+	}
+	if err := os.Chmod(foreign, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", foreign)
+
+	if _, err := VerifyBackupFile(archivePath, passphrase, 0); err == nil || !strings.Contains(err.Error(), "is owned by uid") {
+		t.Fatalf("foreign-owned temp root accepted: %v", err)
+	}
+}

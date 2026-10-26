@@ -31,17 +31,20 @@ extracted members in the temp root (`TMPDIR`, `/tmp` by default), and the
 packaged `veil-helper.service` runs with `PrivateTmp=true`, so there that root
 is a RAM-backed tmpfs sized by systemd at about half of RAM: a verify or restore
 needs roughly twice the archive's size of free space in it. Point `TMPDIR` at a
-root-owned 0700 directory on disk to avoid that ceiling — the helper already has
-`/var/lib/veil` writable:
+root-owned 0700 directory on disk to avoid that ceiling. Keep it outside the
+trees the panel service owns (`/var/lib/veil` is owned by that user), because a
+workspace directory below a service-writable parent can be renamed away and
+replaced:
 
 ```ini
 # /etc/systemd/system/veil-helper.service.d/tmpdir.conf
 [Service]
-Environment=TMPDIR=/var/lib/veil/backup-workspace
+Environment=TMPDIR=/var/cache/veil/workspace
+ReadWritePaths=/var/cache/veil/workspace
 ```
 
 ```bash
-sudo install -d -m 0700 -o root -g root /var/lib/veil/backup-workspace
+sudo install -d -m 0700 -o root -g root /var/cache/veil/workspace
 sudo systemctl daemon-reload
 # Restart the helper only while no backup or restore is running: the running
 # ones fail when the service goes away.
