@@ -59,6 +59,10 @@ func restartRunningPanel() error {
 	return nil
 }
 
+// rotatePreflightSystemdDir is where rotate-key looks for stale pre-#1472
+// drop-ins. Tests replace it.
+var rotatePreflightSystemdDir = veilenv.DefaultSystemdDir
+
 var adminRestartHelper = restartHelperUnit
 
 // restartHelperUnit makes veil-helper.service re-read veil.env. The helper
@@ -435,6 +439,13 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			}
 			if abs, err := filepath.Abs(targetKeyPath); err == nil {
 				targetKeyPath = abs
+			}
+
+			// Pre-#1472 drop-ins pin the old key path in the unit itself and
+			// would ignore the environment rewrite, leaving the helper and the
+			// backup timer on the pre-rotation key (#1473).
+			if stale := staleKeyPinDropIns(rotatePreflightSystemdDir); len(stale) > 0 {
+				return fmt.Errorf("refusing to rotate the state key: %s still pin the key path instead of reading veil.env, so the helper and the backup timer would keep the old key; run `veil repair` (with --etc-dir/--var-dir on a custom install) to re-render them, then retry", strings.Join(stale, ", "))
 			}
 
 			// The Panel, the privileged helper and the backup unit load their

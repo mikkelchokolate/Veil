@@ -18,6 +18,10 @@ type Summary struct {
 	// EgressDNS is the protocol-unit DNS check (#1288). Nil when the
 	// platform has no such filter or no probe was configured.
 	EgressDNS *EgressDNSCheck `json:"egressDNS,omitempty"`
+	// UnitKeyPathDrift lists managed-unit drop-ins that still pin the state key
+	// path instead of reading veil.env (pre-#1472 layouts). It is a warning:
+	// the host works until the key path moves (#1473).
+	UnitKeyPathDrift []string `json:"unitKeyPathDrift,omitempty"`
 }
 
 // EgressDNSCheck reports whether the host resolver is reachable from the
@@ -53,13 +57,24 @@ type CommandStatus struct {
 }
 
 type Readiness struct {
-	version   string
-	lookup    LookupFunc
-	egressDNS EgressDNSProbe
+	version      string
+	lookup       LookupFunc
+	egressDNS    EgressDNSProbe
+	unitKeyDrift UnitKeyPathDriftProbe
 }
 
 func NewReadiness(version string, lookup LookupFunc) Readiness {
 	return Readiness{version: version, lookup: lookup}
+}
+
+// UnitKeyPathDriftProbe returns the managed-unit drop-ins that still pin the
+// state key path instead of reading veil.env.
+type UnitKeyPathDriftProbe func() []string
+
+// WithUnitKeyPathDrift adds the stale key-pin check to the summary.
+func (d Readiness) WithUnitKeyPathDrift(probe UnitKeyPathDriftProbe) Readiness {
+	d.unitKeyDrift = probe
+	return d
 }
 
 // WithEgressDNS adds the protocol-unit DNS check to the summary.
@@ -147,6 +162,9 @@ func (d Readiness) Summary() Summary {
 		}
 		summary.EgressDNS = &check
 	}
+	if d.unitKeyDrift != nil {
+		summary.UnitKeyPathDrift = d.unitKeyDrift()
+	}
 	return summary
 }
 
@@ -203,6 +221,13 @@ func (p Presentation) Render(summary Summary, jsonOutput bool) error {
 	}
 	if check := summary.EgressDNS; check != nil {
 		p.renderEgressDNS(*check)
+	}
+	if len(summary.UnitKeyPathDrift) > 0 {
+		fmt.Fprintln(p.out, "Managed unit key path (warning):")
+		for _, path := range summary.UnitKeyPathDrift {
+			fmt.Fprintf(p.out, "- %s pins the state key path instead of reading veil.env\n", path)
+		}
+		fmt.Fprintln(p.out, "- run `veil repair` to re-render the drop-ins (add --etc-dir/--var-dir on a custom install)")
 	}
 	return nil
 }
