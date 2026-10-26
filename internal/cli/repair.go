@@ -1,9 +1,15 @@
 package cli
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
 	repairflow "github.com/mikkelchokolate/Veil/internal/cliflow/repair"
 	"github.com/mikkelchokolate/Veil/internal/installer"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 	"github.com/spf13/cobra"
 )
 
@@ -41,6 +47,15 @@ func newRepairCommand() *cobra.Command {
 		Use:   "repair",
 		Short: "Repair Veil managed generated files without arbitrary side effects",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Repair has to work on the tree the host is actually installed
+			// with. On a custom --etc-dir/--var-dir install the packaged
+			// defaults would rewrite the wrong veil.env and leave the custom
+			// units stale (#1473), so the installed layout is discovered first.
+			resolvedEtc, resolvedVar, err := resolveRepairLayout(cmd, etcDir, varDir)
+			if err != nil {
+				return err
+			}
+			etcDir, varDir = resolvedEtc, resolvedVar
 			return runRepairWorkflow(cmd, repairWorkflowOptions{
 				Profile:         profile,
 				DryRun:          dryRun,
@@ -71,6 +86,65 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().IntVar(&leIPCertPort, "le-ip-cert-port", 80, "port used for Let's Encrypt HTTP-01 validation")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP; use auto to detect it")
 	return cmd
+}
+
+// repairDiscoverySystemdDir is where the installed veil.service drop-in that
+// records a custom EnvironmentFile= is discovered. Tests replace it.
+var repairDiscoverySystemdDir = veilenv.DefaultSystemdDir
+
+// installedLayout is the configuration tree a Veil install uses.
+type installedLayout struct {
+	etcDir string
+	varDir string
+}
+
+// discoverInstalledLayout reads the installed environment file (the same
+// discovery order rotate-key and status use) and returns the layout it
+// describes. ok is false when there is no installed file or it does not name a
+// complete custom tree, in which case the packaged defaults still apply.
+func discoverInstalledLayout() (installedLayout, bool) {
+	envPath := veilenv.Resolve(repairDiscoverySystemdDir)
+	body, err := os.ReadFile(envPath)
+	if err != nil {
+		return installedLayout{}, false
+	}
+	etcDir := veilenv.Value(body, "VEIL_ETC_DIR")
+	if etcDir == "" {
+		if keyPath := veilenv.Value(body, veilenv.KeyPathKey); keyPath != "" {
+			etcDir = filepath.Dir(keyPath)
+		} else if envPath != veilenv.DefaultPath() {
+			etcDir = filepath.Dir(envPath)
+		}
+	}
+	varDir := veilenv.Value(body, "VEIL_VAR_DIR")
+	if varDir == "" {
+		if statePath := veilenv.Value(body, "VEIL_STATE_PATH"); statePath != "" {
+			varDir = filepath.Dir(statePath)
+		}
+	}
+	if etcDir == "" || varDir == "" {
+		return installedLayout{}, false
+	}
+	return installedLayout{etcDir: etcDir, varDir: varDir}, true
+}
+
+// resolveRepairLayout picks the tree repair works on. Explicit flags win, then
+// an explicit process environment (VEIL_ETC_DIR/VEIL_VAR_DIR, which hostenv
+// already honours), and finally the packaged defaults. When the discovered
+// layout differs from those defaults, repair refuses rather than silently
+// fixing the wrong tree.
+func resolveRepairLayout(cmd *cobra.Command, etcFlag, varFlag string) (string, string, error) {
+	if cmd.Flags().Changed("etc-dir") || cmd.Flags().Changed("var-dir") {
+		return etcFlag, varFlag, nil
+	}
+	if strings.TrimSpace(os.Getenv("VEIL_ETC_DIR")) != "" || strings.TrimSpace(os.Getenv("VEIL_VAR_DIR")) != "" {
+		return etcFlag, varFlag, nil
+	}
+	installed, ok := discoverInstalledLayout()
+	if !ok || (installed.etcDir == etcFlag && installed.varDir == varFlag) {
+		return etcFlag, varFlag, nil
+	}
+	return "", "", fmt.Errorf("this host is installed with a custom layout (%s, %s); rerun with --etc-dir %s --var-dir %s so repair fixes the installed tree instead of writing the packaged defaults", installed.etcDir, installed.varDir, installed.etcDir, installed.varDir)
 }
 
 func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
