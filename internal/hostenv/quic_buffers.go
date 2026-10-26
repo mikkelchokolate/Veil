@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -47,7 +49,91 @@ var (
 	quicLookPath    = syspath.LookPath
 	quicCommand     = syspath.Command
 	quicRuntimeGOOS = func() string { return runtime.GOOS }
+	quicGlob        = filepath.Glob
+	// quicSysctlDirs is the systemd sysctl file set in systemd-sysctl(8)
+	// precedence order, highest first: /etc overrides /run, /run overrides
+	// /usr/local/lib, /usr/local/lib overrides /usr/lib, /usr/lib overrides
+	// /lib. Operator tuning lives here (90-network-tuning.conf and friends), and
+	// Veil's own drop-in sorts late, so the files have to be read instead of
+	// trusting the live value (#1492). systemd-sysctl(8) reads only these
+	// directories — /etc/sysctl.conf belongs to procps' sysctl and is not
+	// applied at boot on a systemd host, so it is deliberately not scanned.
+	quicSysctlDirs = []string{
+		"/etc/sysctl.d",
+		"/run/sysctl.d",
+		"/usr/local/lib/sysctl.d",
+		"/usr/lib/sysctl.d",
+		"/lib/sysctl.d",
+	}
 )
+
+// operatorQUICBuffer returns the highest explicit cap for key across the systemd
+// sysctl file set, or 0 when no file sets it. Files are visited in systemd's
+// precedence order and a file shadowed by a higher-precedence directory with the
+// same name is skipped, so a deliberate lower value in /etc still wins over the
+// vendor copy while a tuned value beats Veil's own late-sorting drop-in (#1492).
+func operatorQUICBuffer(key string) int {
+	best := 0
+	seen := map[string]bool{}
+	for _, dir := range quicSysctlDirs {
+		matches, err := quicGlob(filepath.Join(dir, "*.conf"))
+		if err != nil {
+			continue
+		}
+		sort.Strings(matches)
+		for _, path := range matches {
+			name := filepath.Base(path)
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			if value := quicBufferFromFile(path, key); value > best {
+				best = value
+			}
+		}
+	}
+	return best
+}
+
+// quicBufferFromFile returns the highest value assigned to key in one sysctl
+// file, or 0. Both `key = value` and `key=value` are accepted, as is the `-`
+// prefix systemd uses to ignore a failing write; comments are skipped.
+func quicBufferFromFile(path, key string) int {
+	body, err := quicReadFile(path)
+	if err != nil {
+		return 0
+	}
+	best := 0
+	for _, line := range strings.Split(string(body), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, ";") {
+			continue
+		}
+		line = strings.TrimPrefix(line, "-")
+		name, value, ok := strings.Cut(line, "=")
+		if !ok || strings.TrimSpace(name) != key {
+			continue
+		}
+		parsed, err := strconv.Atoi(strings.TrimSpace(value))
+		if err != nil || parsed < 0 {
+			continue
+		}
+		if parsed > best {
+			best = parsed
+		}
+	}
+	return best
+}
+
+func maxQUICBuffer(values ...int) int {
+	best := 0
+	for _, value := range values {
+		if value > best {
+			best = value
+		}
+	}
+	return best
+}
 
 // observedQUICBuffer returns the live cap at path, or 0 when it cannot be read
 // or parsed: unknown means "apply the floor", never "assume it is high".
@@ -77,23 +163,20 @@ func ApplyQUICUDPBuffers() error {
 	}
 	liveRMEM := observedQUICBuffer(quicRMEMSysctlPath)
 	liveWMEM := observedQUICBuffer(quicWMEMSysctlPath)
-	rmem := liveRMEM
-	if rmem < QUICUDPBufferBytes {
-		rmem = QUICUDPBufferBytes
-	}
-	wmem := liveWMEM
-	if wmem < QUICUDPBufferBytes {
-		wmem = QUICUDPBufferBytes
-	}
+	// The live value may already be clamped by Veil's own drop-in, so a host
+	// tuned in 90-network-tuning.conf never shows its intent through /proc.
+	// Take the highest explicit sysctl.d value as well, and never go below it.
+	rmem := maxQUICBuffer(liveRMEM, operatorQUICBuffer("net.core.rmem_max"), QUICUDPBufferBytes)
+	wmem := maxQUICBuffer(liveWMEM, operatorQUICBuffer("net.core.wmem_max"), QUICUDPBufferBytes)
 	if err := quicWriteFile(quicSysctlPath, []byte(QUICSysctlContentFor(rmem, wmem)), 0o644); err != nil {
 		return fmt.Errorf("write %s: %w", quicSysctlPath, err)
 	}
 	raise := make([]string, 0, 2)
-	if liveRMEM < QUICUDPBufferBytes {
-		raise = append(raise, fmt.Sprintf("net.core.rmem_max=%d", QUICUDPBufferBytes))
+	if liveRMEM < rmem {
+		raise = append(raise, fmt.Sprintf("net.core.rmem_max=%d", rmem))
 	}
-	if liveWMEM < QUICUDPBufferBytes {
-		raise = append(raise, fmt.Sprintf("net.core.wmem_max=%d", QUICUDPBufferBytes))
+	if liveWMEM < wmem {
+		raise = append(raise, fmt.Sprintf("net.core.wmem_max=%d", wmem))
 	}
 	if len(raise) == 0 {
 		return nil

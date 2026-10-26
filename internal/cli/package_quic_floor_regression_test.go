@@ -24,8 +24,10 @@ func TestPostinstallQuicTuningOnlyRaises(t *testing.T) {
 		"/proc/sys/net/core/rmem_max",
 		"/proc/sys/net/core/wmem_max",
 		"quic_floor=16777216",
-		`sysctl -w "net.core.rmem_max=${quic_floor}"`,
-		`sysctl -w "net.core.wmem_max=${quic_floor}"`,
+		"quic_explicit_max net.core.rmem_max",
+		"quic_explicit_max net.core.wmem_max",
+		`sysctl -w "net.core.rmem_max=${quic_rmem}"`,
+		`sysctl -w "net.core.wmem_max=${quic_wmem}"`,
 	} {
 		if !strings.Contains(code, want) {
 			t.Fatalf("postinstall is missing the only-raise step %q", want)

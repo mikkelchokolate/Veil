@@ -139,6 +139,43 @@ if [ "$MODE" = install ]; then
         # Only raise: a host already tuned above Veil's 16 MiB floor keeps its
         # limits, and the drop-in is rewritten to that observed value so the
         # next boot does not lower them either (issue #1456).
+        #
+        # The live value alone is not enough: sysctl.d files apply in
+        # lexicographic order and Veil's own 99-veil-quic.conf sorts after an
+        # operator's 90-network-tuning.conf, so /proc already reads Veil's clamp
+        # and the tuned value would be lost on every upgrade (issue #1492). Read
+        # the explicit assignments too and keep the highest.
+        #
+        # systemd-sysctl(8) reads only the sysctl.d directories; /etc/sysctl.conf
+        # belongs to procps' sysctl and is not applied at boot here. Arguments are
+        # paths, standard globs included — a literal glob for a directory that
+        # does not exist is skipped by the [ -f ] test, and nonexistent paths in
+        # general never reach the reader. The scan keeps the highest value across
+        # every file; systemd itself applies the lexicographically last name, and
+        # a maximum can only raise what it applies, never lower it.
+        quic_explicit_max() {
+            _quic_key="$1"
+            shift
+            _quic_best=0
+            for _quic_path in "$@"; do
+                [ -f "${_quic_path}" ] || continue
+                while IFS= read -r _quic_line; do
+                    case "${_quic_line}" in '' | '#'* | ';'*) continue ;; esac
+                    _quic_line="${_quic_line#-}"
+                    _quic_name="${_quic_line%%=*}"
+                    [ "${_quic_name}" != "${_quic_line}" ] || continue
+                    _quic_name="$(printf '%s' "${_quic_name}" | tr -d '[:space:]')"
+                    [ "${_quic_name}" = "${_quic_key}" ] || continue
+                    _quic_value="${_quic_line#*=}"
+                    _quic_value="$(printf '%s' "${_quic_value}" | tr -d '[:space:]')"
+                    case "${_quic_value}" in '' | *[!0-9]*) continue ;; esac
+                    if [ "${_quic_value}" -gt "${_quic_best}" ]; then
+                        _quic_best="${_quic_value}"
+                    fi
+                done < "${_quic_path}"
+            done
+            echo "${_quic_best}"
+        }
         quic_floor=16777216
         quic_rmem="$(cat /proc/sys/net/core/rmem_max 2>/dev/null || true)"
         quic_wmem="$(cat /proc/sys/net/core/wmem_max 2>/dev/null || true)"
@@ -146,6 +183,16 @@ if [ "$MODE" = install ]; then
         case "${quic_wmem}" in '' | *[!0-9]*) quic_wmem="${quic_floor}" ;; esac
         [ "${quic_rmem}" -ge "${quic_floor}" ] || quic_rmem="${quic_floor}"
         [ "${quic_wmem}" -ge "${quic_floor}" ] || quic_wmem="${quic_floor}"
+        quic_tuned_rmem="$(quic_explicit_max net.core.rmem_max \
+            /etc/sysctl.d/*.conf /run/sysctl.d/*.conf /usr/local/lib/sysctl.d/*.conf \
+            /usr/lib/sysctl.d/*.conf /lib/sysctl.d/*.conf)"
+        quic_tuned_wmem="$(quic_explicit_max net.core.wmem_max \
+            /etc/sysctl.d/*.conf /run/sysctl.d/*.conf /usr/local/lib/sysctl.d/*.conf \
+            /usr/lib/sysctl.d/*.conf /lib/sysctl.d/*.conf)"
+        case "${quic_tuned_rmem}" in '' | *[!0-9]*) quic_tuned_rmem=0 ;; esac
+        case "${quic_tuned_wmem}" in '' | *[!0-9]*) quic_tuned_wmem=0 ;; esac
+        [ "${quic_rmem}" -ge "${quic_tuned_rmem}" ] || quic_rmem="${quic_tuned_rmem}"
+        [ "${quic_wmem}" -ge "${quic_tuned_wmem}" ] || quic_wmem="${quic_tuned_wmem}"
         cat > /etc/sysctl.d/99-veil-quic.conf <<SYSCTL
 # Hysteria2/QUIC needs large UDP socket buffers. Linux defaults (~208 KiB)
 # drop inbound datagrams and cap client upload around 5-10 Mbit/s while
@@ -165,14 +212,14 @@ SYSCTL
         quic_live_wmem="$(cat /proc/sys/net/core/wmem_max 2>/dev/null || true)"
         case "${quic_live_rmem}" in '' | *[!0-9]*) quic_live_rmem=0 ;; esac
         case "${quic_live_wmem}" in '' | *[!0-9]*) quic_live_wmem=0 ;; esac
-        if [ "${quic_live_rmem}" -lt "${quic_floor}" ]; then
-            if ! sysctl -w "net.core.rmem_max=${quic_floor}" >/dev/null 2>&1; then
-                echo "warning: sysctl -w net.core.rmem_max=${quic_floor} failed; the QUIC UDP receive limit was not raised on the running kernel" >&2
+        if [ "${quic_live_rmem}" -lt "${quic_rmem}" ]; then
+            if ! sysctl -w "net.core.rmem_max=${quic_rmem}" >/dev/null 2>&1; then
+                echo "warning: sysctl -w net.core.rmem_max=${quic_rmem} failed; the QUIC UDP receive limit was not raised on the running kernel" >&2
             fi
         fi
-        if [ "${quic_live_wmem}" -lt "${quic_floor}" ]; then
-            if ! sysctl -w "net.core.wmem_max=${quic_floor}" >/dev/null 2>&1; then
-                echo "warning: sysctl -w net.core.wmem_max=${quic_floor} failed; the QUIC UDP send limit was not raised on the running kernel" >&2
+        if [ "${quic_live_wmem}" -lt "${quic_wmem}" ]; then
+            if ! sysctl -w "net.core.wmem_max=${quic_wmem}" >/dev/null 2>&1; then
+                echo "warning: sysctl -w net.core.wmem_max=${quic_wmem} failed; the QUIC UDP send limit was not raised on the running kernel" >&2
             fi
         fi
     fi

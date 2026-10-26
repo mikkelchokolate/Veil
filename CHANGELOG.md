@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- QUIC UDP buffer tuning no longer clamps a host that is tuned in its own
+  `sysctl.d` file. Veil's `99-veil-quic.conf` sorts after an operator's
+  `90-network-tuning.conf`, so the live caps already read Veil's 16 MiB floor and
+  install, repair and package upgrades kept persisting that clamped value: the
+  tuned 64 MiB never came back. Both the Go path and the packaged `postinstall`
+  now also read the explicit `net.core.rmem_max`/`wmem_max` assignments from
+  `/etc/sysctl.d`, `/run/sysctl.d`, `/usr/local/lib/sysctl.d`,
+  `/usr/lib/sysctl.d` and `/lib/sysctl.d` (the set systemd-sysctl applies;
+  `/etc/sysctl.conf` belongs to procps and is not read at boot), keep the highest
+  one, and persist and raise `max(floor, live, operator)` — the operator value
+  wins at the next boot and immediately (#1492).
 - `veil install`, `veil repair` and `veil doctor` no longer resolve their
   root-run `sysctl` and `systemctl` helpers through the invoking shell's `PATH`:
   both now go through the trusted system directories like the other privileged
