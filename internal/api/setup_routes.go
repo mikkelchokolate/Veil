@@ -137,16 +137,19 @@ func (s *managementState) handleSetupComplete(w http.ResponseWriter, r *http.Req
 		Role:         "admin",
 		Locale:       req.Locale,
 	}}
-	// The first user permanently latches the instance as provisioned —
-	// outside the state file itself, so no rollback/restore can clear it —
-	// and revokes any bootstrap sessions minted before this point (#1100).
-	s.noteUsersProvisionedLocked()
 	if err := s.saveLocked(); err != nil {
 		s.setup = previousSetup
 		s.users = previousUsers
 		writeError(w, "failed to persist first-run setup", http.StatusInternalServerError)
 		return
 	}
+	// The first user permanently latches the instance as provisioned —
+	// outside the state file itself, so no rollback/restore can clear it —
+	// and revokes any bootstrap sessions minted before this point (#1100).
+	// It runs only after the save succeeded: latching first left a failed
+	// first-run setup answering "already complete" forever with zero users
+	// (#1441).
+	s.noteUsersProvisionedLocked()
 	s.recordRequestAudit(r, audit.Record{
 		Actor:   req.Username,
 		Role:    "admin",

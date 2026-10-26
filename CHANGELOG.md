@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- A failed first-run setup no longer locks the instance out. `POST
+  /api/setup/complete` latched the provisioning state (the in-memory
+  "users ever existed" flag and the durable `users-provisioned.marker` next to
+  `state.json`) before saving the state. When the save failed, the handler
+  rolled the user back but left the latch, so every retry answered `409
+  first-run setup is already complete`, `/api/setup/status` reported
+  `required: false`, and no Panel user existed — the only way back in was
+  `veil admin reset`/`veil admin set` on the host. The latch (and the
+  revocation of bootstrap sessions) now happens only after the state is
+  persisted, so a transient save failure leaves first-run setup retryable
+  (#1441).
 - The HTTP request metrics now label the routes added since #980 instead of
   collapsing them into `/{unmatched}` or attributing them to a sibling
   template: TOTP and passkey second-factor endpoints
