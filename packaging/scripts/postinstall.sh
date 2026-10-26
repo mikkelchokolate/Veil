@@ -365,6 +365,13 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
     esac
 fi
 
+# Mark the installation as package-managed: the binary, units and install hooks
+# must be upgraded together by the package manager, so `veil update` and the
+# Panel's updater refuse to replace the executable in place (#1424).
+mkdir -p /etc/veil
+printf 'the Veil OS package\n' > /etc/veil/.package-managed
+chmod 0644 /etc/veil/.package-managed
+
 if [ "$MODE" = install ]; then
     echo "Veil installed. Run 'veil install' to configure Panel access, or"
     echo "'veil doctor' to check host readiness."

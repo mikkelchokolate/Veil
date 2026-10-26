@@ -60,6 +60,9 @@ for dir in /lib/systemd/system /usr/lib/systemd/system; do
     done
 done
 rm -f /etc/sysctl.d/99-veil-quic.conf
+# The package no longer owns the binary: drop the package-managed marker so an
+# operator-maintained install can use `veil update` again (#1424).
+rm -f /etc/veil/.package-managed
 
 if command -v systemctl >/dev/null 2>&1; then
     # Removal must never fail because systemd is not running (containers,

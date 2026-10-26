@@ -6,6 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil update` and the Panel's "Update panel" button now refuse to replace a
+  binary that belongs to an installed `.deb`/`.rpm`/`.apk` package. They used to
+  overwrite `/usr/local/bin/veil` in place and restart: the running host then
+  reported the new version while still using the old package's systemd units and
+  without the new package's install hooks, silently missing the unit and account
+  hardening those carry. Package installs are now detected (a marker written by
+  the package's postinstall, or the package database itself for older packages)
+  and the operator is pointed at the package manager, matching
+  `docs/install.md` (#1424).
 - Disabling WARP no longer deletes routing rules. `PUT /api/warp {"enabled":false}`
   (the SPA's "Disable WARP" button) removed every rule whose outbound was `warp`,
   including rules the operator had created by hand and rules that were already
