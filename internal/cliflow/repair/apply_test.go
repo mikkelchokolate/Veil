@@ -2,6 +2,8 @@ package repair
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -38,4 +40,66 @@ func TestApplyRepairPlanReportsNoBackupWhenNoActions(t *testing.T) {
 			t.Fatalf("output missing %q:\n%s", want, out.String())
 		}
 	}
+}
+
+// TestApplyRepairPlanSkipsSystemdActionsForAStagedUnitDir locks the gate added
+// after the #1503 review: units planned into a staging tree are not loaded by
+// the host's systemd, so repair writes them but must not try to enable/restart
+// them (install skips host preparation for the same directories).
+func TestApplyRepairPlanSkipsSystemdActionsForAStagedUnitDir(t *testing.T) {
+	stubQUICBuffers(t)
+	var calls int
+	runSystemd := func([]service.SystemdAction) error {
+		calls++
+		return nil
+	}
+	stagingDir := t.TempDir()
+	plan := installer.RepairPlan{Actions: []installer.RepairAction{
+		{Path: filepath.Join(stagingDir, "veil.service"), Reason: installer.RepairReasonMissing, Content: "unit", Mode: 0o644},
+	}}
+
+	var out bytes.Buffer
+	if err := ApplyPlan(plan, Options{Yes: true, SystemdDir: stagingDir, VarDir: t.TempDir(), BackupDirSet: true}, &out, ApplyDependencies{RunSystemd: runSystemd}); err != nil {
+		t.Fatalf("applyRepairPlan: %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("repair ran %d systemd action batches for a staging directory", calls)
+	}
+	if !strings.Contains(out.String(), "Skipping systemd actions") || !strings.Contains(out.String(), stagingDir) {
+		t.Fatalf("repair did not say what it skipped:\n%s", out.String())
+	}
+	if body, err := os.ReadFile(filepath.Join(stagingDir, "veil.service")); err != nil || string(body) != "unit" {
+		t.Fatalf("staged unit was not written: %q %v", body, err)
+	}
+}
+
+// TestApplyRepairPlanRunsSystemdActionsForTheLiveDir keeps the other side of the
+// gate: the packaged unit directory still gets the systemctl actions.
+func TestApplyRepairPlanRunsSystemdActionsForTheLiveDir(t *testing.T) {
+	stubQUICBuffers(t)
+	var calls int
+	runSystemd := func([]service.SystemdAction) error {
+		calls++
+		return nil
+	}
+	plan := installer.RepairPlan{Actions: []installer.RepairAction{
+		{Path: filepath.Join(t.TempDir(), "veil.service"), Reason: installer.RepairReasonMissing, Content: "unit", Mode: 0o644},
+	}}
+
+	var out bytes.Buffer
+	if err := ApplyPlan(plan, Options{Yes: true, SystemdDir: repairLiveSystemdDir, VarDir: t.TempDir(), BackupDirSet: true}, &out, ApplyDependencies{RunSystemd: runSystemd}); err != nil {
+		t.Fatalf("applyRepairPlan: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("repair ran %d systemd action batches, want 1", calls)
+	}
+}
+
+// stubQUICBuffers keeps the UDP-buffer tuning out of tests that run on a host
+// where /etc/sysctl.d is not writable.
+func stubQUICBuffers(t *testing.T) {
+	t.Helper()
+	original := applyQUICBuffers
+	applyQUICBuffers = func() error { return nil }
+	t.Cleanup(func() { applyQUICBuffers = original })
 }

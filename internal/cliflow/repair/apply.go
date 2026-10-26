@@ -12,6 +12,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 )
 
 type ApplyDependencies struct {
@@ -44,17 +45,26 @@ func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps Appl
 		_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), nil)
 		return err
 	}
-	if err := hostenv.ApplyQUICUDPBuffers(); err != nil {
+	if err := applyQUICBuffers(); err != nil {
 		_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), result.WrittenFiles)
 		return fmt.Errorf("tune QUIC UDP buffers: %w", err)
 	}
 	if actions := SystemdActionsFromRepairPlan(plan); len(actions) > 0 {
-		if deps.RunSystemd == nil {
+		switch {
+		case !repairUnitDirIsLive(opts.SystemdDir):
+			// Units planned into a staging tree are not loaded by the host's
+			// systemd; enabling or restarting them would fail on a live host and
+			// would touch the wrong manager. Install skips host preparation for
+			// exactly these directories, so repair says what it skipped instead
+			// of dying in systemctl (#1503 review).
+			fmt.Fprintf(out, "Skipping systemd actions: units were planned in %s, which the live systemd does not load (it reads %s).\n", opts.SystemdDir, repairLiveSystemdDir)
+		case deps.RunSystemd == nil:
 			return fmt.Errorf("repair systemd runner is not configured")
-		}
-		if err := deps.RunSystemd(actions); err != nil {
-			_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), result.WrittenFiles)
-			return err
+		default:
+			if err := deps.RunSystemd(actions); err != nil {
+				_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), result.WrittenFiles)
+				return err
+			}
 		}
 	}
 	fmt.Fprintln(out, "Repaired files:")
@@ -70,6 +80,27 @@ func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps Appl
 		return fmt.Errorf("audit log write failed after successful repair: %w", err)
 	}
 	return nil
+}
+
+// applyQUICBuffers tunes the host UDP buffers during repair. Tests replace it
+// so the apply contract can be exercised on a host that does not allow
+// /etc/sysctl.d writes.
+var applyQUICBuffers = hostenv.ApplyQUICUDPBuffers
+
+// repairLiveSystemdDir is the unit directory the host's systemd loads. Tests
+// replace it to exercise the staging gate without writing under /etc.
+var repairLiveSystemdDir = veilenv.DefaultSystemdDir
+
+// repairUnitDirIsLive reports whether repair may run systemctl for the units it
+// writes. An empty directory means the caller did not resolve one (programmatic
+// use) and keeps the previous behaviour; anything but the live directory is a
+// staging tree.
+func repairUnitDirIsLive(systemdDir string) bool {
+	dir := strings.TrimSpace(systemdDir)
+	if dir == "" {
+		return true
+	}
+	return filepath.Clean(dir) == filepath.Clean(repairLiveSystemdDir)
 }
 
 func SystemdUnitsFromRepairPlan(plan installer.RepairPlan) []string {

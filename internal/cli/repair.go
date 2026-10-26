@@ -61,6 +61,9 @@ func newRepairCommand() *cobra.Command {
 			// install records it in veil.env, and re-rendering the units into
 			// the packaged path would leave the live ones stale (#1484).
 			systemdDir = resolveRepairSystemdDir(cmd, etcDir, systemdDir)
+			if cmd.Flags().Changed("systemd-dir") && strings.TrimSpace(systemdDir) == "" {
+				return fmt.Errorf("refusing to repair: --systemd-dir is empty, so no unit file would be repaired; pass the installed unit directory or omit the flag")
+			}
 			return runRepairWorkflow(cmd, repairWorkflowOptions{
 				Profile:         profile,
 				DryRun:          dryRun,
