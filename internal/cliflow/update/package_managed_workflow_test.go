@@ -42,7 +42,7 @@ func TestRunWorkflowRefusesAPackageManagedBinary(t *testing.T) {
 			if err == nil {
 				t.Fatalf("update accepted a package-managed binary:\n%s", out.String())
 			}
-			for _, want := range []string{"belongs to veil 0.7.2 (dpkg)", "package manager"} {
+			for _, want := range []string{"belongs to veil 0.7.2 (dpkg)", "package manager", "--force does not bypass", "standalone distribution"} {
 				if !strings.Contains(err.Error(), want) {
 					t.Fatalf("error %v does not mention %q", err, want)
 				}

@@ -23,7 +23,9 @@ All notable changes to Veil will be documented in this file.
   hardening those carry. Package installs are now detected (a marker written by
   the package's postinstall, or the package database itself for older packages)
   and the operator is pointed at the package manager, matching
-  `docs/install.md` (#1424).
+  `docs/install.md`. `--force` does not bypass the refusal (the package manager
+  owns the file); the guide also spells out how to move a host to the standalone
+  distribution instead (#1424).
 - Disabling WARP no longer deletes routing rules. `PUT /api/warp {"enabled":false}`
   (the SPA's "Disable WARP" button) removed every rule whose outbound was `warp`,
   including rules the operator had created by hand and rules that were already
