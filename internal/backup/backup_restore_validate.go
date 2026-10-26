@@ -20,7 +20,7 @@ type resolvedRestoreEntry struct {
 	Mode       os.FileMode
 }
 
-func resolveManifestEntries(backupDir *safefs.Dir, absRoot string, manifest Manifest, allowedRoots []string) ([]resolvedRestoreEntry, error) {
+func resolveManifestEntries(backupDir *safefs.Dir, absRoot string, manifest Manifest, allowedRoots []string, pathFilter func(string) bool) ([]resolvedRestoreEntry, error) {
 	resolvedRoot, err := filepath.EvalSymlinks(absRoot)
 	if err != nil {
 		return nil, fmt.Errorf("resolve backup dir: %w", err)
@@ -30,7 +30,7 @@ func resolveManifestEntries(backupDir *safefs.Dir, absRoot string, manifest Mani
 	seenMember := make(map[string]struct{}, len(manifest.Entries))
 	entries := make([]resolvedRestoreEntry, 0, len(manifest.Entries))
 	for _, entry := range manifest.Entries {
-		original, err := sanitizeRestoreOriginalPath(entry.OriginalPath, absRoot, resolvedRoot, allowedRoots)
+		original, err := sanitizeRestoreOriginalPath(entry.OriginalPath, absRoot, resolvedRoot, allowedRoots, pathFilter)
 		if err != nil {
 			return nil, err
 		}
@@ -57,7 +57,7 @@ func resolveManifestEntries(backupDir *safefs.Dir, absRoot string, manifest Mani
 	return entries, nil
 }
 
-func sanitizeRestoreOriginalPath(path, absRoot, resolvedRoot string, allowedRoots []string) (string, error) {
+func sanitizeRestoreOriginalPath(path, absRoot, resolvedRoot string, allowedRoots []string, pathFilter func(string) bool) (string, error) {
 	if path == "" {
 		return "", fmt.Errorf("manifest original path is empty")
 	}
@@ -81,6 +81,9 @@ func sanitizeRestoreOriginalPath(path, absRoot, resolvedRoot string, allowedRoot
 	if len(allowedRoots) > 0 && !backupPathUnderAnyRoot(allowedRoots, absOrig) {
 		return "", fmt.Errorf("restore destination %s is outside the allowed roots", absOrig)
 	}
+	if pathFilter != nil && !pathFilter(absOrig) {
+		return "", fmt.Errorf("restore destination %s is not a managed path", absOrig)
+	}
 	info, err := os.Lstat(absOrig)
 	if err == nil {
 		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
@@ -95,6 +98,9 @@ func sanitizeRestoreOriginalPath(path, absRoot, resolvedRoot string, allowedRoot
 		}
 		if len(allowedRoots) > 0 && !backupPathUnderAnyRoot(allowedRoots, resolvedOrig) {
 			return "", fmt.Errorf("restore destination %s is outside the allowed roots", absOrig)
+		}
+		if pathFilter != nil && !pathFilter(resolvedOrig) {
+			return "", fmt.Errorf("restore destination %s is not a managed path", absOrig)
 		}
 	} else if !os.IsNotExist(err) {
 		return "", fmt.Errorf("stat original path %s: %w", absOrig, err)

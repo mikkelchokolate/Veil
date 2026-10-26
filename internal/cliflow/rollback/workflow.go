@@ -17,6 +17,9 @@ type Options struct {
 	// unconstrained — callers that operate with elevated privilege should
 	// always set it (#1219).
 	RestoreRoots []string
+	// RestorePathFilter narrows the allowlist once an entry is under a root;
+	// see backup.Lifecycle.RestorePathFilter (#1446).
+	RestorePathFilter func(string) bool
 }
 
 // lifecycle abstracts backup.NewLifecycle so tests can inject mocks.
@@ -29,8 +32,8 @@ type lifecycle interface {
 // newLifecycle is overridable in tests to avoid touching the real filesystem.
 // restoreRoots is the managed-root allowlist enforced on manifest-declared
 // restore destinations (#1219).
-var newLifecycle = func(dir string, restoreRoots []string) lifecycle {
-	return backup.Lifecycle{Dir: dir, RestoreRoots: restoreRoots}
+var newLifecycle = func(dir string, restoreRoots []string, restorePathFilter func(string) bool) lifecycle {
+	return backup.Lifecycle{Dir: dir, RestoreRoots: restoreRoots, RestorePathFilter: restorePathFilter}
 }
 
 // appendAuditEvent is overridable in tests to simulate audit log failures.
@@ -43,7 +46,7 @@ type Workflow struct {
 }
 
 func NewWorkflow(opts Options, out io.Writer) Workflow {
-	return Workflow{opts: opts, out: out, lc: newLifecycle(opts.BackupDir, opts.RestoreRoots)}
+	return Workflow{opts: opts, out: out, lc: newLifecycle(opts.BackupDir, opts.RestoreRoots, opts.RestorePathFilter)}
 }
 
 func (w Workflow) List() error {
