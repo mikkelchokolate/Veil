@@ -72,8 +72,9 @@ func (m panelStateRepairMaterial) addRuntimeUnitActions(plan *installer.RepairPl
 	// was replaced by /usr/local/bin/veil (#1437).
 	veilBinary := m.deps.veilBinary
 	if veilBinary == "" {
-		resolved, err := m.deps.executable()()
-		if err == nil {
+		// Direct callers (tests) may bypass BuildPlanFromOptions, which owns the
+		// warning; only the fallback belongs here.
+		if resolved, err := m.deps.executable()(); err == nil {
 			veilBinary = resolved
 		}
 	}

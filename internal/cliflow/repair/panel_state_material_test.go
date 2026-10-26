@@ -102,3 +102,24 @@ func TestPanelStateRepairMaterialFallsBackWhenTheBinaryCannotBeResolved(t *testi
 		t.Fatalf("unresolvable binary did not fall back to the packaged default:\n%s", mieru)
 	}
 }
+
+// TestPanelStateRepairMaterialNoWarningWhenTheBinaryIsResolved keeps the normal
+// path quiet.
+func TestPanelStateRepairMaterialNoWarningWhenTheBinaryIsResolved(t *testing.T) {
+	dir := t.TempDir()
+	var warnings []string
+	material := newPanelStateRepairMaterial(Options{EtcDir: dir, VarDir: dir, SystemdDir: dir}, panelStateRepairSnapshot{
+		Settings: api.Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "local", Mode: "server"},
+		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
+	}, PlanDependencies{
+		Secret:     func(label string) string { return "repair-" + label },
+		Executable: func() (string, error) { return "/opt/veil/bin/veil", nil },
+		Notify:     func(msg string) { warnings = append(warnings, msg) },
+	})
+	if _, err := material.Apply(installer.RepairPlan{}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", warnings)
+	}
+}
