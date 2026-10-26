@@ -70,7 +70,9 @@ func Probe(binaryPath string) (CaddyCapabilities, error) {
 }
 
 // ProbeContext is Probe bound to a caller context; the internal timeout still
-// applies so an unresponsive caddy can never outlive it.
+// applies so an unresponsive caddy can never outlive it. An empty binary path
+// resolves `caddy` only through internal/syspath's trusted system directories;
+// a binary installed anywhere else must be passed explicitly.
 func ProbeContext(ctx context.Context, binaryPath string) (CaddyCapabilities, error) {
 	if binaryPath == "" {
 		binaryPath = "caddy"
