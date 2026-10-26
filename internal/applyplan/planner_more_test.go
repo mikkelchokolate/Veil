@@ -185,13 +185,16 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 			wantValid: true,
 		},
 		{
-			name: "warp outbound without warp enabled",
+			// #1416: disabling WARP keeps the rules but stops applying them — the
+			// sidecar is not rendered, so an enabled warp rule is inert, not an
+			// inconsistency that blocks every disable.
+			name: "warp outbound while warp is disabled is inert",
 			input: Input{
 				Rules: []model.RoutingRule{{Name: "warp-rule", Match: "geosite:test", Outbound: "warp", Enabled: true}},
 				Warp:  model.WarpConfig{Enabled: false},
 			},
-			wantErr:   []string{"routing rule warp-rule requires WARP to be enabled"},
-			wantValid: false,
+			wantErr:   nil,
+			wantValid: true,
 		},
 		{
 			name: "unsupported routing outbound",

@@ -256,7 +256,10 @@ func TestManagementApplyRejectsRoutingDatChecksumMismatch(t *testing.T) {
 	}
 }
 
-func TestManagementApplyPlanRejectsRoutingRuleUsingDisabledWarpOutbound(t *testing.T) {
+// TestManagementApplyPlanAcceptsRoutingRulesWhileWarpIsDisabled locks #1416:
+// disabling WARP keeps the operator's rules and stops applying them; the plan
+// must stay valid instead of blocking every disable.
+func TestManagementApplyPlanAcceptsRoutingRulesWhileWarpIsDisabled(t *testing.T) {
 	statePath := filepath.Join(t.TempDir(), "state.json")
 	if err := os.WriteFile(statePath, []byte(`{
 		"settings":{"panelListen":"127.0.0.1:2096","mode":"dev","domain":"vpn.example.com","hysteria2Password":"hy2-secret"},
@@ -271,15 +274,15 @@ func TestManagementApplyPlanRejectsRoutingRuleUsingDisabledWarpOutbound(t *testi
 
 	r.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/apply/plan", nil))
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var response ApplyPlanResponse
 	if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
-	if response.Valid || !strings.Contains(strings.Join(response.Errors, ";"), "requires WARP to be enabled") {
-		t.Fatalf("expected disabled WARP routing validation error: %+v", response)
+	if !response.Valid || len(response.Errors) != 0 {
+		t.Fatalf("disabled WARP with kept rules must produce a valid plan: %+v", response)
 	}
 }
 

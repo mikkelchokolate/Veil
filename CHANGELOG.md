@@ -11,8 +11,9 @@ All notable changes to Veil will be documented in this file.
   including rules the operator had created by hand and rules that were already
   disabled, and re-enabling restored only the stock `warp-routing` rule. Turning
   WARP off now just takes the outbound down: the rules stay in the state, the
-  WARP sidecar is simply not rendered, and re-enabling brings the previous
-  routing back unchanged (#1416).
+  WARP sidecar is not rendered and its rules are inert (the apply plan no longer
+  treats them as an inconsistency), and re-enabling brings the previous routing
+  back unchanged (#1416).
 - The Let's Encrypt IP-certificate issuer no longer runs its helpers
   (`env`, `sh`, `rm`, the package managers, `curl`, `socat`, `openssl`,
   `crontab`) through the invoking shell's `PATH`. It runs as root from
