@@ -84,8 +84,8 @@ assert_no_veil_firewall_rules() {
 # certificate from <stdin>". Poll for a bounded time instead, and fail with the
 # listener named.
 panel_tls_issuer() { # $1 = port, $2 = SNI server name (optional)
-  local port="$1" servername="${2:-127.0.0.1}" attempt issuer=""
-  for attempt in $(seq 1 60); do
+  local port="$1" servername="${2:-127.0.0.1}" issuer=""
+  for _ in $(seq 1 60); do
     issuer="$(openssl s_client -connect "127.0.0.1:${port}" -servername "${servername}" </dev/null 2>/dev/null \
       | openssl x509 -noout -issuer 2>/dev/null || true)"
     if [ -n "${issuer}" ]; then
