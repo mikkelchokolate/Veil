@@ -8,6 +8,7 @@ import (
 
 	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
 	repairflow "github.com/mikkelchokolate/Veil/internal/cliflow/repair"
+	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/veilenv"
 	"github.com/spf13/cobra"
@@ -122,9 +123,12 @@ func discoverInstalledLayout() (installedLayout, bool) {
 			varDir = filepath.Dir(statePath)
 		}
 	}
-	if etcDir == "" || varDir == "" {
+	if etcDir == "" && varDir == "" {
 		return installedLayout{}, false
 	}
+	// A layout is allowed to record only one dimension: `install` takes --etc-dir
+	// and --var-dir independently, and a repaired env may only carry the etc
+	// block. Unknown dimensions are compared against the packaged default.
 	return installedLayout{etcDir: etcDir, varDir: varDir}, true
 }
 
@@ -138,10 +142,19 @@ func resolveRepairLayout(cmd *cobra.Command, etcFlag, varFlag string) (string, s
 		return etcFlag, varFlag, nil
 	}
 	if strings.TrimSpace(os.Getenv("VEIL_ETC_DIR")) != "" || strings.TrimSpace(os.Getenv("VEIL_VAR_DIR")) != "" {
-		return etcFlag, varFlag, nil
+		return hostenv.EtcDir(), hostenv.VarDir(), nil
 	}
 	installed, ok := discoverInstalledLayout()
-	if !ok || (installed.etcDir == etcFlag && installed.varDir == varFlag) {
+	if !ok {
+		return etcFlag, varFlag, nil
+	}
+	if installed.etcDir == "" {
+		installed.etcDir = etcFlag
+	}
+	if installed.varDir == "" {
+		installed.varDir = varFlag
+	}
+	if sameKeyPath(installed.etcDir, etcFlag) && sameKeyPath(installed.varDir, varFlag) {
 		return etcFlag, varFlag, nil
 	}
 	return "", "", fmt.Errorf("this host is installed with a custom layout (%s, %s); rerun with --etc-dir %s --var-dir %s so repair fixes the installed tree instead of writing the packaged defaults", installed.etcDir, installed.varDir, installed.etcDir, installed.varDir)

@@ -120,3 +120,70 @@ func TestRepairKeepsThePackagedDefaultsWithoutAnInstalledLayout(t *testing.T) {
 		t.Fatalf("default layout reported as custom:\n%s", out.String())
 	}
 }
+
+// TestRepairUsesTheProcessEnvironmentLayout locks the inert-env branch: with
+// VEIL_ETC_DIR/VEIL_VAR_DIR exported, repair has to plan against those trees
+// instead of the hardcoded flag defaults (the branch used to return the
+// defaults, so the plan silently targeted /etc/veil).
+func TestRepairUsesTheProcessEnvironmentLayout(t *testing.T) {
+	stubRepairDiscovery(t, t.TempDir())
+	customEtc := filepath.Join(t.TempDir(), "opt", "veil", "etc")
+	customVar := filepath.Join(t.TempDir(), "opt", "veil", "var")
+	t.Setenv("VEIL_ETC_DIR", customEtc)
+	t.Setenv("VEIL_VAR_DIR", customVar)
+
+	cmd := NewRootCommand("test")
+	out := &bytes.Buffer{}
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	cmd.SetArgs([]string{"repair", "--dry-run"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("repair with an explicit process layout: %v\n%s", err, out.String())
+	}
+	text := out.String()
+	if !strings.Contains(text, customEtc) {
+		t.Fatalf("repair did not use VEIL_ETC_DIR:\n%s", text)
+	}
+	if strings.Contains(text, "/etc/veil") && !strings.Contains(text, customEtc) {
+		t.Fatalf("repair planned the packaged tree although VEIL_ETC_DIR is set:\n%s", text)
+	}
+}
+
+// TestRepairRefusesAPartiallyRecordedCustomLayout locks the second fallback:
+// a repaired env may carry only the etc block (VEIL_VAR_DIR is absent), which
+// used to make discovery report "not installed" and a bare repair write to
+// /etc/veil again. Each recorded dimension has to be compared on its own.
+func TestRepairRefusesAPartiallyRecordedCustomLayout(t *testing.T) {
+	systemdDir := t.TempDir()
+	stubRepairDiscovery(t, systemdDir)
+	customEtc := filepath.Join(t.TempDir(), "opt", "veil", "etc")
+	customVar := filepath.Join(t.TempDir(), "opt", "veil", "var")
+	envFile := filepath.Join(customEtc, "veil.env")
+	if err := os.MkdirAll(customEtc, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Etc block only: exactly what `repair` regenerates before this fix.
+	body := "VEIL_ETC_DIR=" + customEtc + "\nVEIL_KEY_PATH=" + filepath.Join(customEtc, "state.key") + "\n"
+	if err := os.WriteFile(envFile, []byte(body), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	writeCustomEnvDropIn(t, systemdDir, envFile)
+
+	cmd := NewRootCommand("test")
+	out := &bytes.Buffer{}
+	cmd.SetOut(out)
+	cmd.SetErr(out)
+	cmd.SetArgs([]string{"repair", "--dry-run"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatalf("repair on a partially recorded custom layout fell back to the defaults:\n%s", out.String())
+	}
+	if !strings.Contains(err.Error(), "custom layout") || !strings.Contains(err.Error(), customEtc) {
+		t.Fatalf("error %v does not name the custom etc dir", err)
+	}
+	// The unknown dimension is offered with the packaged default.
+	if !strings.Contains(err.Error(), "--var-dir /var/lib/veil") {
+		t.Fatalf("error %v does not suggest the var dir to pass", err)
+	}
+	_ = customVar
+}

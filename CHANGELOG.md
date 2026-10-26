@@ -16,7 +16,11 @@ All notable changes to Veil will be documented in this file.
   refuses with the exact `--etc-dir`/`--var-dir` to pass when that layout
   differs from the packaged defaults; explicit flags and an explicit
   `VEIL_ETC_DIR`/`VEIL_VAR_DIR` still win, and hosts without an installed
-  environment file keep the previous behaviour (#1473).
+  environment file keep the previous behaviour. A repair also records the
+  state root in the regenerated `veil.env` again (`VEIL_VAR_DIR`,
+  `VEIL_STATE_PATH`, `VEIL_APPLY_ROOT`, `VEIL_AUTO_TLS_DIR`), so the next bare
+  repair discovers the whole custom layout instead of only its `etc` half
+  (#1473).
 - `veil backup create` and `veil admin show/set/reset` now resolve the state and
   encryption key from the installed `veil.env` (explicit `--state`/`--key-path`
   still win) instead of the process environment and the packaged default. After
