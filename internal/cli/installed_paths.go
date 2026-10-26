@@ -2,6 +2,8 @@ package cli
 
 import (
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
@@ -54,4 +56,46 @@ func envNamesKey(envPath, keyPath string) bool {
 	}
 	recorded := veilenv.Value(body, veilenv.KeyPathKey)
 	return recorded != "" && sameKeyPath(recorded, keyPath)
+}
+
+// staleKeyPinDropIns lists generated drop-ins that still hardcode the state key
+// path the pre-#1472 packages wrote: a VEIL_KEY_PATH= literal in the helper
+// unit's Environment= without an EnvironmentFile=, or a --key-path flag in the
+// backup unit's ExecStart. Those override veil.env, so a rotation that repoints
+// the environment leaves the helper and the backup timer on the old key until
+// `veil install`/`veil repair` re-renders the drop-ins (#1473).
+func staleKeyPinDropIns(systemdDir string) []string {
+	var stale []string
+	for _, candidate := range []struct {
+		unit    string
+		isStale func(body string) bool
+	}{
+		{"veil-helper.service", func(body string) bool {
+			return strings.Contains(body, "VEIL_KEY_PATH=") && !strings.Contains(body, "EnvironmentFile=")
+		}},
+		{"veil-backup.service", func(body string) bool {
+			for _, line := range strings.Split(body, "\n") {
+				if strings.HasPrefix(strings.TrimSpace(line), "ExecStart=") && strings.Contains(line, "--key-path") {
+					return true
+				}
+			}
+			return false
+		}},
+	} {
+		matches, err := filepath.Glob(filepath.Join(systemdDir, candidate.unit+".d", "*.conf"))
+		if err != nil {
+			continue
+		}
+		for _, path := range matches {
+			body, err := os.ReadFile(path)
+			if err != nil {
+				continue
+			}
+			if candidate.isStale(string(body)) {
+				stale = append(stale, path)
+			}
+		}
+	}
+	sort.Strings(stale)
+	return stale
 }

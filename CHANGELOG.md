@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil admin rotate-key` now refuses to rotate while a pre-#1472 unit drop-in
+  still pins the state key path (an `Environment=VEIL_KEY_PATH=` literal in the
+  helper override without `EnvironmentFile=`, or `--key-path` in the backup
+  unit's `ExecStart`). Those overrides win over `veil.env`, so the rotation
+  would have repointed the environment while leaving the privileged helper and
+  the backup timer on the pre-rotation key — the timer would then archive new
+  state with the old key and delete every archive its verification rejected.
+  The refusal names the files and points at `veil repair`, which re-renders
+  them. `veil doctor` reports the same drift as a warning (it does not flip
+  readiness before the key path actually moves), and `docs/install.md` no
+  longer claims package hooks refresh managed units (#1473).
 - `veil repair` now works on the tree the host is actually installed with. On a
   custom `--etc-dir`/`--var-dir` install the packaged defaults made it write
   `veil.env`, panel TLS material and backups into `/etc/veil` and

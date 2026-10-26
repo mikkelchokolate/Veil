@@ -11,6 +11,7 @@ import (
 	versionflow "github.com/mikkelchokolate/Veil/internal/cliflow/version"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
 	"github.com/mikkelchokolate/Veil/internal/syspath"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 	"github.com/spf13/cobra"
 )
 
@@ -96,7 +97,14 @@ func buildDoctorSummary(version string) doctorSummary {
 	if runtime.GOOS == "linux" {
 		readiness = readiness.WithEgressDNS(doctorEgressDNSWithMieruUnitState)
 	}
+	readiness = readiness.WithUnitKeyPathDrift(doctorUnitKeyPathDriftProbe)
 	return readiness.Summary()
+}
+
+// doctorUnitKeyPathDriftProbe reports the stale pre-#1472 drop-ins that keep a
+// managed unit on the old key path. Tests replace it.
+var doctorUnitKeyPathDriftProbe doctorflow.UnitKeyPathDriftProbe = func() []string {
+	return staleKeyPinDropIns(veilenv.DefaultSystemdDir)
 }
 
 // doctorEgressDNSWithMieruUnitState runs the egress DNS probe and asks

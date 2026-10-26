@@ -288,11 +288,30 @@ source build or use a matching pre-migration backup and binary for recovery.
 
 For `.deb`, `.rpm` or `.apk` installations, install the matching v0.7.3 package
 with the package manager instead of overwriting its binary with `veil update`.
-Package hooks refresh managed units and restart services; the pre-upgrade
-backup and post-upgrade checks are still required. For containers, back up the
+Package hooks reload systemd and restart the units the package owns; they do
+not re-render `veil` drop-ins under `/etc/systemd/system`, so the pre-upgrade
+backup and post-upgrade checks are still required. Run `veil repair` after an
+upgrade if you installed with custom paths. For containers, back up the
 mounted state and key before replacing the image with
 `ghcr.io/mikkelchokolate/veil:0.7.3`. Rootless containers still cannot perform
 the host helper's systemd/firewall operations.
+
+### Custom install paths
+
+`veil repair` works on the tree the host is installed with: it discovers the
+layout from the installed `veil.service` drop-in and `veil.env`, and refuses to
+run when that layout differs from the packaged `/etc/veil` + `/var/lib/veil`
+defaults. Pass the paths explicitly to fix a custom install:
+
+```bash
+sudo veil repair --etc-dir /opt/veil/etc --var-dir /opt/veil/var --systemd-dir /etc/systemd/system
+```
+
+This re-renders the install drop-ins (including the key path they read: since
+v0.7.3 the helper, backup and Panel units take `VEIL_KEY_PATH` from `veil.env`
+instead of a hardcoded literal or `--key-path`). Upgraded custom installs keep
+their pre-0.7.3 drop-ins until that command runs, and `veil admin rotate-key`
+refuses to rotate while such a drop-in is still present.
 
 ### Check the upgraded installation
 
