@@ -50,8 +50,10 @@ var (
 	quicCommand     = syspath.Command
 	quicRuntimeGOOS = func() string { return runtime.GOOS }
 	quicGlob        = filepath.Glob
-	// quicSysctlDirs is the systemd sysctl file set, highest precedence first.
-	// Operator tuning lives here (90-network-tuning.conf and friends), and
+	// quicSysctlDirs is the systemd sysctl file set in systemd-sysctl(8)
+	// precedence order, highest first: /etc overrides /run, /run overrides
+	// /usr/local/lib, /usr/local/lib overrides /usr/lib, /usr/lib overrides
+	// /lib. Operator tuning lives here (90-network-tuning.conf and friends), and
 	// Veil's own drop-in sorts late, so the files have to be read instead of
 	// trusting the live value (#1492).
 	quicSysctlDirs = []string{
@@ -61,6 +63,8 @@ var (
 		"/usr/lib/sysctl.d",
 		"/lib/sysctl.d",
 	}
+	// quicSysctlConf is applied by systemd-sysctl after every *.conf file, so a
+	// tuning written there outranks the drop-ins; the scan reads it too.
 	quicSysctlConf = "/etc/sysctl.conf"
 )
 

@@ -99,3 +99,28 @@ func TestApplyQUICUDPBuffersIgnoresUnparsableSysctlValues(t *testing.T) {
 		}
 	}
 }
+
+// TestApplyQUICUDPBuffersHonoursSysctlConf covers the file systemd-sysctl
+// applies last: an operator tuning in /etc/sysctl.conf must survive the same
+// way a sysctl.d file does (#1492).
+func TestApplyQUICUDPBuffersHonoursSysctlConf(t *testing.T) {
+	fixture := newQUICFloorFixture(t, map[string]string{
+		quicRMEMSysctlPath: "16777216",
+		quicWMEMSysctlPath: "16777216",
+	})
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "sysctl.conf"), []byte("net.core.rmem_max = 134217728\nnet.core.wmem_max = 134217728\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	quicSysctlDirs = []string{filepath.Join(dir, "sysctl.d")}
+	quicSysctlConf = filepath.Join(dir, "sysctl.conf")
+
+	if err := ApplyQUICUDPBuffers(); err != nil {
+		t.Fatalf("ApplyQUICUDPBuffers: %v", err)
+	}
+	for _, want := range []string{"net.core.rmem_max = 134217728", "net.core.wmem_max = 134217728"} {
+		if !strings.Contains(fixture.written, want) {
+			t.Fatalf("drop-in lost the /etc/sysctl.conf value %q:\n%s", want, fixture.written)
+		}
+	}
+}
