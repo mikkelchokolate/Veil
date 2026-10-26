@@ -19,8 +19,15 @@ All notable changes to Veil will be documented in this file.
   rewrite — and prints the recorded path with the `--etc-dir`/`--var-dir` to
   use. The new `--reset-install-state` flag is the explicit opt-in for a fresh
   panel on the packaged paths; the recorded files are left on disk either way.
-  Environment values are now written with the same quoting the `veil.env`
-  rewrites use, so a path containing a space survives the round-trip (#1498).
+  The same resolved pair now drives every install step that touches state — the
+  Let's Encrypt IP-certificate snapshot (which decides whether the standalone
+  HTTP-01 listener can share :80 with veil-caddy) and the panel-domain update
+  after issuance — so those no longer fall back to the self-signed certificate
+  or leave the domain behind on a rotated host. A recorded key or state path
+  that is lexically inside the tree but resolves outside it through a symlink is
+  refused as well. Environment values are now written with the same quoting the
+  `veil.env` rewrites use, so a path containing a space survives the round-trip
+  (#1498).
 - `veil repair` now resolves the state key and state file the way the rest of
   the root CLI does: the installed `veil.env`, then the process environment,
   then the packaged `<etc>/state.key` and `<var>/state.json`. It used to assume

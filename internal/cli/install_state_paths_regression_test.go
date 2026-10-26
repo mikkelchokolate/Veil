@@ -2,12 +2,14 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/mikkelchokolate/Veil/internal/acmeip"
 	"github.com/mikkelchokolate/Veil/internal/hostaccess"
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
@@ -219,4 +221,137 @@ func TestInstallResetFlagInstallsAgainstThePackagedLayout(t *testing.T) {
 	if body, err := os.ReadFile(outside); err != nil || string(body) != "recorded state" {
 		t.Fatalf("install touched the recorded state file: %q %v", body, err)
 	}
+}
+
+// TestInstallReadsTheCertSnapshotWithTheResolvedPair covers the LE IP-cert
+// leg: the stand-alone HTTP-01 port is chosen from the persisted panel state, so
+// that read has to use the same pair the rest of the install resolved (#1498).
+func TestInstallReadsTheCertSnapshotWithTheResolvedPair(t *testing.T) {
+	stubInstallStatePathSeams(t)
+	oldSnapshot := installLoadCertSnapshot
+	var gotState, gotKey string
+	installLoadCertSnapshot = func(statePath, keyPath string) (model.ManagementSnapshot, bool) {
+		gotState, gotKey = statePath, keyPath
+		return model.ManagementSnapshot{}, false
+	}
+	t.Cleanup(func() { installLoadCertSnapshot = oldSnapshot })
+
+	etcDir, varDir := t.TempDir(), t.TempDir()
+	keyPath := filepath.Join(etcDir, "rotated-state.key")
+	statePath := filepath.Join(varDir, "state.json")
+	seedInstallState(t, keyPath, statePath)
+	env := "VEIL_KEY_PATH=" + keyPath + "\nVEIL_STATE_PATH=" + statePath + "\nVEIL_PANEL_ACCESS=direct\n"
+	if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte(env), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	err := applyRURecommendedInstall(cmd, installer.RURecommendedProfile{
+		Domain: "example.com", Username: "veil", Password: "pw", WebBasePath: "/panel/", PanelAccess: "direct",
+	}, ruRecommendedInstallOptions{EtcDir: etcDir, VarDir: varDir, PanelAccess: "direct", LEIPCert: true, PublicIP: "127.0.0.1"})
+	if err != nil {
+		t.Fatalf("direct install: %v", err)
+	}
+	if gotState != statePath || gotKey != keyPath {
+		t.Fatalf("cert snapshot read from (%q, %q), want the resolved (%q, %q)", gotState, gotKey, statePath, keyPath)
+	}
+}
+
+// TestInstallUpdatesTheDomainOnARotatedStateKey pins the second LE call site:
+// the issued certificate names the public IP and the persisted panel domain is
+// pointed at it. Using the packaged key there failed with a GCM error that the
+// caller downgraded to a warning, so the install reported success without the
+// certificate identity it had just obtained.
+func TestInstallUpdatesTheDomainOnARotatedStateKey(t *testing.T) {
+	stubInstallStatePathSeams(t)
+	oldIssue := leIPCertIssueFunc
+	leIPCertIssueFunc = func(_ context.Context, opts acmeip.IssueOptions) (acmeip.IssuedCert, error) {
+		if err := os.WriteFile(opts.CertPath, []byte("LE-CERT"), 0o644); err != nil {
+			t.Fatalf("write fake cert: %v", err)
+		}
+		if err := os.WriteFile(opts.KeyPath, []byte("LE-KEY"), 0o640); err != nil {
+			t.Fatalf("write fake key: %v", err)
+		}
+		return acmeip.IssuedCert{CertPath: opts.CertPath, KeyPath: opts.KeyPath}, nil
+	}
+	t.Cleanup(func() { leIPCertIssueFunc = oldIssue })
+
+	etcDir, varDir := t.TempDir(), t.TempDir()
+	keyPath := filepath.Join(etcDir, "rotated-state.key")
+	statePath := filepath.Join(varDir, "state.json")
+	seedInstallState(t, keyPath, statePath)
+	// The pre-rotation key is still on disk, as the documented procedure leaves it.
+	if _, err := secrets.LoadOrCreateKey(filepath.Join(etcDir, "state.key")); err != nil {
+		t.Fatal(err)
+	}
+	env := "VEIL_KEY_PATH=" + keyPath + "\nVEIL_STATE_PATH=" + statePath + "\nVEIL_PANEL_ACCESS=direct\n"
+	if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte(env), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := NewRootCommand("test")
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	err := applyRURecommendedInstall(cmd, installer.RURecommendedProfile{
+		Domain: "example.com", Username: "veil", Password: "pw", WebBasePath: "/panel/", PanelAccess: "direct",
+	}, ruRecommendedInstallOptions{EtcDir: etcDir, VarDir: varDir, PanelAccess: "direct", LEIPCert: true, PublicIP: "127.0.0.1"})
+	if err != nil {
+		t.Fatalf("direct install over a rotated key: %v", err)
+	}
+	if strings.Contains(out.String(), "could not obtain Let's Encrypt IP certificate") {
+		t.Fatalf("install fell back to the self-signed certificate:\n%s", out.String())
+	}
+	raw, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cipher, err := cipherFromRawKey(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, ok, err := managementstate.NewStore(statePath, cipher).Load()
+	if err != nil || !ok {
+		t.Fatalf("load state with the rotated key: ok=%v err=%v", ok, err)
+	}
+	if snapshot.Settings.Domain != "127.0.0.1" {
+		t.Fatalf("panel domain = %q, want the issued IP identity", snapshot.Settings.Domain)
+	}
+}
+
+// TestInstallRefusesAStateKeyLeafSymlinkedOutsideTheTree covers the leaf case:
+// the recorded path is lexically inside the tree, but an existing symlink sends
+// LoadOrCreateKey outside it, so install refuses instead of writing a key the
+// environment does not name.
+func TestInstallRefusesAStateKeyLeafSymlinkedOutsideTheTree(t *testing.T) {
+	stubInstallStatePathSeams(t)
+	etcDir, varDir := t.TempDir(), t.TempDir()
+	outside := filepath.Join(t.TempDir(), "real.key")
+	if _, err := secrets.LoadOrCreateKey(outside); err != nil {
+		t.Fatal(err)
+	}
+	linked := filepath.Join(etcDir, "state.key")
+	if err := os.Symlink(outside, linked); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	env := "VEIL_KEY_PATH=" + linked + "\nVEIL_PANEL_ACCESS=local\n"
+	if err := os.WriteFile(filepath.Join(etcDir, "veil.env"), []byte(env), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	etcBefore, varBefore := treeSnapshot(t, etcDir), treeSnapshot(t, varDir)
+
+	err := runInstallForStatePaths(t, ruRecommendedInstallOptions{EtcDir: etcDir, VarDir: varDir})
+	if err == nil {
+		t.Fatal("install followed a state-key symlink out of the tree")
+	}
+	for _, want := range []string{linked, "--etc-dir", "--reset-install-state"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %v does not mention %q", err, want)
+		}
+	}
+	assertSameTree(t, etcBefore, treeSnapshot(t, etcDir))
+	assertSameTree(t, varBefore, treeSnapshot(t, varDir))
 }
