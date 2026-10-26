@@ -20,13 +20,17 @@ import (
 const promotionTransactionJournalName = ".promotion-transaction.json"
 
 // promotionJournalUnusable marks a journal recovery can never apply: it does
-// not decode, does not describe a transaction this helper may replay, or names
-// destinations the live policy rejects. The journal lives under the
-// service-writable backup root, so leaving it in place let one planted or
-// corrupted file fail every later promote — the only path that publishes
-// artifacts (#1267). withPromotionLock quarantines this class and proceeds;
-// I/O failures and rollback errors stay hard errors, because continuing on a
-// half-restored tree is worse than refusing.
+// not decode, is not a regular file, does not describe a transaction this
+// helper may replay, or names destinations the live policy rejects. The
+// promotion backup root is helper-owned (root:root 0700, enforced by
+// openPromotionBackupRoot), so the panel cannot write such a journal; a crash,
+// a legacy shape or a root-level mistake can, and while it sat there every
+// later promote failed — the only path that publishes artifacts (#1267).
+// withPromotionLock quarantines this class and reports the failure once; I/O
+// failures and rollback errors stay hard errors, because continuing on a
+// half-restored tree is worse than refusing. A caller that simply forgot its
+// destination policy is not part of this class: that journal is valid and is
+// left untouched for the correct call.
 type promotionJournalUnusable struct{ err error }
 
 func (e *promotionJournalUnusable) Error() string { return e.err.Error() }
@@ -377,6 +381,12 @@ func recoverPromotionTransactionAt(rootDir *safefs.Dir, root string, validateDes
 		// A planted journal can claim any generation, and refusing here would
 		// wedge every promote forever; the journal is discarded, not applied.
 		return unusablePromotionJournal(errors.New("promotion recovery fencing generation regressed"))
+	}
+	if validateDestination == nil {
+		// A caller error, not a property of the journal: quarantining a valid
+		// journal would destroy the recovery a correct caller needs (#1267
+		// review). Refuse and leave it in place.
+		return errors.New("promotion journal recovery requires a destination policy")
 	}
 	if err := validatePromotionDestinations(journal, validateDestination); err != nil {
 		return unusablePromotionJournal(err)
