@@ -808,9 +808,13 @@ func (ctx ManagementApplyContext) syncFirewall() []ServiceActionResult {
 		for i, r := range rules {
 			reqRules[i] = privileged.FirewallRule{Command: r.Command, Args: r.Args}
 		}
-		if _, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{Rules: reqRules, Fence: ctx.fenceToken()}); err != nil {
+		firewallResult, err := ctx.state.privileged.FirewallApply(ctx.operationContext(), privileged.FirewallRequest{Rules: reqRules, Fence: ctx.fenceToken()})
+		if err != nil {
 			result.Error = err.Error()
 			return []ServiceActionResult{result}
+		}
+		if len(firewallResult.Warnings) > 0 {
+			result.Output = strings.Join(firewallResult.Warnings, "\n")
 		}
 	} else {
 		// ApplySafely refuses to enable an inactive UFW that has no SSH

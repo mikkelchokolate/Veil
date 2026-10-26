@@ -11,7 +11,11 @@ import (
 
 type ufwSnapshot struct {
 	Active bool
-	Rules  map[string]string
+	// InactiveConfigured is the number of configured rules `ufw status` cannot
+	// show because the firewall is not loaded (read from `ufw show added`).
+	InactiveConfigured int
+	configured         []ConfiguredRule
+	Rules              map[string]string
 	// Allows records only the inbound ALLOW entries (destination → comment).
 	// A deny/reject/limit on the SSH port does not pass management traffic,
 	// so it must not satisfy the enable gate (#1007).
@@ -42,6 +46,11 @@ func (a UFWApplier) ApplySafely(rules []Rule) error {
 	initial, err := a.snapshot()
 	if err != nil {
 		return err
+	}
+	if !initial.Active && initial.InactiveConfigured > 0 {
+		// Configured rules do not filter traffic until UFW is enabled; say so
+		// instead of quietly treating the firewall as empty (#1434).
+		warnInactiveUFW("WARNING: UFW is disabled but %d configured rule(s) exist; they do not filter traffic until `ufw enable`, and Veil treats them as pre-existing rules\n", initial.InactiveConfigured)
 	}
 	if !initial.Active && !containsSSHManagementRule(rules) && !snapshotHasSSH(initial) {
 		return errors.New("refusing to enable UFW without a staged SSH management access rule")
@@ -105,7 +114,29 @@ func (a UFWApplier) snapshot() (ufwSnapshot, error) {
 	if err != nil {
 		return ufwSnapshot{}, fmt.Errorf("parse ufw status: %w", err)
 	}
+	a.mergeConfiguredWhenInactive(&snap)
 	return snap, nil
+}
+
+// mergeConfiguredWhenInactive fills an inactive snapshot from `ufw show added`:
+// an unloaded firewall still has its configured rules, and treating them as
+// absent made rollback delete the operator's pre-staged rules and the stale
+// pass miss Veil rules that go live on enable (#1434).
+func (a UFWApplier) mergeConfiguredWhenInactive(snap *ufwSnapshot) {
+	if snap.Active {
+		return
+	}
+	configured, ok := a.configuredSnapshot()
+	if !ok {
+		return
+	}
+	for target, comment := range configured.Rules {
+		snap.Rules[target] = comment
+	}
+	for target, comment := range configured.Allows {
+		snap.Allows[target] = comment
+	}
+	snap.InactiveConfigured = len(configured.Rules)
 }
 
 func (a UFWApplier) restore(initial ufwSnapshot, added []string) error {

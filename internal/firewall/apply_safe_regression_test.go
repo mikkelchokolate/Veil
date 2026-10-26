@@ -73,11 +73,13 @@ func (m *safeUFWModel) Run(input veilruntime.RuntimeCommandInput) veilruntime.Ru
 
 func (m *safeUFWModel) statusOutput() string {
 	var b strings.Builder
-	if m.enabled {
-		b.WriteString("Status: active\n")
-	} else {
+	if !m.enabled {
+		// Real ufw prints only the status line while the firewall is not loaded;
+		// its configured rules are visible through `ufw show added` only (#1434).
 		b.WriteString("Status: inactive\n")
+		return b.String()
 	}
+	b.WriteString("Status: active\n")
 	targets := make([]string, 0, len(m.rules))
 	for target := range m.rules {
 		targets = append(targets, target)
@@ -102,12 +104,16 @@ func (m *safeUFWModel) showAddedOutput() string {
 	}
 	sort.Strings(targets)
 	for _, target := range targets {
+		action := "allow"
+		if override, ok := m.actions[target]; ok {
+			action = strings.ToLower(override)
+		}
 		comment := m.rules[target]
 		if comment == "" {
-			fmt.Fprintf(&b, "ufw allow %s\n", target)
+			fmt.Fprintf(&b, "ufw %s %s\n", action, target)
 			continue
 		}
-		fmt.Fprintf(&b, "ufw allow %s comment %s\n", target, comment)
+		fmt.Fprintf(&b, "ufw %s %s comment %s\n", action, target, comment)
 	}
 	return b.String()
 }
@@ -193,6 +199,11 @@ func TestApplySafelyFailureAtEveryCommandRestoresRulesAndEnabledState(t *testing
 		t.Fatal("expected ufw commands on the success path")
 	}
 	for failAt := 1; failAt <= len(success.calls); failAt++ {
+		if strings.Join(success.calls[failAt-1], " ") == "ufw show added" {
+			// Reading the configured ruleset is best-effort: an unavailable
+			// `ufw show added` must not fail the apply (#1434).
+			continue
+		}
 		t.Run(fmt.Sprintf("command-%d", failAt), func(t *testing.T) {
 			model := &safeUFWModel{rules: cloneRuleMap(initial), failAt: failAt}
 			if err := NewUFWApplierWithRunner(model).ApplySafely(managementSSHAndPanelRules()); err == nil {

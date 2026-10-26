@@ -171,6 +171,7 @@ func (a UFWApplier) RemoveManagedRules() ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse ufw status: %w", err)
 	}
+	a.mergeConfiguredWhenInactive(&snap)
 	targets := make([]string, 0)
 	for target, comment := range snap.Rules {
 		if !IsVeilManagedComment(comment) || IsManagementSSHComment(comment) {
