@@ -11,8 +11,10 @@ import (
 
 // rollbackDefaultSystemdDir is the unit directory install and repair back up;
 // it must stay absolute. Tests replace it (an empty value disables the name
-// filter), and a custom --systemd-dir install still needs an explicit
-// --restore-root for its own tree.
+// filter). The command prefers the directory the installed veil.env records
+// (VEIL_SYSTEMD_DIR), so a custom --systemd-dir install restores its own tree
+// without extra flags while that file is intact; an environment that no longer
+// records it falls back here and the operator has to pass --restore-root.
 var rollbackDefaultSystemdDir = defaultSystemdDir
 
 func rollbackSystemdRoot() string { return rollbackDefaultSystemdDir }
