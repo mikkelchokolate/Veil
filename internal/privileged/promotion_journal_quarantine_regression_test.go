@@ -1,6 +1,7 @@
 package privileged
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,7 +71,7 @@ func TestPromotionQuarantinesAJournalOutsideTheDestinationPolicy(t *testing.T) {
 	}
 	journal := `{"version":1,"transactionId":"planted","kind":"promote","phase":"prepared",` +
 		`"manifestPath":"/tmp/planted/manifest.json","fenceGeneration":0,"manifest":{"records":[` +
-		`{"id":"evil","destination":"/tmp/not-managed","phase":"prepared"}]}}`
+		`{"artifactId":"evil","destination":"/tmp/not-managed","phase":"prepared"}]}}`
 	if err := os.WriteFile(filepath.Join(backups, promotionTransactionJournalName), []byte(journal), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +112,7 @@ func TestPromotionRecoveryKeepsTheJournalWhenThePolicyIsMissing(t *testing.T) {
 	}
 	journal := `{"version":1,"transactionId":"planted","kind":"promote","phase":"prepared",` +
 		`"manifestPath":"/tmp/planted/manifest.json","fenceGeneration":0,"manifest":{"records":[` +
-		`{"id":"managed","destination":"/tmp/managed","phase":"prepared"}]}}`
+		`{"artifactId":"managed","destination":"/tmp/managed","phase":"prepared"}]}}`
 	journalPath := filepath.Join(backups, promotionTransactionJournalName)
 	if err := os.WriteFile(journalPath, []byte(journal), 0o600); err != nil {
 		t.Fatal(err)
@@ -146,24 +147,31 @@ func TestPromotionQuarantinesANonRegularJournal(t *testing.T) {
 }
 
 // TestPromotionQuarantinesAFencingRegressedJournal keeps a journal from a
-// "newer" generation from wedging the root: it is discarded, not replayed.
+// "newer" generation from wedging the root: it is discarded, not replayed. The
+// destination and the ArtifactID are the fixture's own, so only the fencing
+// branch can classify it (#1267 review).
 func TestPromotionQuarantinesAFencingRegressedJournal(t *testing.T) {
 	root := t.TempDir()
 	request := preparePromotionFixture(t, root, 1)
+	request.FenceGeneration = 1
 	backups := filepath.Join(root, "backups")
 	if err := os.MkdirAll(backups, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	journal := `{"version":1,"transactionId":"future","kind":"promote","phase":"prepared",` +
-		`"manifestPath":"/tmp/future/manifest.json","fenceGeneration":99,"manifest":{"records":[` +
-		`{"id":"managed","destination":"/tmp/managed","phase":"prepared"}]}}`
+	journal := fmt.Sprintf(`{"version":1,"transactionId":"future","kind":"promote","phase":"prepared",`+
+		`"manifestPath":%q,"fenceGeneration":99,"manifest":{"records":[`+
+		`{"artifactId":%q,"destination":%q,"phase":"prepared"}]}}`,
+		filepath.Join(backups, "future", "manifest.json"), request.Artifacts[0].ID, request.Artifacts[0].Destination)
 	if err := os.WriteFile(filepath.Join(backups, promotionTransactionJournalName), []byte(journal), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	withStubbedArtifactOwnership(t, func() {
 		_, err := promoteResolvedArtifacts(backups, fixedPromotionNow, request)
-		if err == nil || !strings.Contains(err.Error(), "quarantined") {
-			t.Fatalf("first promote error = %v, want the one-shot quarantine failure", err)
+		if err == nil || !strings.Contains(err.Error(), "fencing generation regressed") {
+			t.Fatalf("first promote error = %v, want the fencing-generation quarantine", err)
+		}
+		if !strings.Contains(err.Error(), "quarantined") {
+			t.Fatalf("fencing-regressed journal was not quarantined: %v", err)
 		}
 		if _, retryErr := promoteResolvedArtifacts(backups, fixedPromotionNow, request); retryErr != nil {
 			t.Fatalf("promotion wedged by a fencing-regressed journal: %v", retryErr)
