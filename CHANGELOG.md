@@ -6,6 +6,16 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- A custom `--systemd-dir` install now records its unit directory in `veil.env`
+  (`VEIL_SYSTEMD_DIR`), and `veil repair`, the `veil admin rotate-key` preflight
+  and `veil doctor` read it instead of assuming `/etc/systemd/system`. Before,
+  repair re-rendered the units into the packaged path and left the live ones
+  stale, the stale-key-pin preflight could not see a drop-in in the real unit
+  directory, and the doctor drift check was blind to it too. The packaged default
+  stays implicit, so environments of unchanged installs are byte-identical
+  (#1484). The stale-pin scanner also ignores a relative `EnvironmentFile=` the
+  way systemd does, so a same-named file in the working directory can no longer
+  make a literal key pin look harmless (#1496 review).
 - `veil repair` no longer reports success while silently keeping an expired
   Panel certificate. In direct mode with `--le-ip-cert` enabled it attempted the
   Let's Encrypt IP-certificate renewal while building the plan and discarded the

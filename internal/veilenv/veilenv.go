@@ -19,6 +19,11 @@ import (
 // encryption key from.
 const KeyPathKey = "VEIL_KEY_PATH"
 
+// SystemdDirKey records a custom --systemd-dir so repair, the rotate-key
+// preflight and the doctor drift check look at the directory the units were
+// actually installed into instead of the packaged one (#1484).
+const SystemdDirKey = "VEIL_SYSTEMD_DIR"
+
 // DefaultSystemdDir is where the installed veil.service drop-ins live.
 const DefaultSystemdDir = "/etc/systemd/system"
 

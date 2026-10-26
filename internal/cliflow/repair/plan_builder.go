@@ -220,7 +220,7 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 	}
 	statePath, keyPath := installedStatePaths(opts)
 	material := panelmaterial.NewManagedMaterial(panelmaterial.Input{
-		Paths:           panelmaterial.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir},
+		Paths:           panelmaterial.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir},
 		KeyPath:         keyPath,
 		StatePath:       statePath,
 		PanelAuthToken:  token,
