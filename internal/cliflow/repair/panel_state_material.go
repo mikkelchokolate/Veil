@@ -1,7 +1,6 @@
 package repair
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -73,15 +72,10 @@ func (m panelStateRepairMaterial) addRuntimeUnitActions(plan *installer.RepairPl
 	// was replaced by /usr/local/bin/veil (#1437).
 	veilBinary := m.deps.veilBinary
 	if veilBinary == "" {
-		resolved, err := m.deps.executable()()
-		if err == nil {
+		// Direct callers (tests) may bypass BuildPlanFromOptions, which owns the
+		// warning; only the fallback belongs here.
+		if resolved, err := m.deps.executable()(); err == nil {
 			veilBinary = resolved
-		} else {
-			// Falling back silently would render the packaged /usr/local/bin/veil
-			// into a host whose panel runs from another path, which is the same
-			// flip-flop the VarDir fix removed — just for another field (#1437
-			// review).
-			m.deps.notify(fmt.Sprintf("could not resolve the running veil binary path: %v; the re-rendered units use the packaged %s, so pass the installed binary path explicitly if the panel runs from elsewhere", err, "/usr/local/bin/veil"))
 		}
 	}
 	cfg := renderer.SystemdConfig{

@@ -121,7 +121,12 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 	}
 	veilBinary, executableErr := deps.executable()()
 	if executableErr != nil {
+		// The plan falls back to the packaged path, so a custom-binary install
+		// would get the wrong ExecStart/ExecStartPre. Warn here, where every plan
+		// shape passes — including the no-state/Unreadable-state repair that never
+		// reaches the panel material (#1437 review).
 		veilBinary = ""
+		deps.notify(fmt.Sprintf("could not resolve the running veil binary path: %v; the re-rendered units use the packaged /usr/local/bin/veil. Verify the rendered ExecStart=/ExecStartPre= paths before applying", executableErr))
 	}
 	deps.veilBinary = veilBinary
 	statePath, keyPath := installedStatePaths(opts)

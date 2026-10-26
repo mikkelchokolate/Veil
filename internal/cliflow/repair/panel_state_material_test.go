@@ -103,32 +103,6 @@ func TestPanelStateRepairMaterialFallsBackWhenTheBinaryCannotBeResolved(t *testi
 	}
 }
 
-// TestPanelStateRepairMaterialWarnsWhenTheBinaryCannotBeResolved keeps the
-// operator informed instead of silently rendering the packaged binary into a
-// host that runs the panel from another path (#1437 review).
-func TestPanelStateRepairMaterialWarnsWhenTheBinaryCannotBeResolved(t *testing.T) {
-	opts := Options{EtcDir: t.TempDir(), VarDir: t.TempDir(), SystemdDir: t.TempDir()}
-	var warnings []string
-	material := newPanelStateRepairMaterial(opts, panelStateRepairSnapshot{
-		Settings: api.Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "local", Mode: "server"},
-		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
-	}, PlanDependencies{
-		Secret:     func(label string) string { return "repair-" + label },
-		Executable: func() (string, error) { return "", errors.New("no executable") },
-		Notify:     func(msg string) { warnings = append(warnings, msg) },
-	})
-
-	if _, err := material.Apply(installer.RepairPlan{}); err != nil {
-		t.Fatalf("Apply: %v", err)
-	}
-	joined := strings.Join(warnings, "\n")
-	for _, want := range []string{"could not resolve the running veil binary path", "no executable", "/usr/local/bin/veil"} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("warnings %v do not mention %q", warnings, want)
-		}
-	}
-}
-
 // TestPanelStateRepairMaterialNoWarningWhenTheBinaryIsResolved keeps the normal
 // path quiet.
 func TestPanelStateRepairMaterialNoWarningWhenTheBinaryIsResolved(t *testing.T) {
