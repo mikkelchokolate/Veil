@@ -15,10 +15,12 @@ import (
 // reports "unsupported" and there is nothing to inject. Keeping them in a
 // _linux_test file lets the package's test binary compile for darwin/freebsd.
 
-// TestPreflightChargesDecryptedInspectionWorkspace covers #1119: an encrypted
-// archive's inspect workspace holds the decrypted tarball (≤maxBytes) AND the
-// extracted members (≤maxBytes aggregate) at once, so the archive directory
-// must be charged archiveSize + 2*maxBytes — not archiveSize + maxBytes.
+// TestPreflightChargesDecryptedInspectionWorkspace covers #1119 and #1254 F2:
+// an encrypted archive's inspect workspace holds the decrypted tarball
+// (≤maxBytes) AND the extracted members (≤maxBytes aggregate) at once, so the
+// filesystem that hosts the workspace must be charged 2*maxBytes — not
+// maxBytes. The workspace lives in the private temp root, so the archive
+// directory itself is no longer charged: reading the archive needs no room.
 func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 	root := t.TempDir()
 	archive := filepath.Join(root, "backup.tar.gz.enc")
@@ -27,13 +29,13 @@ func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 	}
 	const maxBytes = int64(10)
 	const reserve = int64(64 * 1024 * 1024)
-	archiveRequirement := int64(4) + 2*maxBytes + reserve
+	workspaceRequirement := 2*maxBytes + reserve
 
 	old := backupStatfs
 	t.Cleanup(func() { backupStatfs = old })
 	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
 		stats.Bsize = 1
-		stats.Bavail = uint64(archiveRequirement - 1)
+		stats.Bavail = uint64(workspaceRequirement - 1)
 		return nil
 	}
 	if err := PreflightVerifySpace(archive, maxBytes); err == nil || !strings.Contains(err.Error(), "insufficient free space") {
@@ -41,14 +43,14 @@ func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 	}
 	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
 		stats.Bsize = 1
-		stats.Bavail = uint64(archiveRequirement)
+		stats.Bavail = uint64(workspaceRequirement)
 		return nil
 	}
 	if err := PreflightVerifySpace(archive, maxBytes); err != nil {
 		t.Fatalf("verify preflight rejected exactly-sufficient space: %v", err)
 	}
 
-	// Same accounting on the restore preflight: state dir on the same
+	// Same accounting on the restore preflight: the state dir on the same
 	// filesystem adds its own maxBytes + member sizes.
 	statePath := filepath.Join(root, "state.json")
 	keyPath := filepath.Join(root, "state.key")
@@ -58,7 +60,7 @@ func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	restoreRequirement := archiveRequirement + maxBytes + 3 + 2 + 5
+	restoreRequirement := workspaceRequirement + maxBytes + 3 + 2 + 5
 	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
 		stats.Bsize = 1
 		stats.Bavail = uint64(restoreRequirement - 1)

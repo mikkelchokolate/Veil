@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"os"
 	"strings"
 	"time"
 
@@ -43,6 +44,39 @@ func sweepBackupWorkspaceResidue(dirPath string) {
 	}
 	defer dir.Close()
 	sweepRestoreResidueEntries(dir, []string{".veil-backup-"}, nil)
+}
+
+// sweepInspectWorkspaceResidue removes stale .veil-backup-inspect-* workspaces
+// from the private temp root, where inspection stages decrypted state
+// (state.json, state.key and veil.db) until it returns (#1254 F2). The temp
+// root is shared with other users, so only entries owned by this user are
+// removed, and a fresh workspace (younger than restoreResidueMinAge) may belong
+// to a live operation and is kept.
+func sweepInspectWorkspaceResidue() {
+	root, err := safefs.OpenDir(os.TempDir())
+	if err != nil {
+		return
+	}
+	defer root.Close()
+	entries, err := root.ReadDir()
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-restoreResidueMinAge)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, ".veil-backup-inspect-") {
+			continue
+		}
+		info, err := root.StatAt(name)
+		if err != nil || info.ModTime().After(cutoff) {
+			continue
+		}
+		if uid, _ := fileOwnerIDs(info); uid != os.Geteuid() {
+			continue
+		}
+		_ = root.RemoveTreeAt(name)
+	}
 }
 
 // sweepRestoreResidueEntries removes matched entries through the pinned

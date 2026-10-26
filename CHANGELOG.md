@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil backup verify` and `veil backup restore` no longer stage the decrypted
+  archive inside the backup directory. The inspection workspace — the decrypted
+  tarball plus the extracted `state.json`, `state.key` and `veil.db` — was
+  created as `.veil-backup-inspect-*` next to the archive, i.e. under
+  `/var/lib/veil/backups`, a directory the panel service owns and can write. A
+  local writer could rename that workspace away and substitute its members
+  between extraction and the reads, so the verification report and the journaled
+  commit could describe bytes the operator never backed up. The workspace now
+  lives in the private sticky temp root (0700, name not reachable by rename), the
+  space preflight charges that filesystem instead of the archive directory, and a
+  stale workspace left by a crash is swept from there (#1254).
 - Veil no longer treats an inactive UFW as an empty ruleset. `ufw status`
   prints only `Status: inactive` while the firewall is not loaded, so the
   firewall reconcile, the rollback, the stale-rule pass, the local prune and

@@ -81,12 +81,13 @@ func preflightBackupOperationSpace(archivePath, statePath, keyPath, databasePath
 		return backupPolicyError(archiveInfo.Size(), maxBytes)
 	}
 	requirements := map[string][]int64{
-		// The archive dir also hosts the .veil-backup-inspect-* workspace,
-		// which can hold a decrypted tarball (≤maxBytes) AND the extracted
-		// members (≤maxBytes aggregate) at once for encrypted archives —
-		// charging a single maxBytes undercounted restores of encrypted
-		// archives (#1119).
-		filepath.Dir(archivePath): {archiveInfo.Size(), maxBytes, maxBytes},
+		// The .veil-backup-inspect-* workspace lives in the private temp root,
+		// not next to the archive (#1254 F2), and can hold a decrypted tarball
+		// (≤maxBytes) AND the extracted members (≤maxBytes aggregate) at once
+		// for encrypted archives — charging a single maxBytes undercounted
+		// restores of encrypted archives (#1119). Reading the archive itself
+		// needs no room on the archive filesystem.
+		os.TempDir(): {maxBytes, maxBytes},
 	}
 	if restoring {
 		stateDir := filepath.Dir(statePath)
@@ -512,6 +513,20 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 	return result, nil
 }
 
+// inspectWorkspaceParent returns the directory the decryption workspace is
+// created in: the private temp root, never the archive directory. The archive
+// directory is /var/lib/veil/backups, which the panel service owns and can
+// write, so a local writer could rename the workspace away and substitute the
+// decrypted tarball or the extracted members between the create and the reads —
+// forging the verification report and the journaled commit (#1254 F2). The
+// sticky temp root rejects a rename by anyone but this process.
+var inspectWorkspaceParent = func() string {
+	return os.TempDir()
+}
+
+// inspectWorkspaceCreated is a test seam that observes the workspace path.
+var inspectWorkspaceCreated = func(string) {}
+
 func inspectBackupFile(path, passphrase string, configuredMax int64) (*extractedBackup, error) {
 	return inspectBackupFileWithOptions(path, passphrase, configuredMax, CryptoOptions{}, false)
 }
@@ -538,10 +553,12 @@ func inspectBackupFileWithOptions(path, passphrase string, configuredMax int64, 
 	// left behind; fresh entries (< restoreResidueMinAge) may belong to a live
 	// operation and are kept (#1125).
 	sweepBackupWorkspaceResidue(filepath.Dir(path))
-	workDir, err := os.MkdirTemp(filepath.Dir(path), ".veil-backup-inspect-*")
+	sweepInspectWorkspaceResidue()
+	workDir, err := os.MkdirTemp(inspectWorkspaceParent(), ".veil-backup-inspect-*")
 	if err != nil {
 		return nil, fmt.Errorf("create backup inspection workspace: %w", err)
 	}
+	inspectWorkspaceCreated(workDir)
 	result := &extractedBackup{workDir: workDir}
 	ok := false
 	defer func() {
