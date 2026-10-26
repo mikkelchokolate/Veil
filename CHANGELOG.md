@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil rollback restore` now accepts the systemd unit directory by default.
+  `veil install` and `veil repair` snapshot every unit and drop-in they overwrite
+  under `/etc/systemd/system`, but the default restore allowlist only covered
+  `/etc/veil` and `/var/lib/veil`, and the restore is all-or-nothing: the
+  documented recovery command in the README and the `veil menu` rollback option
+  refused such a backup as a whole with "restore destination
+  /etc/systemd/system/veil.service is outside the allowed roots" and restored
+  nothing. The defaults now include the configured unit directory, so the
+  product's own backups restore; a custom `--systemd-dir` install still needs
+  `--restore-root` for that tree, and unmanaged destinations are still refused
+  (#1446).
 - `veil admin rotate-key` now refuses to rotate while a pre-#1472 unit drop-in
   still pins the state key path (an `Environment=VEIL_KEY_PATH=` literal in the
   helper override without `EnvironmentFile=`, or `--key-path` in the backup
