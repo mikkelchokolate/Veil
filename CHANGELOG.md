@@ -6,6 +6,18 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil repair` no longer reports success while silently keeping an expired
+  Panel certificate. In direct mode with `--le-ip-cert` enabled it attempted the
+  Let's Encrypt IP-certificate renewal while building the plan and discarded the
+  error, so a blocked `:80`, a failed acme.sh run or an unreachable public IP
+  left the previous certificate in place and the command exited 0 with no
+  message. The failure is now printed as `warning:` next to the plan, including
+  on `--dry-run`; when the certificate was requested on that invocation
+  (`--le-ip-cert=true` or `--le-ip-cert-port`) the command fails instead, because
+  there success means the certificate was renewed. The Caddy configuration
+  re-render in the same builder no longer falls back silently either: when the
+  state-derived JSON cannot be built, repair says so and keeps the
+  profile-default configuration it already had (#1500).
 - `veil install` resolves the state key and the state file from the installed
   `veil.env` instead of always assuming `<etc>/state.key` and
   `<var>/state.json`, the same order the rest of the root CLI uses. After the

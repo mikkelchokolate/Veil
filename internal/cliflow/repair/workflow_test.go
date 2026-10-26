@@ -92,3 +92,46 @@ func TestRunPrintsEgressDNSWarning(t *testing.T) {
 		})
 	}
 }
+
+// #1500: plan-building findings (a failed certificate renewal, an
+// unreproducible Caddy configuration) are printed with the plan on both dry-run
+// and apply, so a successful exit never hides them.
+func TestRunPrintsPlanBuildWarnings(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		dryRun  bool
+		warning string
+	}{
+		{"dry-run warns", true, "could not renew the Let's Encrypt IP certificate: permission denied"},
+		{"apply warns", false, "could not renew the Let's Encrypt IP certificate: permission denied"},
+		{"no warning", true, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			warnings := []string{}
+			if tc.warning != "" {
+				warnings = append(warnings, tc.warning)
+			}
+			err := Run(Options{Profile: "ru-recommended", DryRun: tc.dryRun, Yes: !tc.dryRun}, &out, Dependencies{
+				BuildPlan: func(Options) (installer.RepairPlan, error) { return installer.RepairPlan{}, nil },
+				ApplyPlan: func(installer.RepairPlan, Options) error { return nil },
+				Warnings:  func() []string { return warnings },
+			})
+			if err != nil {
+				t.Fatalf("Run: %v", err)
+			}
+			got := out.String()
+			if tc.warning == "" {
+				if strings.Contains(got, "warning:") {
+					t.Fatalf("no warnings but output has one:\n%s", got)
+				}
+				return
+			}
+			planAt := strings.Index(got, "Veil repair plan")
+			warnAt := strings.Index(got, "warning: "+tc.warning)
+			if planAt < 0 || warnAt < planAt {
+				t.Fatalf("warning must follow the plan:\n%s", got)
+			}
+		})
+	}
+}
