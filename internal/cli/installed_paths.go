@@ -8,6 +8,7 @@ import (
 
 	serveflow "github.com/mikkelchokolate/Veil/internal/cliflow/serve"
 	"github.com/mikkelchokolate/Veil/internal/veilenv"
+	"github.com/spf13/cobra"
 )
 
 // resolveInstalledPaths resolves the state and key paths the root CLI layer
@@ -116,6 +117,23 @@ func staleKeyPins(systemdDirs ...string) []keyPin {
 	}
 	sort.Slice(pins, func(i, j int) bool { return pins[i].DropIn < pins[j].DropIn })
 	return pins
+}
+
+// resolveSystemdUnitDir picks the unit directory a command works on: an
+// explicit --systemd-dir wins, then VEIL_SYSTEMD_DIR recorded by the installed
+// environment file, then the value the command already had (its flag default,
+// or a test seam) (#1505).
+func resolveSystemdUnitDir(cmd *cobra.Command, envPath, flagValue, packaged string) string {
+	if cmd != nil && cmd.Flags().Lookup("systemd-dir") != nil && cmd.Flags().Changed("systemd-dir") {
+		return flagValue
+	}
+	if dir := installedSystemdDir(envPath); dir != "" {
+		return dir
+	}
+	if strings.TrimSpace(flagValue) == "" {
+		return packaged
+	}
+	return flagValue
 }
 
 // installedSystemdDir returns the unit directory the installed environment

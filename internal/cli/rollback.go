@@ -53,13 +53,16 @@ func newRollbackCommand() *cobra.Command {
 	// back up the units they overwrite (#1446), but a manifest is data on disk,
 	// not authority: inside that root only Veil's own units and drop-ins may be
 	// written, or a forged manifest would become root-executed code (#1219).
-	restoreFilter := rollbackRestorePathFilter(rollbackSystemdRoot())
 	// Rollback destinations are constrained to the managed roots the backups
 	// were taken from — the manifest is on-disk data, not authority (#1219).
 	// The systemd unit directory is part of that set: install and repair back
 	// up every unit and drop-in they are about to overwrite, so omitting it
 	// refused every backup the product itself writes (#1446).
-	defaultRestoreRoots := []string{hostenv.EtcDir(), hostenv.VarDir(), rollbackSystemdRoot()}
+	// The recorded unit directory of the install is the root backups were taken
+	// from, so it belongs to the defaults and to the name filter (#1505).
+	systemdRoot := resolveSystemdUnitDir(nil, filepath.Join(hostenv.EtcDir(), "veil.env"), rollbackSystemdRoot(), rollbackDefaultSystemdDir)
+	restoreFilter := rollbackRestorePathFilter(systemdRoot)
+	defaultRestoreRoots := []string{hostenv.EtcDir(), hostenv.VarDir(), systemdRoot}
 
 	workflow := func(cmd *cobra.Command) rollbackflow.Workflow {
 		roots := restoreRoots

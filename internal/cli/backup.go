@@ -102,6 +102,12 @@ func reloadRunningPanelAfterRestore() (bool, error) {
 // uses for the veil-backup.service drop-in. Tests replace it with a temp dir.
 var backupSystemdDir = "/etc/systemd/system"
 
+// resolveBackupSystemdDir keeps the schedule drop-in and the timer operations on
+// the unit directory the install actually uses (#1505).
+func resolveBackupSystemdDir(cmd *cobra.Command, current string) string {
+	return resolveSystemdUnitDir(cmd, veilenv.Resolve(veilenv.DefaultSystemdDir), current, defaultSystemdDir)
+}
+
 var backupVeilBinary = "/usr/local/bin/veil"
 
 func newBackupCommand(version string) *cobra.Command {
@@ -469,6 +475,7 @@ func newBackupCommand(version string) *cobra.Command {
 		Use:   "enable",
 		Short: "Store the backup passphrase and enable the daily timer",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			backupSystemdDir = resolveBackupSystemdDir(cmd, backupSystemdDir)
 			resolvedPass, err := resolvePassphrase(passphrase, passphraseFile)
 			if err != nil {
 				return err
@@ -521,6 +528,7 @@ func newBackupCommand(version string) *cobra.Command {
 		Use:   "disable",
 		Short: "Disable the daily backup timer",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			backupSystemdDir = resolveBackupSystemdDir(cmd, backupSystemdDir)
 			if !cmd.Flags().Changed("passphrase-path") {
 				if fromDropIn := scheduledPassphrasePathFromDropIn(backupSystemdDir); fromDropIn != "" {
 					schedulePassphrasePath = fromDropIn

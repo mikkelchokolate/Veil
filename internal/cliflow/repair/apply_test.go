@@ -9,6 +9,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/service"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 )
 
 func TestApplyRepairPlanRunsSystemdActionsForRepairedUnits(t *testing.T) {
@@ -87,7 +88,7 @@ func TestApplyRepairPlanRunsSystemdActionsForTheLiveDir(t *testing.T) {
 	}}
 
 	var out bytes.Buffer
-	if err := ApplyPlan(plan, Options{Yes: true, SystemdDir: repairLiveSystemdDir, VarDir: t.TempDir(), BackupDirSet: true}, &out, ApplyDependencies{RunSystemd: runSystemd}); err != nil {
+	if err := ApplyPlan(plan, Options{Yes: true, SystemdDir: veilenv.DefaultSystemdDir, VarDir: t.TempDir(), BackupDirSet: true}, &out, ApplyDependencies{RunSystemd: runSystemd}); err != nil {
 		t.Fatalf("applyRepairPlan: %v", err)
 	}
 	if calls != 1 {
@@ -102,4 +103,25 @@ func stubQUICBuffers(t *testing.T) {
 	original := applyQUICBuffers
 	applyQUICBuffers = func() error { return nil }
 	t.Cleanup(func() { applyQUICBuffers = original })
+}
+
+// TestApplyRepairPlanRunsSystemdActionsForAnEmptyProgrammaticDir pins the
+// documented compromise: a caller that did not resolve a unit directory keeps
+// the historical behaviour, while a resolved staging tree is skipped.
+func TestApplyRepairPlanRunsSystemdActionsForAnEmptyProgrammaticDir(t *testing.T) {
+	stubQUICBuffers(t)
+	var calls int
+	plan := installer.RepairPlan{Actions: []installer.RepairAction{
+		{Path: filepath.Join(t.TempDir(), "veil.service"), Reason: installer.RepairReasonMissing, Content: "unit", Mode: 0o644},
+	}}
+	var out bytes.Buffer
+	if err := ApplyPlan(plan, Options{Yes: true, VarDir: t.TempDir(), BackupDirSet: true}, &out, ApplyDependencies{RunSystemd: func([]service.SystemdAction) error { calls++; return nil }}); err != nil {
+		t.Fatalf("applyRepairPlan: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("systemd actions ran %d times for an unresolved directory, want 1", calls)
+	}
+	if strings.Contains(out.String(), "Skipping systemd actions") {
+		t.Fatalf("an unresolved directory must not be reported as staging:\n%s", out.String())
+	}
 }

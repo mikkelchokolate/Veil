@@ -48,6 +48,14 @@ func newRepairCommand() *cobra.Command {
 		Use:   "repair",
 		Short: "Repair Veil managed generated files without arbitrary side effects",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// An explicit --systemd-dir also tells the layout discovery where the
+			// install drop-in lives; without it a custom unit directory is only
+			// found through VEIL_ETC_DIR (#1505).
+			if dir := repairDiscoveryDir(cmd, systemdDir); dir != repairDiscoverySystemdDir {
+				original := repairDiscoverySystemdDir
+				repairDiscoverySystemdDir = dir
+				defer func() { repairDiscoverySystemdDir = original }()
+			}
 			// Repair has to work on the tree the host is actually installed
 			// with. On a custom --etc-dir/--var-dir install the packaged
 			// defaults would rewrite the wrong veil.env and leave the custom
@@ -100,16 +108,17 @@ func newRepairCommand() *cobra.Command {
 // explicit --systemd-dir wins, then the directory the installed veil.env
 // records, then the packaged default.
 func resolveRepairSystemdDir(cmd *cobra.Command, etcDir, flagValue string) string {
-	if cmd.Flags().Changed("systemd-dir") {
-		return flagValue
+	return resolveSystemdUnitDir(cmd, filepath.Join(etcDir, "veil.env"), flagValue, defaultSystemdDir)
+}
+
+// repairDiscoveryDir is the directory repair looks for the installed
+// veil.service drop-in in: an explicit --systemd-dir, or the packaged default
+// (#1505).
+func repairDiscoveryDir(cmd *cobra.Command, systemdDir string) string {
+	if cmd.Flags().Lookup("systemd-dir") != nil && cmd.Flags().Changed("systemd-dir") && strings.TrimSpace(systemdDir) != "" {
+		return systemdDir
 	}
-	if dir := installedSystemdDir(filepath.Join(etcDir, "veil.env")); dir != "" {
-		return dir
-	}
-	if strings.TrimSpace(flagValue) == "" {
-		return defaultSystemdDir
-	}
-	return flagValue
+	return repairDiscoverySystemdDir
 }
 
 // repairDiscoverySystemdDir is where the installed veil.service drop-in that

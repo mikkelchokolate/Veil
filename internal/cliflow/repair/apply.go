@@ -57,7 +57,7 @@ func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps Appl
 			// would touch the wrong manager. Install skips host preparation for
 			// exactly these directories, so repair says what it skipped instead
 			// of dying in systemctl (#1503 review).
-			fmt.Fprintf(out, "Skipping systemd actions: units were planned in %s, which the live systemd does not load (it reads %s).\n", opts.SystemdDir, repairLiveSystemdDir)
+			fmt.Fprintf(out, "Skipping systemd actions: units were planned in %s, which the live systemd does not load (it reads %s or the other systemd unit directories).\n", opts.SystemdDir, veilenv.DefaultSystemdDir)
 		case deps.RunSystemd == nil:
 			return fmt.Errorf("repair systemd runner is not configured")
 		default:
@@ -87,20 +87,43 @@ func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps Appl
 // /etc/sysctl.d writes.
 var applyQUICBuffers = hostenv.ApplyQUICUDPBuffers
 
-// repairLiveSystemdDir is the unit directory the host's systemd loads. Tests
-// replace it to exercise the staging gate without writing under /etc.
-var repairLiveSystemdDir = veilenv.DefaultSystemdDir
+// repairLiveSystemdDirs are the directories systemd itself loads units from.
+// Tests replace the slice to exercise the staging gate without writing under
+// /etc.
+var repairLiveSystemdDirs = []string{
+	veilenv.DefaultSystemdDir,
+	"/run/systemd/system",
+	"/usr/lib/systemd/system",
+	"/lib/systemd/system",
+}
 
 // repairUnitDirIsLive reports whether repair may run systemctl for the units it
 // writes. An empty directory means the caller did not resolve one (programmatic
-// use) and keeps the previous behaviour; anything but the live directory is a
-// staging tree.
+// use) and keeps the previous behaviour; a directory systemd does not read is a
+// staging tree. Symlinks are resolved, so an /etc/systemd/system reached
+// through a link still counts as live (#1504 review).
 func repairUnitDirIsLive(systemdDir string) bool {
 	dir := strings.TrimSpace(systemdDir)
 	if dir == "" {
 		return true
 	}
-	return filepath.Clean(dir) == filepath.Clean(repairLiveSystemdDir)
+	for _, live := range repairLiveSystemdDirs {
+		if sameUnitDir(dir, live) {
+			return true
+		}
+	}
+	return false
+}
+
+// sameUnitDir compares two unit directories, following symlinks when both
+// exist.
+func sameUnitDir(a, b string) bool {
+	if filepath.Clean(a) == filepath.Clean(b) {
+		return true
+	}
+	realA, errA := filepath.EvalSymlinks(a)
+	realB, errB := filepath.EvalSymlinks(b)
+	return errA == nil && errB == nil && realA == realB
 }
 
 func SystemdUnitsFromRepairPlan(plan installer.RepairPlan) []string {
