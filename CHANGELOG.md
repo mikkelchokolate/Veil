@@ -10,12 +10,14 @@ All notable changes to Veil will be documented in this file.
   `veil uninstall`, `veil backup schedule`, the default `veil rollback` restore
   roots and `veil repair`'s environment discovery now read `VEIL_SYSTEMD_DIR`
   from the installed `veil.env` (an explicit `--systemd-dir` still wins). A
-  custom-unit-directory install is therefore fully removable, schedulable and
-  repairable instead of having its units left behind. `veil install
-  --systemd-dir ""` is refused like repair, and repair now treats
-  `/run/systemd/system`, `/usr/lib/systemd/system` and `/lib/systemd/system` —
-  and a symlinked `/etc/systemd/system` — as live unit directories when deciding
-  whether to run the systemd actions (#1505).
+  custom-unit-directory install is now removed, scheduled, rolled back and
+  repaired against its own unit tree instead of the packaged one. A directory
+  the live systemd does not load is still a staging tree: `backup schedule
+  enable` cannot start its timer there, and repair reports that it skipped the
+  systemd actions. `veil install --systemd-dir ""` is refused like repair, and
+  repair now treats `/run/systemd/system`, `/usr/lib/systemd/system` and
+  `/lib/systemd/system` — and a symlinked `/etc/systemd/system` — as live unit
+  directories when deciding whether to run the systemd actions (#1505).
 - QUIC UDP buffer tuning no longer clamps a host that is tuned in its own
   `sysctl.d` file. Veil's `99-veil-quic.conf` sorts after an operator's
   `90-network-tuning.conf`, so the live caps already read Veil's 16 MiB floor and

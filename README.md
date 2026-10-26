@@ -192,9 +192,14 @@ tree only names starting with `veil` are accepted — `veil*.service`,
 manifest cannot introduce an arbitrary unit name there. That name filter applies
 to the default unit directory only: a tree added with `--restore-root` is
 bounded by the root allowlist alone, so only add roots whose contents you
-expect. An install with a custom `--systemd-dir` (or another managed root) needs
-that root added with `--restore-root`, which replaces the defaults: repeat it
-for every root the backup touches.
+expect. The default unit root follows the directory the installed `veil.env`
+records (`VEIL_SYSTEMD_DIR`), so a custom `--systemd-dir` install restores its
+units without extra flags while that file is intact. If it no longer records the
+directory — an interrupted install that overwrote `veil.env` is the usual case —
+the paths in the backup fall outside the defaults and the restore refuses
+(`outside the allowed roots`): add the tree that holds them with `--restore-root`,
+which replaces the defaults, and repeat it for every root the backup touches.
+Any other managed root that a custom install moved also needs `--restore-root`.
 
 A configuration backup is a trusted-input archive: it carries `state.key`,
 `veil.env` and the systemd units, and the restore writes them as root. Restore
