@@ -40,18 +40,26 @@ func TestPostinstallQuicExplicitMaxReadsTunedFiles(t *testing.T) {
 	missingGlob := filepath.Join(dir, "no-such-dir", "*.conf")
 
 	// Edge cases the first helper missed: an indented ignore-failure line with no
-	// trailing newline, a masked (symlink to /dev/null) file, and a value wider
-	// than the shell can compare.
+	// trailing newline, a value wider than the shell can compare, and systemd
+	// name shadowing — a masked (/dev/null) or overriding file in a higher
+	// priority directory hides the copies below it.
 	indented := filepath.Join(dir, "95-indented.conf")
 	if err := os.WriteFile(indented, []byte("  -net.core.rmem_max=134217728"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	masked := filepath.Join(dir, "96-masked.conf")
-	if err := os.Symlink("/dev/null", masked); err != nil {
-		t.Skipf("symlink not supported: %v", err)
-	}
 	tooWide := filepath.Join(dir, "97-wide.conf")
 	if err := os.WriteFile(tooWide, []byte("net.core.wmem_max=123456789012345678901234\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	highDir, lowDir := t.TempDir(), t.TempDir()
+	if err := os.Symlink("/dev/null", filepath.Join(highDir, "90-tuning.conf")); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(lowDir, "90-tuning.conf"), []byte("net.core.rmem_max = 67108864\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	overrideDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(overrideDir, "90-tuning.conf"), []byte("net.core.rmem_max = 33554432\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -64,7 +72,9 @@ func TestPostinstallQuicExplicitMaxReadsTunedFiles(t *testing.T) {
 		{"tuned file", "net.core.rmem_max", "67108864", tuned + " " + clamped + " " + missingGlob},
 		{"wmem", "net.core.wmem_max", "33554432", tuned + " " + clamped + " " + missingGlob},
 		{"indented ignore-failure line without newline", "net.core.rmem_max", "134217728", indented},
-		{"masked file and too-wide value", "net.core.wmem_max", "33554432", masked + " " + tooWide + " " + tuned},
+		{"too-wide value falls back to the floor", "net.core.wmem_max", "0", tooWide},
+		{"masked higher copy hides the lower one", "net.core.rmem_max", "0", filepath.Join(highDir, "*.conf") + " " + filepath.Join(lowDir, "*.conf")},
+		{"higher copy wins over the lower one", "net.core.rmem_max", "33554432", filepath.Join(overrideDir, "*.conf") + " " + filepath.Join(lowDir, "*.conf")},
 	} {
 		script := "#!/bin/sh\nset -eu\n" + helper + "\nquic_explicit_max " + tc.key + " " + tc.args + "\n"
 		out, err := exec.Command("sh", "-c", script).CombinedOutput()
