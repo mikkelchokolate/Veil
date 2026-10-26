@@ -2,12 +2,12 @@ package cli
 
 import (
 	"context"
-	"os/exec"
 	"strings"
 	"time"
 
 	doctorflow "github.com/mikkelchokolate/Veil/internal/cliflow/doctor"
 	"github.com/mikkelchokolate/Veil/internal/renderer"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 // mieruUnitFallbackState says whether the loaded veil-mieru.service carries
@@ -24,10 +24,15 @@ const (
 
 // doctorMieruUnitFallbackProbe asks systemd for the loaded unit. Tests
 // replace it.
-var doctorMieruUnitFallbackProbe = func() mieruUnitFallbackState {
+var doctorMieruUnitFallbackProbe = probeMieruUnitFallbackState
+
+// probeMieruUnitFallbackState asks the trusted systemctl about the loaded unit.
+// The probe runs as root from `veil doctor`, so it resolves systemctl through
+// syspath rather than the caller's PATH (#1490).
+func probeMieruUnitFallbackState() mieruUnitFallbackState {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "systemctl", "show", "veil-mieru.service", "--property=LoadState,BindReadOnlyPaths").Output()
+	out, err := syspath.CommandContext(ctx, "systemctl", "show", "veil-mieru.service", "--property=LoadState,BindReadOnlyPaths").Output()
 	if err != nil {
 		return mieruUnitFallbackUnknown
 	}

@@ -6,6 +6,12 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil install`, `veil repair` and `veil doctor` no longer resolve their
+  root-run `sysctl` and `systemctl` helpers through the invoking shell's `PATH`:
+  both now go through the trusted system directories like the other privileged
+  tools. A `PATH` prepared by `sudo -E` or a provisioning script could otherwise
+  make a planted `sysctl`/`systemctl` run as root (the live QUIC buffer tuning
+  in install/repair and the `veil-mieru.service` probe in doctor) (#1490).
 - `veil repair` no longer fails on a host whose recorded unit directory is a
   staging tree: it writes the unit files and prints that it skipped the systemd
   actions, instead of running `systemctl` against a directory the live systemd

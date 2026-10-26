@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
+
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 const (
@@ -43,8 +44,8 @@ var (
 	quicReadFile    = os.ReadFile
 	quicWriteFile   = os.WriteFile
 	quicMkdirAll    = os.MkdirAll
-	quicLookPath    = exec.LookPath
-	quicCommand     = exec.Command
+	quicLookPath    = syspath.LookPath
+	quicCommand     = syspath.Command
 	quicRuntimeGOOS = func() string { return runtime.GOOS }
 )
 
