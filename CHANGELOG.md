@@ -14,9 +14,13 @@ All notable changes to Veil will be documented in this file.
   local writer could rename that workspace away and substitute its members
   between extraction and the reads, so the verification report and the journaled
   commit could describe bytes the operator never backed up. The workspace now
-  lives in the private sticky temp root (0700, name not reachable by rename), the
-  space preflight charges that filesystem instead of the archive directory, and a
-  stale workspace left by a crash is swept from there (#1254).
+  lives in the temp root (`TMPDIR`, the helper's `PrivateTmp` tmpfs by default),
+  where only its owner can rename the 0700 directory, a shared non-sticky
+  `TMPDIR` is refused, the space preflight charges that filesystem for twice the
+  archive's real size instead of the archive directory, and a stale workspace
+  left by a crash is swept from there (#1254). Create now preflights the
+  verification workspace too, so a backup cannot lose its pending archive to a
+  full tmpfs halfway through verification.
 - Veil no longer treats an inactive UFW as an empty ruleset. `ufw status`
   prints only `Status: inactive` while the firewall is not loaded, so the
   firewall reconcile, the rollback, the stale-rule pass, the local prune and

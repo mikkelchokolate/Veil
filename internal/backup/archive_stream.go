@@ -34,7 +34,6 @@ const (
 )
 
 func preflightBackupSpace(destinationDir string, sourcePaths []string, maxBytes int64) error {
-	const safetyReserve = int64(64 * 1024 * 1024)
 	var sourceBytes int64
 	for _, sourcePath := range sourcePaths {
 		info, err := os.Stat(sourcePath)
@@ -46,16 +45,20 @@ func preflightBackupSpace(destinationDir string, sourcePaths []string, maxBytes 
 		}
 		sourceBytes += info.Size()
 	}
-	if sourceBytes > (math.MaxInt64-safetyReserve)/2 {
+	if sourceBytes > math.MaxInt64/2 {
 		return fmt.Errorf("backup space estimate overflow")
 	}
-	required := sourceBytes*2 + safetyReserve
-	available, _, err := backupFilesystemUsage(destinationDir)
-	if err != nil {
-		return fmt.Errorf("backup space preflight: %w", err)
+	// The archive and the post-create verification's decrypted workspace are
+	// staged in different directories — the destination and the private temp
+	// root (#1254 F2). When they share a filesystem the requirements add up.
+	// Checking the workspace before anything is written keeps a create from
+	// losing its pending archive to an ENOSPC halfway through verification.
+	requirements := map[string][]int64{
+		destinationDir: {sourceBytes * 2},
+		os.TempDir():   {sourceBytes * 2},
 	}
-	if uint64(required) > available {
-		return fmt.Errorf("insufficient free space for backup: require %d bytes, available %d", required, available)
+	if err := requireBackupSpaceByFilesystem(requirements); err != nil {
+		return fmt.Errorf("backup space preflight: %w", err)
 	}
 	return nil
 }
@@ -82,12 +85,14 @@ func preflightBackupOperationSpace(archivePath, statePath, keyPath, databasePath
 	}
 	requirements := map[string][]int64{
 		// The .veil-backup-inspect-* workspace lives in the private temp root,
-		// not next to the archive (#1254 F2), and can hold a decrypted tarball
-		// (≤maxBytes) AND the extracted members (≤maxBytes aggregate) at once
-		// for encrypted archives — charging a single maxBytes undercounted
-		// restores of encrypted archives (#1119). Reading the archive itself
-		// needs no room on the archive filesystem.
-		os.TempDir(): {maxBytes, maxBytes},
+		// not next to the archive (#1254 F2), and can hold the decrypted
+		// tarball and the extracted members at once for encrypted archives
+		// (#1119). It is charged by the archive's real size: the size policy is
+		// a ceiling (16 GiB by default), and demanding twice the ceiling from a
+		// tmpfs — the privileged helper runs with PrivateTmp=true — refused
+		// ordinary verifies on hosts with gigabytes of free RAM (#1254 review).
+		// Reading the archive itself needs no room on the archive filesystem.
+		os.TempDir(): {2 * archiveInfo.Size()},
 	}
 	if restoring {
 		stateDir := filepath.Dir(statePath)
@@ -518,10 +523,28 @@ func RestoreBackupFileWithOptions(archivePath, statePath, keyPath, passphrase st
 // directory is /var/lib/veil/backups, which the panel service owns and can
 // write, so a local writer could rename the workspace away and substitute the
 // decrypted tarball or the extracted members between the create and the reads —
-// forging the verification report and the journaled commit (#1254 F2). The
-// sticky temp root rejects a rename by anyone but this process.
+// forging the verification report and the journaled commit (#1254 F2).
 var inspectWorkspaceParent = func() string {
 	return os.TempDir()
+}
+
+// privateWorkspaceRoot rejects a temp root someone else can write: entries in a
+// world-writable directory are only protected from rename by the sticky bit, so
+// a TMPDIR inside the service-owned state tree would restore the window F2
+// closes. Sticky roots (/tmp, /var/tmp) and roots writable by this user alone
+// pass.
+func privateWorkspaceRoot(path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return fmt.Errorf("inspect workspace root %s: %w", path, err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("inspect workspace root %s is not a directory", path)
+	}
+	if info.Mode().Perm()&0o022 != 0 && info.Mode()&os.ModeSticky == 0 {
+		return fmt.Errorf("refusing to stage decrypted backup material in %s: group/other-writable directory without the sticky bit; point TMPDIR at a private directory", path)
+	}
+	return nil
 }
 
 // inspectWorkspaceCreated is a test seam that observes the workspace path.
@@ -553,8 +576,12 @@ func inspectBackupFileWithOptions(path, passphrase string, configuredMax int64, 
 	// left behind; fresh entries (< restoreResidueMinAge) may belong to a live
 	// operation and are kept (#1125).
 	sweepBackupWorkspaceResidue(filepath.Dir(path))
+	workspaceRoot := inspectWorkspaceParent()
+	if err := privateWorkspaceRoot(workspaceRoot); err != nil {
+		return nil, err
+	}
 	sweepInspectWorkspaceResidue()
-	workDir, err := os.MkdirTemp(inspectWorkspaceParent(), ".veil-backup-inspect-*")
+	workDir, err := os.MkdirTemp(workspaceRoot, ".veil-backup-inspect-*")
 	if err != nil {
 		return nil, fmt.Errorf("create backup inspection workspace: %w", err)
 	}

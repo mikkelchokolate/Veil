@@ -96,3 +96,26 @@ func within(root, path string) bool {
 	}
 	return relative == "." || (relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator)))
 }
+
+// TestInspectWorkspaceRejectsASharedTempRoot keeps the F2 window closed when an
+// operator points TMPDIR at a directory other users can write: without the
+// sticky bit such a directory does not protect the workspace from a rename.
+func TestInspectWorkspaceRejectsASharedTempRoot(t *testing.T) {
+	statePath, keyPath := writeValidBackupSource(t)
+	archiveDir := t.TempDir()
+	archivePath := filepath.Join(archiveDir, "backup.tar.gz.enc")
+	passphrase := strings.Repeat("inspect-shared-", 2)
+	if err := CreateBackupFileWithOptions(archivePath, statePath, keyPath, passphrase, ArchiveOptions{}); err != nil {
+		t.Fatalf("create backup: %v", err)
+	}
+
+	shared := t.TempDir()
+	if err := os.Chmod(shared, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", shared)
+
+	if _, err := VerifyBackupFile(archivePath, passphrase, 0); err == nil || !strings.Contains(err.Error(), "sticky bit") {
+		t.Fatalf("shared temp root accepted: %v", err)
+	}
+}

@@ -23,15 +23,28 @@ func TestRestoreSpacePreflightSumsWorkspaceStagingAndSafetyOnSameFilesystem(t *t
 			t.Fatal(err)
 		}
 	}
+	// The inspection workspace is charged twice the archive's real size
+	// (#1254 F2); on the same filesystem the state directory adds its own
+	// maxBytes plus the staged member sizes.
+	const reserve = int64(64 * 1024 * 1024)
+	const required = 2*4 + 10 + 3 + 2 + 5
 	old := backupStatfs
 	defer func() { backupStatfs = old }()
 	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
 		stats.Bsize = 1
-		stats.Bavail = 64*1024*1024 + 4 + 10 + 10 + 3 + 2 + 5 - 1
+		stats.Bavail = uint64(required + reserve - 1)
 		return nil
 	}
 	err := PreflightRestoreSpace(archive, state, key, database, 10)
 	if err == nil || !strings.Contains(err.Error(), "insufficient free space") {
 		t.Fatalf("expected summed same-filesystem rejection, got %v", err)
+	}
+	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
+		stats.Bsize = 1
+		stats.Bavail = uint64(required + reserve)
+		return nil
+	}
+	if err := PreflightRestoreSpace(archive, state, key, database, 10); err != nil {
+		t.Fatalf("restore preflight rejected exactly-sufficient space: %v", err)
 	}
 }
