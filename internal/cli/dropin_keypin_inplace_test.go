@@ -231,3 +231,46 @@ func TestRotateKeySeesATransientDropIn(t *testing.T) {
 		t.Fatal("the key changed although the preflight refused")
 	}
 }
+
+// TestStaleKeyPinsRequireAnExistingEnvironmentFile locks the #1482 review nit:
+// a fragment only outranks the literal Environment= line when the environment
+// file systemd loads actually exists. `EnvironmentFile=` (reset) and
+// `EnvironmentFile=-/missing` supply nothing, so the literal pin still applies.
+func TestStaleKeyPinsRequireAnExistingEnvironmentFile(t *testing.T) {
+	shared := t.TempDir()
+	envFile := filepath.Join(shared, "veil.env")
+	if err := os.WriteFile(envFile, []byte("VEIL_KEY_PATH=/opt/veil/etc/state.key\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	missing := filepath.Join(shared, "missing.env")
+	for _, tc := range []struct {
+		name    string
+		body    string
+		wantPin bool
+	}{
+		{
+			name:    "missing ignored file",
+			body:    "[Service]\nEnvironmentFile=-" + missing + "\nEnvironment=VEIL_KEY_PATH=/opt/veil/etc/state.key\n",
+			wantPin: true,
+		},
+		{
+			name:    "empty reset",
+			body:    "[Service]\nEnvironmentFile=\nEnvironment=VEIL_KEY_PATH=/opt/veil/etc/state.key\n",
+			wantPin: true,
+		},
+		{
+			name:    "loaded file",
+			body:    "[Service]\nEnvironmentFile=-" + envFile + "\nEnvironment=VEIL_KEY_PATH=/opt/veil/etc/state.key\n",
+			wantPin: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			systemdDir := t.TempDir()
+			writeHelperKeyPinDropIn(t, systemdDir, tc.body)
+			pins := staleKeyPins(systemdDir)
+			if got := len(pins) > 0; got != tc.wantPin {
+				t.Fatalf("staleKeyPins = %+v, want pin=%v", pins, tc.wantPin)
+			}
+		})
+	}
+}

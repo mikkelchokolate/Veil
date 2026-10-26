@@ -19,7 +19,10 @@ All notable changes to Veil will be documented in this file.
   is still stopped before anything is written. Commented-out lines, which
   systemd ignores, no longer count as a pin, and runtime drop-ins under
   `/run/systemd/system` are scanned as well, because they load after the
-  packaged ones and override them. When the preflight does refuse, the message
+  packaged ones and override them, and a fragment counts as reading `veil.env`
+  only when that `EnvironmentFile=` actually exists — an empty reset or an
+  ignored missing file leaves the literal in force. When the preflight does
+  refuse, the message
   prints the `veil repair` invocation for the installed tree instead of a second
   refusal (#1483, #1484).
 - Deleting a client or a binding no longer drops the traffic usage of the other

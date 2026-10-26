@@ -118,10 +118,22 @@ func staleKeyPins(systemdDirs ...string) []keyPin {
 	return pins
 }
 
-// hasEnvironmentFileDirective reports whether the fragment points systemd at an
-// environment file, which wins over a literal Environment= line.
+// hasEnvironmentFileDirective reports whether the fragment makes systemd load an
+// environment file, which wins over a literal Environment= line. An empty value
+// resets the list and a `-`-prefixed path systemd cannot open supplies nothing,
+// so neither of them makes the literal harmless (#1482 review).
 func hasEnvironmentFileDirective(body string) bool {
-	return len(unitDirectiveLines(body, "EnvironmentFile=")) > 0
+	for _, entry := range unitDirectiveLines(body, "EnvironmentFile=") {
+		entry = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(entry), "-"))
+		path := trimUnitQuotes(entry)
+		if path == "" {
+			continue
+		}
+		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
 }
 
 // unitEnvironmentValue returns the value of an Environment= assignment called
