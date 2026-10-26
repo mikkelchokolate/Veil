@@ -13,6 +13,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
 	"github.com/mikkelchokolate/Veil/internal/syspath"
+	"github.com/mikkelchokolate/Veil/internal/testutil/fakecaddy"
 )
 
 func TestBuildRepairPlanFromOptionsLoadsEncryptedPanelState(t *testing.T) {
@@ -100,6 +101,12 @@ func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *tes
 		return "", errors.New("missing")
 	}
 	t.Cleanup(func() { testLookPath = oldLookPath })
+
+	// The capability probe resolves caddy through the trusted system
+	// directories since #1458, so the planned binary path above is not enough:
+	// register a hermetic fake caddy for the probe itself.
+	caddyCleanup := fakecaddy.MustInstall()
+	t.Cleanup(caddyCleanup)
 
 	dir := t.TempDir()
 	varDir := filepath.Join(dir, "var", "lib", "veil")
