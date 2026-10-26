@@ -531,6 +531,15 @@ var inspectWorkspaceParent = func() string {
 	return os.TempDir()
 }
 
+// workspaceRootOwner and workspaceCurrentUID are seams for the ownership check:
+// a test cannot chown a directory without root, and CI rejects skipped tests.
+var workspaceRootOwner = func(info os.FileInfo) int {
+	uid, _ := fileOwnerIDs(info)
+	return uid
+}
+
+var workspaceCurrentUID = os.Geteuid
+
 // privateWorkspaceRoot rejects a temp root someone else can write or own:
 // entries in a world-writable directory are only protected from rename by the
 // sticky bit, and a directory someone else owns can be renamed away and
@@ -562,7 +571,7 @@ func privateWorkspaceRoot(path string) error {
 	// only this user and root are acceptable owners. /tmp is root-owned and
 	// accepted for an unprivileged CLI; a service-owned TMPDIR is not, because
 	// that user could replace the workspace. POSIX ownership only.
-	if uid, _ := fileOwnerIDs(info); uid != os.Geteuid() && uid != 0 {
+	if uid := workspaceRootOwner(info); uid != workspaceCurrentUID() && uid != 0 {
 		return fmt.Errorf("refusing to stage decrypted backup material in %s: directory is owned by uid %d, not by this user or root; point TMPDIR at a directory this service owns", path, uid)
 	}
 	return nil

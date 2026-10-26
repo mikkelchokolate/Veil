@@ -123,11 +123,9 @@ func TestInspectWorkspaceRejectsASharedTempRoot(t *testing.T) {
 // TestInspectWorkspaceRejectsAForeignOwnedTempRoot keeps the F2 window closed
 // when TMPDIR points at a directory another user owns: such a directory can be
 // renamed away and replaced between the check and the workspace creation, even
-// though it is not group/other-writable.
+// though it is not group/other-writable. The ownership seams stand in for the
+// chown a non-root CI cannot make.
 func TestInspectWorkspaceRejectsAForeignOwnedTempRoot(t *testing.T) {
-	if os.Geteuid() != 0 {
-		t.Skip("changing ownership needs root")
-	}
 	statePath, keyPath := writeValidBackupSource(t)
 	archiveDir := t.TempDir()
 	archivePath := filepath.Join(archiveDir, "backup.tar.gz.enc")
@@ -137,13 +135,11 @@ func TestInspectWorkspaceRejectsAForeignOwnedTempRoot(t *testing.T) {
 	}
 
 	foreign := t.TempDir()
-	if err := os.Chown(foreign, 65534, 65534); err != nil {
-		t.Skipf("chown unsupported here: %v", err)
-	}
-	if err := os.Chmod(foreign, 0o700); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("TMPDIR", foreign)
+	current := workspaceCurrentUID()
+	previousOwner, previousUID := workspaceRootOwner, workspaceCurrentUID
+	workspaceRootOwner = func(os.FileInfo) int { return current + 1 }
+	t.Cleanup(func() { workspaceRootOwner, workspaceCurrentUID = previousOwner, previousUID })
 
 	if _, err := VerifyBackupFile(archivePath, passphrase, 0); err == nil || !strings.Contains(err.Error(), "is owned by uid") {
 		t.Fatalf("foreign-owned temp root accepted: %v", err)
