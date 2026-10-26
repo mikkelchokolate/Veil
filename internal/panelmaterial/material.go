@@ -51,6 +51,14 @@ type Input struct {
 	// bind the same standalone port (#1185/audit). Empty or "80" renders
 	// nothing — 80 is already the implicit default.
 	PanelHTTP01Port string
+	// KeyPath and StatePath override the <EtcDir>/state.key and
+	// <VarDir>/state.json the renderer would otherwise write. A path-moving
+	// `veil admin rotate-key --new-key-path` leaves the installation with a
+	// state key outside the packaged name, and rewriting the environment from
+	// the directories alone would point the Panel back at the pre-rotation
+	// key (#1485). Empty keeps the derived paths.
+	KeyPath   string
+	StatePath string
 }
 
 type File struct {
@@ -131,15 +139,23 @@ func (m ManagedMaterial) EnvContent() (string, error) {
 		entries = append(entries, envKV{"VEIL_PANEL_HTTP01_PORT", port})
 	}
 	if paths := input.Paths; paths.EtcDir != "" {
+		keyPath := filepath.Join(paths.EtcDir, "state.key")
+		if input.KeyPath != "" {
+			keyPath = input.KeyPath
+		}
 		entries = append(entries,
 			envKV{"VEIL_ETC_DIR", filepath.ToSlash(paths.EtcDir)},
-			envKV{"VEIL_KEY_PATH", filepath.ToSlash(filepath.Join(paths.EtcDir, "state.key"))},
+			envKV{"VEIL_KEY_PATH", filepath.ToSlash(keyPath)},
 			envKV{"VEIL_LIVE_ROOT", filepath.ToSlash(filepath.Join(paths.EtcDir, "generated"))})
 	}
 	if paths := input.Paths; paths.VarDir != "" {
+		statePath := filepath.Join(paths.VarDir, "state.json")
+		if input.StatePath != "" {
+			statePath = input.StatePath
+		}
 		entries = append(entries,
 			envKV{"VEIL_VAR_DIR", filepath.ToSlash(paths.VarDir)},
-			envKV{"VEIL_STATE_PATH", filepath.ToSlash(filepath.Join(paths.VarDir, "state.json"))},
+			envKV{"VEIL_STATE_PATH", filepath.ToSlash(statePath)},
 			envKV{"VEIL_APPLY_ROOT", filepath.ToSlash(filepath.Join(paths.VarDir, "staging"))})
 		// Persist the autocert cache root too: VEIL_VAR_DIR already drives the
 		// default, but an explicit VEIL_AUTO_TLS_DIR keeps the resolved path

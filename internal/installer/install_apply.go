@@ -36,6 +36,13 @@ type ApplyPaths struct {
 	BackupDir   string
 	VeilBinary  string
 	CaddyBinary string
+	// KeyPath and StatePath carry the state key and state file the installed
+	// veil.env records when they are not the packaged <EtcDir>/state.key and
+	// <VarDir>/state.json, so a rendered environment does not repoint the
+	// Panel at the pre-rotation key after `rotate-key --new-key-path` (#1485).
+	// Empty keeps the derived paths.
+	KeyPath   string
+	StatePath string
 }
 
 type ApplyResult struct {

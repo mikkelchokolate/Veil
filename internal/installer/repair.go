@@ -65,6 +65,8 @@ func desiredManagedFiles(profile RURecommendedProfile, paths ApplyPaths) ([]mana
 		PanelPublicIP:     profile.PanelPublicIP,
 		PanelLEIPCert:     profile.PanelLEIPCertEnv,
 		PanelHTTP01Port:   profile.PanelHTTP01PortEnv,
+		KeyPath:           paths.KeyPath,
+		StatePath:         paths.StatePath,
 	}).Files()
 	if err != nil {
 		return nil, err
