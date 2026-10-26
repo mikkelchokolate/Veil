@@ -146,6 +146,7 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 		name      string
 		input     Input
 		wantErr   []string
+		wantIssue string
 		wantValid bool
 	}{
 		{
@@ -195,6 +196,7 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 			},
 			wantErr:   nil,
 			wantValid: true,
+			wantIssue: "targets WARP, which is disabled",
 		},
 		{
 			name: "unsupported routing outbound",
@@ -230,6 +232,17 @@ func TestBuildRoutingRulesAndSources(t *testing.T) {
 				t.Errorf("Valid = %v, want %v", plan.Valid, tt.wantValid)
 			}
 			assertExactErrorMultiset(t, plan.Errors, tt.wantErr)
+			if tt.wantIssue != "" {
+				found := false
+				for _, issue := range plan.Issues {
+					if strings.Contains(issue.Message, tt.wantIssue) {
+						found = true
+					}
+				}
+				if !found {
+					t.Errorf("issues = %+v, want one containing %q", plan.Issues, tt.wantIssue)
+				}
+			}
 		})
 	}
 }

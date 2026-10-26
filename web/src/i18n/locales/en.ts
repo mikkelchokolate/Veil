@@ -446,11 +446,9 @@ export const en: Record<string, string> = {
 	"routing.outboundHint":
 		"direct bypasses the full proxy and WARP. warp sends traffic through WARP. proxy sends traffic through the proxy, not WARP.",
 	"routing.outboundHintWarpOff":
-		"direct bypasses the full proxy. proxy sends traffic through the proxy, not WARP. warp is unavailable while WARP is disabled — an enabled warp rule fails the apply plan.",
-	"routing.warpOutboundBlocked":
-		'WARP is disabled — an enabled rule with outbound "warp" fails apply. Enable WARP, disable the rule, or choose another outbound.',
+		"direct bypasses the full proxy. proxy sends traffic through the proxy, not WARP. warp rules are kept but not applied while WARP is disabled.",
 	"routing.warpRequired":
-		'WARP is off — an enabled rule with outbound "warp" fails the apply plan until WARP is enabled or the rule is changed. direct still exits locally. proxy uses the inbound\'s own exit, not WARP.',
+		'WARP is off — rules with outbound "warp" are kept but not applied until WARP is enabled; re-enabling restores them. direct still exits locally. proxy uses the inbound\'s own exit, not WARP.',
 	"routing.enabled": "Enabled",
 	"routing.saving": "Saving…",
 	"routing.saveFailed": "Save failed",
