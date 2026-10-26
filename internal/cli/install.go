@@ -3,7 +3,9 @@ package cli
 import (
 	"crypto/rand"
 	"encoding/base64"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/mikkelchokolate/Veil/internal/audit"
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
@@ -40,6 +42,9 @@ func newInstallCommand() *cobra.Command {
 		Use:   "install",
 		Short: "Install the Veil panel; protocol runtimes are installed on demand",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Flags().Changed("systemd-dir") && strings.TrimSpace(systemdDir) == "" {
+				return fmt.Errorf("refusing to install: --systemd-dir is empty, so no unit file would be written; pass the systemd unit directory or omit the flag")
+			}
 			return runRURecommendedInstall(cmd, ruRecommendedInstallOptions{
 				Profile:           profile,
 				Domain:            domain,

@@ -15,6 +15,7 @@ var uninstallServiceStopper = uninstallflow.StopAndDisableService
 var uninstallFileRemover = uninstallflow.RemovePath
 var uninstallSystemdReloader = uninstallflow.ReloadSystemdDaemon
 var uninstallFirewallCleaner = uninstallflow.RemoveManagedFirewallRules
+var uninstallRunFunc = uninstallflow.Run
 
 func newUninstallCommand() *cobra.Command {
 	var dryRun bool
@@ -56,7 +57,11 @@ func newUninstallCommand() *cobra.Command {
 			"The veil system account is always preserved.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			warnUninstallEnvOverrides(cmd.ErrOrStderr(), cmd.Flags().Changed)
-			return uninstallflow.Run(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir, VendorSystemdDirs: vendorSystemdDirs, SysctlConfPath: sysctlConfPath}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
+			// A custom --systemd-dir install records its unit tree; uninstalling
+			// only the packaged one would leave every unit and drop-in behind
+			// (#1505).
+			systemdDir = resolveSystemdUnitDir(cmd, filepath.Join(etcDir, "veil.env"), systemdDir, defaultSystemdDir)
+			return uninstallRunFunc(uninstallflow.Options{DryRun: dryRun, Yes: yes, Purge: purge, KeepData: keepData, EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir, InstallDir: installDir, CaddyStateDir: caddyStateDir, MitaStateDir: mitaStateDir, VendorSystemdDirs: vendorSystemdDirs, SysctlConfPath: sysctlConfPath}, cmd.OutOrStdout(), cmd.ErrOrStderr(), uninstallflow.Dependencies{
 				ServiceStopper:  uninstallServiceStopper,
 				FileRemover:     uninstallFileRemover,
 				SystemdReloader: uninstallSystemdReloader,

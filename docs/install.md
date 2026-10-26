@@ -318,10 +318,11 @@ directory as `VEIL_SYSTEMD_DIR` in `veil.env`. `veil repair`, the `rotate-key`
 preflight and `veil doctor` read it, so they keep working on the real unit tree;
 pass `--systemd-dir` to override it for one run. A directory the live systemd
 does not load is treated as staging: `veil repair` writes the unit files there
-and reports that it skipped the systemd actions, so the host is not touched
-until you either copy the rendered units into the live directory yourself or
-re-run repair with `--systemd-dir /etc/systemd/system` once the layout is real.
-Passing an empty `--systemd-dir ""` is refused.
+and reports that it skipped the systemd actions (the configuration and state
+files are still repaired). Copying those units into a live directory by hand
+does not move the recorded value — `VEIL_SYSTEMD_DIR` still names the staging
+tree — so re-run repair with the live `--systemd-dir` once the layout is real.
+Passing an empty `--systemd-dir ""` is refused by both install and repair.
 
 ### Install state paths and reinstalls
 
