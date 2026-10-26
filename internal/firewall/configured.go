@@ -40,11 +40,7 @@ type ConfiguredRule struct {
 // skipped rather than guessed.
 func ParseConfiguredRules(output string) []ConfiguredRule {
 	snap := parseUFWShowAdded(output)
-	rules := make([]ConfiguredRule, 0, len(snap.Rules))
-	for _, rule := range snap.configured {
-		rules = append(rules, rule)
-	}
-	return rules
+	return append([]ConfiguredRule(nil), snap.configured...)
 }
 
 // parseUFWShowAdded turns `ufw show added` lines back into the same
