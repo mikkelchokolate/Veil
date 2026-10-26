@@ -41,6 +41,12 @@ type Lifecycle struct {
 	// that restore into caller-controlled test roots; no production restore
 	// path runs without roots (the CLI rollback always sets them).
 	RestoreRoots []string
+	// RestorePathFilter narrows the allowlist further once an entry is under a
+	// root: a path the filter rejects is refused even inside an allowed root.
+	// The rollback CLI uses it to accept only Veil's own units and drop-ins in
+	// /etc/systemd/system, where a forged manifest entry would otherwise become
+	// root-executed code (#1446).
+	RestorePathFilter func(string) bool
 }
 
 type BackupLifecycle = Lifecycle
@@ -261,7 +267,7 @@ func (l Lifecycle) Restore(backupID string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	entries, err := resolveManifestEntries(backupDir, absRoot, manifest, allowedRoots)
+	entries, err := resolveManifestEntries(backupDir, absRoot, manifest, allowedRoots, l.RestorePathFilter)
 	if err != nil {
 		return nil, err
 	}
@@ -617,7 +623,7 @@ func (l Lifecycle) rollbackRestoredFiles(safetyID string, restored []string, par
 	if err != nil {
 		return err
 	}
-	entries, err := resolveManifestEntries(safetyDir, absRoot, manifest, allowedRoots)
+	entries, err := resolveManifestEntries(safetyDir, absRoot, manifest, allowedRoots, l.RestorePathFilter)
 	if err != nil {
 		return err
 	}
