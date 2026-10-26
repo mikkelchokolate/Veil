@@ -102,3 +102,50 @@ func TestPanelStateRepairMaterialFallsBackWhenTheBinaryCannotBeResolved(t *testi
 		t.Fatalf("unresolvable binary did not fall back to the packaged default:\n%s", mieru)
 	}
 }
+
+// TestPanelStateRepairMaterialWarnsWhenTheBinaryCannotBeResolved keeps the
+// operator informed instead of silently rendering the packaged binary into a
+// host that runs the panel from another path (#1437 review).
+func TestPanelStateRepairMaterialWarnsWhenTheBinaryCannotBeResolved(t *testing.T) {
+	opts := Options{EtcDir: t.TempDir(), VarDir: t.TempDir(), SystemdDir: t.TempDir()}
+	var warnings []string
+	material := newPanelStateRepairMaterial(opts, panelStateRepairSnapshot{
+		Settings: api.Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "local", Mode: "server"},
+		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
+	}, PlanDependencies{
+		Secret:     func(label string) string { return "repair-" + label },
+		Executable: func() (string, error) { return "", errors.New("no executable") },
+		Notify:     func(msg string) { warnings = append(warnings, msg) },
+	})
+
+	if _, err := material.Apply(installer.RepairPlan{}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	joined := strings.Join(warnings, "\n")
+	for _, want := range []string{"could not resolve the running veil binary path", "no executable", "/usr/local/bin/veil"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("warnings %v do not mention %q", warnings, want)
+		}
+	}
+}
+
+// TestPanelStateRepairMaterialNoWarningWhenTheBinaryIsResolved keeps the normal
+// path quiet.
+func TestPanelStateRepairMaterialNoWarningWhenTheBinaryIsResolved(t *testing.T) {
+	dir := t.TempDir()
+	var warnings []string
+	material := newPanelStateRepairMaterial(Options{EtcDir: dir, VarDir: dir, SystemdDir: dir}, panelStateRepairSnapshot{
+		Settings: api.Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "local", Mode: "server"},
+		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
+	}, PlanDependencies{
+		Secret:     func(label string) string { return "repair-" + label },
+		Executable: func() (string, error) { return "/opt/veil/bin/veil", nil },
+		Notify:     func(msg string) { warnings = append(warnings, msg) },
+	})
+	if _, err := material.Apply(installer.RepairPlan{}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", warnings)
+	}
+}
