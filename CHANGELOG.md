@@ -6,13 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
-- `veil repair` re-renders the runtime units with the installed layout instead of
-  the packaged defaults: the `SystemdConfig` it built carried only `EtcDir` and
-  the Caddy binary, so the re-rendered protocol units lost the installed layout
-  (`InaccessiblePaths=`, `ReadWritePaths=` and the binary their `ExecStartPre`
-  runs). On a custom `--var-dir` install every repair flipped them back to
-  `/var/lib/veil` and then the next repair flipped them again, leaving the
-  runtime shared state floor-plan where the install had masked it (#1437).
+- `veil repair` re-renders the edge/protocol units with the installed layout
+  instead of the packaged defaults: the `SystemdConfig` it built carried only
+  `EtcDir` and the Caddy binary, so those units lost `InaccessiblePaths=` (the
+  state mask) and `veil-mieru.service` lost the path of the binary its
+  `ExecStartPre` runs. On a custom `--var-dir` install every repair flipped them
+  back to `/var/lib/veil` and then the next repair flipped them again, leaving the
+  runtime shared state readable where the install had masked it. The panel,
+  helper and backup units were not affected — the panel material already renders
+  them with the custom `VarDir`/binary (#1437).
 - `veil update` and the Panel's "Update panel" button now refuse to replace a
   binary that belongs to an installed `.deb`/`.rpm`/`.apk` package. They used to
   overwrite `/usr/local/bin/veil` in place and restart: the running host then
