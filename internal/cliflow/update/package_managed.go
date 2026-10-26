@@ -22,6 +22,12 @@ var packageQueryRunner = func(name string, args ...string) ([]byte, error) {
 // when the binary is not package-managed. Markers cover packages built with the
 // current postinstall; the database probes catch hosts installed by an older
 // package, which the marker cannot identify (#1424).
+//
+// It is deliberately fail-open: if no marker exists and the probes cannot run
+// (a host without those tools, or a tarball install), the binary is treated as
+// unmanaged so `veil update` keeps working. The marker is the authoritative
+// signal for packages built from now on; the probes are best-effort cover for
+// older ones.
 func DetectPackageManagedBinary(binaryPath string) (string, bool) {
 	for _, marker := range packageManagedMarkers {
 		body, err := os.ReadFile(marker)
@@ -45,7 +51,7 @@ func DetectPackageManagedBinary(binaryPath string) (string, bool) {
 		if err != nil {
 			continue
 		}
-		if owner := firstLine(string(out)); owner != "" {
+		if owner := packageOwnerFromProbe(probe[0], out); owner != "" {
 			return owner, true
 		}
 	}
@@ -59,4 +65,16 @@ func firstLine(value string) string {
 		}
 	}
 	return ""
+}
+
+// packageOwnerFromProbe normalises a probe answer: dpkg-query reports
+// "<package>: <path>", while rpm and apk print the package name alone.
+func packageOwnerFromProbe(command string, out []byte) string {
+	owner := firstLine(string(out))
+	if command == "dpkg-query" {
+		if name, _, ok := strings.Cut(owner, ":"); ok {
+			owner = strings.TrimSpace(name)
+		}
+	}
+	return owner
 }

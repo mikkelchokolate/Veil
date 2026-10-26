@@ -41,8 +41,8 @@ func TestDetectPackageManagedBinaryFallsBackToPackageDatabases(t *testing.T) {
 	})
 
 	owner, managed := DetectPackageManagedBinary("/usr/local/bin/veil")
-	if !managed || owner != "veil: /usr/local/bin/veil" {
-		t.Fatalf("owner=%q managed=%v, want the dpkg owner", owner, managed)
+	if !managed || owner != "veil" {
+		t.Fatalf("owner=%q managed=%v, want the normalised dpkg owner", owner, managed)
 	}
 }
 

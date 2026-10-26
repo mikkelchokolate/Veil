@@ -23,6 +23,15 @@ func TestRunWorkflowRefusesAPackageManagedBinary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			deps, _ := newValidWorkflowDeps(t)
 			deps.PackageManaged = func(string) (string, bool) { return "veil 0.7.2 (dpkg)", true }
+			fetched, downloaded := false, false
+			deps.FetchRelease = func() (*Release, error) {
+				fetched = true
+				return &Release{TagName: "v1.2.4"}, nil
+			}
+			deps.DownloadAsset = func(string) ([]byte, error) {
+				downloaded = true
+				return nil, nil
+			}
 			replaced := false
 			deps.ReplaceBinaryFromArchive = func(string, []byte, bool) (string, error) {
 				replaced = true
@@ -33,10 +42,13 @@ func TestRunWorkflowRefusesAPackageManagedBinary(t *testing.T) {
 			if err == nil {
 				t.Fatalf("update accepted a package-managed binary:\n%s", out.String())
 			}
-			for _, want := range []string{"belongs to the veil 0.7.2 (dpkg) package", "package manager"} {
+			for _, want := range []string{"belongs to veil 0.7.2 (dpkg)", "package manager"} {
 				if !strings.Contains(err.Error(), want) {
 					t.Fatalf("error %v does not mention %q", err, want)
 				}
+			}
+			if fetched || downloaded {
+				t.Fatalf("the updater fetched/downloaded before refusing (fetched=%v downloaded=%v)", fetched, downloaded)
 			}
 			if replaced {
 				t.Fatal("the updater replaced the binary before refusing")

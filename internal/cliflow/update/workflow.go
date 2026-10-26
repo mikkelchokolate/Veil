@@ -72,7 +72,7 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 	// updater would refresh the executable alone and leave the old package's
 	// units and postinstall migrations in place (#1424).
 	if owner, managed := deps.PackageManaged(currentPath); managed {
-		return fmt.Errorf("this Veil binary belongs to the %s package; upgrade it with the package manager (apt/dnf/apk) instead of `veil update` so the packaged units and install hooks are refreshed", owner)
+		return fmt.Errorf("this Veil binary belongs to %s; upgrade it with the package manager (apt/dnf/apk) instead of `veil update` so the packaged units and install hooks are refreshed", owner)
 	}
 
 	// 1. Fetch latest release metadata

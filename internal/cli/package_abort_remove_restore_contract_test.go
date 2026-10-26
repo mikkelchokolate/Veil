@@ -81,6 +81,9 @@ exit 0
 		"/lib/systemd/system", filepath.Join(dir, "lib-systemd"),
 		"/etc/systemd/system", filepath.Join(dir, "etc-systemd"),
 		"/etc/sysctl.d/99-veil-quic.conf", filepath.Join(dir, "etc-sysctl", "99-veil-quic.conf"),
+		// #1424: the package-managed marker must never touch the real /etc in a
+		// test, even on an install-mode run.
+		"/etc/veil/.package-managed", filepath.Join(dir, "etc-veil", ".package-managed"),
 	)
 	for _, name := range []string{"preremove", "postinstall"} {
 		body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "scripts", name+".sh"))
