@@ -180,6 +180,17 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		veilBinary = ""
 	}
 
+	// Refuse before anything is created when the installed environment points
+	// the state key or state file outside the tree this install writes to: a
+	// fresh Panel next to the real state would look like a success while the
+	// operator's data stayed elsewhere (#1498). The packaged layout is used when
+	// there is no installed environment or the operator passed
+	// --reset-install-state.
+	resolvedStatePath, resolvedKeyPath, err := installStatePaths(opts)
+	if err != nil {
+		return err
+	}
+
 	// 1. Ensure configuration and state directories exist before running install and writing files
 	if err := os.MkdirAll(opts.EtcDir, 0755); err != nil {
 		return fmt.Errorf("create etc directory: %w", err)
@@ -217,9 +228,6 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 	applyInstallEnvToProfile(&profile, opts, existingEnv)
 
 	// 2. Initialize state.key and encrypted state.json with generated credentials
-	resolvedKeyPath := filepath.Join(opts.EtcDir, "state.key")
-	resolvedStatePath := filepath.Join(opts.VarDir, "state.json")
-
 	key, err := secrets.LoadOrCreateKey(resolvedKeyPath)
 	if err != nil {
 		return fmt.Errorf("initialize encryption key: %w", err)
@@ -374,6 +382,8 @@ func applyRURecommendedInstall(cmd *cobra.Command, profile installer.RURecommend
 		BackupDir:   actualBackupDir,
 		VeilBinary:  veilBinary,
 		CaddyBinary: opts.CaddyBinary,
+		KeyPath:     resolvedKeyPath,
+		StatePath:   resolvedStatePath,
 	})
 	if err != nil {
 		_ = writeAuditInstall(opts.AuditLog, result.BackupID, false, err.Error(), nil)

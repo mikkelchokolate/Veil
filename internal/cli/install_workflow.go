@@ -45,6 +45,12 @@ type ruRecommendedInstallOptions struct {
 	LEIPCertSet     bool
 	LEIPCertPort    int
 	LEIPCertPortSet bool
+	// ResetInstallState ignores the state key and state file recorded in an
+	// existing veil.env and installs against --etc-dir/--var-dir instead. It is
+	// the explicit opt-in for hosts whose recorded state lives outside the
+	// target tree; without it install refuses instead of starting a fresh panel
+	// next to the real state (#1498).
+	ResetInstallState bool
 }
 
 type RURecommendedInstallWorkflow struct {

@@ -6,6 +6,21 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil install` resolves the state key and the state file from the installed
+  `veil.env` instead of always assuming `<etc>/state.key` and
+  `<var>/state.json`, the same order the rest of the root CLI uses. After the
+  documented path-moving `veil admin rotate-key --new-key-path`, a re-install
+  therefore keeps working and keeps the rotated paths in the environment it
+  renders; before, it failed on the old key with a misleading "corrupted state
+  or a mismatched key" message (leaving a stray `<etc>/state.key` behind) or, if
+  the state had moved, silently installed a fresh Panel next to the real state.
+  When the recorded path lies outside the tree the install would write, install
+  now refuses before creating anything — no key, no state, no environment
+  rewrite — and prints the recorded path with the `--etc-dir`/`--var-dir` to
+  use. The new `--reset-install-state` flag is the explicit opt-in for a fresh
+  panel on the packaged paths; the recorded files are left on disk either way.
+  Environment values are now written with the same quoting the `veil.env`
+  rewrites use, so a path containing a space survives the round-trip (#1498).
 - `veil repair` now resolves the state key and state file the way the rest of
   the root CLI does: the installed `veil.env`, then the process environment,
   then the packaged `<etc>/state.key` and `<var>/state.json`. It used to assume
