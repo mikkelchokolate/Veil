@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -18,7 +19,7 @@ type quicFloorFixture struct {
 func newQUICFloorFixture(t *testing.T, caps map[string]string) *quicFloorFixture {
 	t.Helper()
 	fixture := &quicFloorFixture{}
-	original := []any{quicRuntimeGOOS, quicGeteuid, quicReadFile, quicWriteFile, quicMkdirAll, quicLookPath, quicCommand}
+	original := []any{quicRuntimeGOOS, quicGeteuid, quicReadFile, quicWriteFile, quicMkdirAll, quicLookPath, quicCommand, quicGlob, quicSysctlDirs, quicSysctlConf}
 	t.Cleanup(func() {
 		quicRuntimeGOOS = original[0].(func() string)
 		quicGeteuid = original[1].(func() int)
@@ -27,14 +28,24 @@ func newQUICFloorFixture(t *testing.T, caps map[string]string) *quicFloorFixture
 		quicMkdirAll = original[4].(func(string, os.FileMode) error)
 		quicLookPath = original[5].(func(string) (string, error))
 		quicCommand = original[6].(func(string, ...string) *exec.Cmd)
+		quicGlob = original[7].(func(string) ([]string, error))
+		quicSysctlDirs = original[8].([]string)
+		quicSysctlConf = original[9].(string)
 	})
+	// Hermetic by default: no sysctl.d files unless a test seeds them.
+	quicSysctlDirs = nil
+	quicSysctlConf = filepath.Join(t.TempDir(), "sysctl.conf")
 	quicRuntimeGOOS = func() string { return "linux" }
 	quicGeteuid = func() int { return 0 }
 	quicReadFile = func(path string) ([]byte, error) {
 		if value, ok := caps[path]; ok {
 			return []byte(value + "\n"), nil
 		}
-		return nil, errors.New("unreadable")
+		if strings.HasPrefix(path, "/proc/") {
+			return nil, errors.New("unreadable")
+		}
+		// Seedable files (sysctl.d) fall through to the real read.
+		return os.ReadFile(path)
 	}
 	quicWriteFile = func(path string, body []byte, mode os.FileMode) error {
 		fixture.written = string(body)
