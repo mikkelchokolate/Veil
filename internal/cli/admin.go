@@ -441,11 +441,26 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 				targetKeyPath = abs
 			}
 
-			// Pre-#1472 drop-ins pin the old key path in the unit itself and
-			// would ignore the environment rewrite, leaving the helper and the
-			// backup timer on the pre-rotation key (#1473).
-			if stale := staleKeyPinDropIns(rotatePreflightSystemdDir); len(stale) > 0 {
-				return fmt.Errorf("refusing to rotate the state key: %s still pin the key path instead of reading veil.env, so the helper and the backup timer would keep the old key; run `veil repair` (with --etc-dir/--var-dir on a custom install) to re-render them, then retry", strings.Join(stale, ", "))
+			// Pre-#1472 drop-ins pin the key path in the unit itself and would
+			// ignore an environment rewrite, leaving the helper and the backup
+			// timer on the pre-rotation key (#1473). A pin on exactly the file
+			// this rotation rewrites cannot do that: the unit reads that path,
+			// so an in-place rewrite replaces the key underneath it and the
+			// next operation loads the new one. Refusing those blocked the
+			// emergency re-key on the very hosts that need it (#1483).
+			if pins := staleKeyPins(rotatePreflightSystemdDir); len(pins) > 0 {
+				var blocking []string
+				for _, pin := range pins {
+					// An unparsable pin stays conservative: without the value
+					// there is no way to prove the rotation picks it up.
+					if pin.Pinned != "" && sameKeyPath(pin.Pinned, targetKeyPath) {
+						continue
+					}
+					blocking = append(blocking, pin.DropIn)
+				}
+				if len(blocking) > 0 {
+					return fmt.Errorf("refusing to rotate the state key: %s still pin the key path instead of reading veil.env, so the helper and the backup timer would keep the old key; run `veil repair` (with --etc-dir/--var-dir on a custom install) to re-render them, then retry", strings.Join(blocking, ", "))
+				}
 			}
 
 			// The Panel, the privileged helper and the backup unit load their

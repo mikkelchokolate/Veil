@@ -6,6 +6,18 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil admin rotate-key` no longer refuses an in-place rotation because a
+  pre-#1472 drop-in still pins the key path. The preflight added for #1473
+  refused whenever a `veil-helper.service` drop-in carried a literal
+  `Environment=VEIL_KEY_PATH=` or the backup unit passed `--key-path` in
+  `ExecStart=`, even when the pin named exactly the key file the in-place
+  rotation rewrites — and there the unit picks up the new key by itself. That
+  blocked the documented emergency re-key, and the only rotation a host without
+  an installed `veil.env` has, until an operator ran `veil repair` on units that
+  did nothing wrong. The preflight now parses the pinned path and refuses only
+  when it differs from the rotation target, so `--new-key-path` on a stale host
+  is still stopped before anything is written. Commented-out lines, which
+  systemd ignores, no longer count as a pin (#1483, #1484).
 - Deleting a client or a binding no longer drops the traffic usage of the other
   clients on the same runtime. The traffic provider map is a snapshot taken
   before an apply, and deleting a client cascades its bindings away while the
