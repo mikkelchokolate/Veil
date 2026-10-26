@@ -289,8 +289,14 @@ source build or use a matching pre-migration backup and binary for recovery.
 `veil update` and the Panel's **Update panel** button refuse to run on a binary
 that belongs to an installed package (`dpkg`/`rpm`/`apk`): they replace only the
 executable, which would leave the previous package's systemd units and install
-hooks in place. Upgrade such hosts with the package manager, which refreshes the
+hooks in place, and `--force` does not bypass the refusal — the package manager
+owns the file. Upgrade such hosts with the package manager, which refreshes the
 units and runs the hooks.
+
+To move a host from the package to the standalone distribution instead, remove
+the package first (`apt remove veil`, `dnf remove veil` or `apk del veil`) and
+then install the release archive; `veil update` cannot perform that migration,
+because it can only replace a binary it owns.
 
 For `.deb`, `.rpm` or `.apk` installations, install the matching v0.7.3 package
 with the package manager instead of overwriting its binary with `veil update`.

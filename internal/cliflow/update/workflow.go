@@ -72,7 +72,7 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 	// updater would refresh the executable alone and leave the old package's
 	// units and postinstall migrations in place (#1424).
 	if owner, managed := deps.PackageManaged(currentPath); managed {
-		return fmt.Errorf("this Veil binary belongs to %s; upgrade it with the package manager (apt/dnf/apk) instead of `veil update` so the packaged units and install hooks are refreshed", owner)
+		return fmt.Errorf("this Veil binary belongs to %s; upgrade it with the package manager (apt/dnf/apk) instead of `veil update` so the packaged units and install hooks are refreshed. --force does not bypass this: the package manager owns the file. To switch this host to the standalone distribution, remove the package first and install the release archive", owner)
 	}
 
 	// 1. Fetch latest release metadata

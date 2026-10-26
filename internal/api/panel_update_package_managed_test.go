@@ -38,8 +38,10 @@ func TestPanelUpdateRefusesAPackageManagedBinary(t *testing.T) {
 	if !errors.As(err, &refused) {
 		t.Fatalf("error %v is not an updateRefusedError (the handler maps that to 409)", err)
 	}
-	if !strings.Contains(err.Error(), "package manager") {
-		t.Fatalf("error %v does not point at the package manager", err)
+	for _, want := range []string{"package manager", "standalone distribution"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %v does not mention %q", err, want)
+		}
 	}
 }
 

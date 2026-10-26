@@ -82,7 +82,7 @@ func (s panelUpdateStager) Stage(ctx context.Context, force bool) (string, error
 	if s.packageManaged != nil {
 		if exe, err := os.Executable(); err == nil {
 			if owner, managed := s.packageManaged(exe); managed {
-				return "", &updateRefusedError{reason: fmt.Sprintf("this Veil binary belongs to %s; update it with the package manager (apt/dnf/apk) instead of the panel updater so the packaged units and install hooks are refreshed", owner)}
+				return "", &updateRefusedError{reason: fmt.Sprintf("this Veil binary belongs to %s; update it with the package manager (apt/dnf/apk) instead of the panel updater so the packaged units and install hooks are refreshed. To switch this host to the standalone distribution, remove the package first and install the release archive", owner)}
 			}
 		}
 	}
