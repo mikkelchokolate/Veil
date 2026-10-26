@@ -298,6 +298,17 @@ the package first (`apt remove veil`, `dnf remove veil` or `apk del veil`) and
 then install the release archive; `veil update` cannot perform that migration,
 because it can only replace a binary it owns.
 
+Take a backup (`sudo veil backup create`) before removing the package, and know
+what the package manager takes with it: the packaged binary
+(`/usr/local/bin/veil`), the packaged units under `/lib/systemd/system`, the QUIC
+`sysctl.d` drop-in and the package marker. The configuration that `veil install`
+rendered is **not** package-owned and stays: `/etc/veil` (environment file,
+`state.key`, panel TLS material), `/var/lib/veil` (`state.json`, `veil.db` and the
+backups directory) and the units written under `/etc/systemd/system` — those units
+will point at the missing binary until the archive install re-renders them, so
+finish with `sudo veil repair` (or `veil install`) after installing the release
+archive.
+
 For `.deb`, `.rpm` or `.apk` installations, install the matching v0.7.3 package
 with the package manager instead of overwriting its binary with `veil update`.
 Package hooks reload systemd and restart the units the package owns; they do
