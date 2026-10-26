@@ -52,6 +52,12 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 		} else {
 			output.WriteString("Status: inactive\n")
 		}
+		if !m.enabled {
+			// Real ufw prints only the status line while the firewall is not
+			// loaded; the configured rules are visible via `ufw show added`
+			// (#1434).
+			return output.String(), nil
+		}
 		targets := make([]string, 0, len(m.rules))
 		for target := range m.rules {
 			targets = append(targets, target)
@@ -63,6 +69,29 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 				action = override
 			}
 			fmt.Fprintf(&output, "%s %s Anywhere # %s\n", target, action, m.rules[target])
+		}
+		return output.String(), nil
+	case "show":
+		var output strings.Builder
+		targets := make([]string, 0, len(m.rules))
+		for target := range m.rules {
+			targets = append(targets, target)
+		}
+		sort.Strings(targets)
+		for _, target := range targets {
+			action := "allow"
+			if override, ok := m.actions[target]; ok {
+				action = strings.ToLower(override)
+			}
+			comment := m.rules[target]
+			switch {
+			case comment == "":
+				fmt.Fprintf(&output, "ufw %s %s\n", action, target)
+			case strings.ContainsAny(comment, " \t'\""):
+				fmt.Fprintf(&output, "ufw %s %s comment '%s'\n", action, target, comment)
+			default:
+				fmt.Fprintf(&output, "ufw %s %s comment %s\n", action, target, comment)
+			}
 		}
 		return output.String(), nil
 	case "--dry-run":
@@ -83,9 +112,9 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 			return "", errors.New("missing allow target")
 		}
 		comment := ""
-		for i := 3; i+1 < len(command); i++ {
-			if command[i] == "comment" {
-				comment = command[i+1]
+		for i := 3; i < len(command); i++ {
+			if command[i] == "comment" && i+1 < len(command) {
+				comment = strings.Trim(strings.Join(command[i+1:], " "), `"'`)
 			}
 		}
 		m.rules[command[2]] = comment
@@ -105,7 +134,12 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 }
 
 func TestFirewallFailureAtEveryCommandRestoresRulesAndEnabledState(t *testing.T) {
-	for failAt := 1; failAt <= 8; failAt++ {
+	for failAt := 1; failAt <= 9; failAt++ {
+		if failAt == 2 {
+			// `ufw show added` is a best-effort read: its failure must not fail
+			// the reconcile (#1434).
+			continue
+		}
 		t.Run(fmt.Sprintf("command-%d", failAt), func(t *testing.T) {
 			initialRules := map[string]string{"22/tcp": "OpenSSH", "9999/tcp": "Veil stale"}
 			model := &transactionalUFWModel{rules: cloneFirewallRules(initialRules), failAt: failAt}

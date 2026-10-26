@@ -6,6 +6,22 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Veil no longer treats an inactive UFW as an empty ruleset. `ufw status`
+  prints only `Status: inactive` while the firewall is not loaded, so the
+  firewall reconcile, the rollback, the stale-rule pass, the local prune and
+  uninstall all saw zero rules: a failed apply that enables UFW deleted the
+  operator's pre-staged `ufw allow 22/tcp` and never replayed it (the next
+  `ufw enable` then had no SSH access), and stale Veil-commented allows were
+  never pruned, going live on the next enable. The configured ruleset is now
+  read from `ufw show added` when the status reports the firewall inactive
+  (plain ports, ranges, `port N proto P`, application profiles and
+  source-restricted and route/interface-scoped rules), and both paths keep the
+  operator rules as pre-existing while still removing stale Veil ones; a rollback
+  replays each configured rule with its original arguments, so it cannot widen an
+  `on eth0` allow or turn a route rule into a plain outbound allow. The situation is also
+  reported: install/repair and the Panel apply surface a warning that the
+  configured rules do not filter traffic until UFW is enabled, instead of
+  silently presenting the firewall as empty (#1434).
 - `veil repair` re-renders the edge/protocol units with the installed layout
   instead of the packaged defaults: the `SystemdConfig` it built carried only
   `EtcDir` and the Caddy binary, so those units lost `InaccessiblePaths=` (the

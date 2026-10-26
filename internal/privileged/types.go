@@ -320,6 +320,9 @@ type FirewallResult struct {
 	AppliedRuleIDs []string `json:"appliedRuleIds,omitempty"`
 	TransactionID  string   `json:"transactionId,omitempty"`
 	Prepared       bool     `json:"prepared,omitempty"`
+	// Warnings carries non-fatal operator-facing notes, e.g. that UFW is
+	// disabled while configured rules exist (they only take effect on enable).
+	Warnings []string `json:"warnings,omitempty"`
 }
 
 type UpdateRequest struct {

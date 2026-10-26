@@ -15,6 +15,9 @@ type ufwState struct {
 	Enabled bool              `json:"enabled"`
 	Rules   map[string]string `json:"rules"`
 	Entries []ufwRuleState    `json:"entries"`
+	// InactiveConfigured counts the configured rules `ufw status` cannot list
+	// while the firewall is not loaded (read from `ufw show added`).
+	InactiveConfigured int `json:"inactiveConfigured,omitempty"`
 }
 
 type ufwRuleState struct {
@@ -29,6 +32,11 @@ type ufwRuleState struct {
 	Enabled     bool     `json:"enabled"`
 	Comment     string   `json:"comment,omitempty"`
 	Args        []string `json:"args"`
+	// Configured marks an entry discovered through `ufw show added`: its Args
+	// are the operator's exact command and are replayed verbatim. Journal
+	// entries leave it false so their fields are rebuilt (and widened args
+	// from older journals are not replayed as-is).
+	Configured bool `json:"configured,omitempty"`
 }
 
 type ufwDesiredRule struct {
@@ -54,6 +62,7 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 	if err != nil {
 		return FirewallResult{}, fmt.Errorf("parse preflight ufw status: %w", err)
 	}
+	warnings := mergeConfiguredUFWState(ctx, runner, &initial)
 	// Manage IPv6 too: with IPV6=no in /etc/default/ufw a plain `ufw allow`
 	// installs no (v6) twin and dual-stack listeners stay reachable on
 	// unmanaged ip6tables. Repair before any rule is staged so both the
@@ -143,7 +152,46 @@ func reconcileUFW(ctx context.Context, runner CommandRunner, request ResolvedFir
 			return FirewallResult{}, rollback(fmt.Errorf("stale Veil firewall rule %s remains", target))
 		}
 	}
-	return FirewallResult{AppliedRuleIDs: append([]string(nil), request.RuleIDs...)}, nil
+	return FirewallResult{AppliedRuleIDs: append([]string(nil), request.RuleIDs...), Warnings: warnings}, nil
+}
+
+// mergeConfiguredUFWState fills an inactive preflight state from `ufw show
+// added`: `ufw status` prints only the status line while the firewall is not
+// loaded, so treating the ruleset as empty made rollback delete the operator's
+// pre-staged rules and the stale pass miss Veil rules that go live on enable
+// (#1434). A missing or failing ufw is tolerated: the status-only view is kept
+// and no warning is produced.
+func mergeConfiguredUFWState(ctx context.Context, runner CommandRunner, state *ufwState) []string {
+	if state.Enabled {
+		return nil
+	}
+	output, err := runUFW(ctx, runner, 10*time.Second, "show", "added")
+	if err != nil {
+		return nil
+	}
+	configured := veilfirewall.ParseConfiguredRules(output)
+	for i, rule := range configured {
+		if rule.Target != "" {
+			if _, exists := state.Rules[rule.Target]; !exists {
+				state.Rules[rule.Target] = rule.Comment
+			}
+		}
+		state.Entries = append(state.Entries, ufwRuleState{
+			Family: "ipv4", Action: rule.Action, Direction: rule.Direction,
+			Source: rule.Source, Destination: rule.Target, Order: i,
+			Enabled: true, Comment: rule.Comment,
+			// Args is the rule exactly as ufw printed it, so rollback replays
+			// the original interface/route/source scope instead of re-encoding
+			// it and widening the rule (#1434 review).
+			Args:       append([]string(nil), rule.Args...),
+			Configured: true,
+		})
+	}
+	state.InactiveConfigured = len(configured)
+	if len(configured) == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf("UFW is disabled but %d configured rule(s) exist; they do not filter traffic until `ufw enable`, and Veil treats them as pre-existing rules", len(configured))}
 }
 
 func parseDesiredUFWRules(request ResolvedFirewall) ([]ufwDesiredRule, error) {
@@ -419,6 +467,16 @@ func parseUFWFromColumn(fields []string) (source, iface string) {
 }
 
 func ufwReplayArgs(entry ufwRuleState) ([]string, bool, error) {
+	if entry.Configured && len(entry.Args) > 0 {
+		// Configured rules discovered via `ufw show added` carry their original
+		// arguments: replaying them verbatim keeps interfaces, routes and
+		// source/destination scope exactly as the operator wrote them.
+		switch strings.ToLower(strings.TrimSpace(entry.Args[0])) {
+		case "allow", "deny", "reject", "limit", "route":
+			return append([]string(nil), entry.Args...), false, nil
+		}
+		return nil, false, errors.New("configured firewall rule has an unsupported action")
+	}
 	if !isUFWAction(entry.Action) {
 		return nil, false, errors.New("firewall recovery entry is incomplete")
 	}
