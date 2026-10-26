@@ -290,15 +290,13 @@ func (m Mutation) UpdateWarp(update WarpConfig) (WarpConfig, error) {
 				}
 				*m.target.Rules = append([]RoutingRule{warpRule}, (*m.target.Rules)...)
 			}
-		} else {
-			nextRules := []RoutingRule{}
-			for _, r := range *m.target.Rules {
-				if r.Outbound != "warp" {
-					nextRules = append(nextRules, r)
-				}
-			}
-			*m.target.Rules = nextRules
 		}
+		// Disabling keeps every rule, including the ones routing to warp and the
+		// auto rule: the sidecar renderer emits nothing while WARP is off, so the
+		// rules are inert, and re-enabling restores the operator's configuration
+		// without a second, destructive transition. Deleting them here lost
+		// operator-created rules (even already-disabled ones) with no way back
+		// (#1416).
 	}
 
 	if err := m.save(); err != nil {

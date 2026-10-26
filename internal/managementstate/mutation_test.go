@@ -279,7 +279,7 @@ func TestMutationCreateRoutingRuleRejectsInvalidAndDuplicate(t *testing.T) {
 	}
 }
 
-func TestMutationUpdateWarpAddsAndRemovesRoutingRule(t *testing.T) {
+func TestMutationUpdateWarpAddsRuleAndKeepsItOnDisable(t *testing.T) {
 	rules := []RoutingRule{{Name: "direct", Match: "geoip:private", Outbound: "direct", Enabled: true}}
 	warp := WarpConfig{}
 	m := NewManagementStateMutation(ManagementStateMutationTarget{Rules: &rules, Warp: &warp}, func() error { return nil })
@@ -305,11 +305,10 @@ func TestMutationUpdateWarpAddsAndRemovesRoutingRule(t *testing.T) {
 	if updated.Enabled {
 		t.Fatal("expected warp disabled")
 	}
-	if len(rules) != 1 || rules[0].Outbound == "warp" {
-		t.Fatalf("warp routing rule not removed: %+v", rules)
-	}
-	if rules[0].Match != "geoip:private" {
-		t.Fatalf("disable must keep the pre-existing rule, got %+v", rules[0])
+	// #1416: disabling takes the outbound down but keeps the rules, so enabling
+	// again restores the operator's routing instead of silently deleting it.
+	if len(rules) != 2 || rules[0] != wantRule {
+		t.Fatalf("disable dropped routing rules: %+v", rules)
 	}
 }
 
