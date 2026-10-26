@@ -6,6 +6,18 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The QUIC UDP buffer tuning no longer lowers limits a host already raised.
+  `veil install`, `veil repair` and the package `postinstall` wrote
+  `net.core.rmem_max`/`wmem_max = 16777216` unconditionally — live and through
+  `/etc/sysctl.d/99-veil-quic.conf`, which sorts last and therefore wins over
+  operator files such as `90-network-tuning.conf` on every boot. On a server
+  tuned above 16 MiB for other high-throughput workloads (a common BBR/QUIC
+  setting) every install, repair and package upgrade silently reset the kernel
+  limits to 16 MiB, and the value stayed lowered until reboot. Both paths now
+  read the live caps and only raise what is below 16 MiB; the drop-in is
+  rewritten to the observed value, so a higher limit survives the next boot
+  too. An unreadable `/proc` entry keeps the old fail-safe direction (apply the
+  floor) (#1456).
 - The Caddy capability probe used by `veil install` and `veil repair` to render
   the Caddy JSON now resolves `caddy` through the trusted system directories and
   runs it with a scrubbed `PATH` (`internal/syspath`) instead of the caller's

@@ -47,7 +47,9 @@ func TestApplyQUICUDPBuffersWritesSysctlAndApplies(t *testing.T) {
 	origWrite := quicWriteFile
 	origLook := quicLookPath
 	origCmd := quicCommand
+	origRead := quicReadFile
 	t.Cleanup(func() {
+		quicReadFile = origRead
 		quicGeteuid = origEUID
 		quicRuntimeGOOS = origGOOS
 		quicMkdirAll = origMkdir
@@ -55,6 +57,7 @@ func TestApplyQUICUDPBuffersWritesSysctlAndApplies(t *testing.T) {
 		quicLookPath = origLook
 		quicCommand = origCmd
 	})
+	quicReadFile = func(string) ([]byte, error) { return []byte("212992\n"), nil }
 	quicGeteuid = func() int { return 0 }
 	quicRuntimeGOOS = func() string { return "linux" }
 	quicMkdirAll = func(string, os.FileMode) error { return nil }
