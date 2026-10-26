@@ -313,6 +313,11 @@ instead of a hardcoded literal or `--key-path`). Upgraded custom installs keep
 their pre-0.7.3 drop-ins until that command runs, and `veil admin rotate-key`
 refuses to rotate while such a drop-in is still present.
 
+An install that writes its units outside `/etc/systemd/system` records the
+directory as `VEIL_SYSTEMD_DIR` in `veil.env`. `veil repair`, the `rotate-key`
+preflight and `veil doctor` read it, so they keep working on the real unit tree;
+pass `--systemd-dir` to override it for one run.
+
 ### Install state paths and reinstalls
 
 `veil install` takes the state key and state file from the installed `veil.env`
@@ -333,6 +338,9 @@ prints the recorded path with two ways forward:
   layout on purpose. The flag only ignores the recorded paths: the key and state
   files on disk are left untouched, so take a backup first if you still need
   them.
+
+The refusal also covers `--dry-run` and `--check-only`: the recorded paths are
+resolved before the preview, so a foreign tree is reported instead of planned.
 
 ```bash
 # keep the installed (= rotated) state paths

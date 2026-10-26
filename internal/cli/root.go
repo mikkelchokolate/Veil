@@ -104,7 +104,11 @@ func buildDoctorSummary(version string) doctorSummary {
 // doctorUnitKeyPathDriftProbe reports the stale pre-#1472 drop-ins that keep a
 // managed unit on the old key path. Tests replace it.
 var doctorUnitKeyPathDriftProbe doctorflow.UnitKeyPathDriftProbe = func() []string {
-	pins := staleKeyPins(veilenv.DefaultSystemdDir, runtimeSystemdDir)
+	scanDirs := []string{veilenv.DefaultSystemdDir, runtimeSystemdDir}
+	if dir := installedSystemdDir(veilenv.Resolve(veilenv.DefaultSystemdDir)); dir != "" {
+		scanDirs = append(scanDirs, dir)
+	}
+	pins := staleKeyPins(scanDirs...)
 	paths := make([]string, 0, len(pins))
 	for _, pin := range pins {
 		paths = append(paths, pin.DropIn)

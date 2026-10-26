@@ -57,6 +57,10 @@ func newRepairCommand() *cobra.Command {
 				return err
 			}
 			etcDir, varDir = resolvedEtc, resolvedVar
+			// Same contract for the unit directory: a custom --systemd-dir
+			// install records it in veil.env, and re-rendering the units into
+			// the packaged path would leave the live ones stale (#1484).
+			systemdDir = resolveRepairSystemdDir(cmd, etcDir, systemdDir)
 			return runRepairWorkflow(cmd, repairWorkflowOptions{
 				Profile:         profile,
 				DryRun:          dryRun,
@@ -87,6 +91,22 @@ func newRepairCommand() *cobra.Command {
 	cmd.Flags().IntVar(&leIPCertPort, "le-ip-cert-port", 80, "port used for Let's Encrypt HTTP-01 validation")
 	cmd.Flags().StringVar(&publicIP, "public-ip", "", "optional server public IP; use auto to detect it")
 	return cmd
+}
+
+// resolveRepairSystemdDir picks the unit directory repair writes into: an
+// explicit --systemd-dir wins, then the directory the installed veil.env
+// records, then the packaged default.
+func resolveRepairSystemdDir(cmd *cobra.Command, etcDir, flagValue string) string {
+	if cmd.Flags().Changed("systemd-dir") {
+		return flagValue
+	}
+	if dir := installedSystemdDir(filepath.Join(etcDir, "veil.env")); dir != "" {
+		return dir
+	}
+	if strings.TrimSpace(flagValue) == "" {
+		return defaultSystemdDir
+	}
+	return flagValue
 }
 
 // repairDiscoverySystemdDir is where the installed veil.service drop-in that

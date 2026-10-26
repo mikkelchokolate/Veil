@@ -479,7 +479,13 @@ func newAdminCommand(hasher PasswordHasher) *cobra.Command {
 			// so an in-place rewrite replaces the key underneath it and the
 			// next operation loads the new one. Refusing those blocked the
 			// emergency re-key on the very hosts that need it (#1483).
-			if pins := staleKeyPins(rotatePreflightSystemdDir, rotatePreflightRuntimeSystemdDir); len(pins) > 0 {
+			scanDirs := []string{rotatePreflightSystemdDir, rotatePreflightRuntimeSystemdDir}
+			if dir := installedSystemdDir(envPath); dir != "" {
+				// A custom --systemd-dir install keeps its drop-ins outside the
+				// packaged path; the recorded directory is where they live (#1484).
+				scanDirs = append(scanDirs, dir)
+			}
+			if pins := staleKeyPins(scanDirs...); len(pins) > 0 {
 				var blocking []string
 				for _, pin := range pins {
 					// An unparsable pin stays conservative: without the value

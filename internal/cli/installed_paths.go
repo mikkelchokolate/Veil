@@ -118,6 +118,22 @@ func staleKeyPins(systemdDirs ...string) []keyPin {
 	return pins
 }
 
+// installedSystemdDir returns the unit directory the installed environment
+// records, or "" when it records none (or only the packaged default). A custom
+// --systemd-dir install keeps its units outside /etc/systemd/system, so repair
+// and the rotate-key preflight must not fall back to the packaged path (#1484).
+func installedSystemdDir(envPath string) string {
+	body, err := os.ReadFile(envPath)
+	if err != nil {
+		return ""
+	}
+	dir := strings.TrimSpace(veilenv.Value(body, veilenv.SystemdDirKey))
+	if dir == "" || sameKeyPath(dir, veilenv.DefaultSystemdDir) {
+		return ""
+	}
+	return dir
+}
+
 // hasEnvironmentFileDirective reports whether the fragment makes systemd load an
 // environment file, which wins over a literal Environment= line. An empty value
 // resets the list and a `-`-prefixed path systemd cannot open supplies nothing,
@@ -126,7 +142,10 @@ func hasEnvironmentFileDirective(body string) bool {
 	for _, entry := range unitDirectiveLines(body, "EnvironmentFile=") {
 		entry = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(entry), "-"))
 		path := trimUnitQuotes(entry)
-		if path == "" {
+		// systemd requires an absolute path here; a relative one is ignored at
+		// load time, so a same-named file in the CLI's working directory must
+		// not make the fragment look env-backed (#1496 review).
+		if path == "" || !filepath.IsAbs(path) {
 			continue
 		}
 		if info, err := os.Stat(path); err == nil && info.Mode().IsRegular() {

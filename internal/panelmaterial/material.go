@@ -149,6 +149,14 @@ func (m ManagedMaterial) EnvContent() (string, error) {
 			envKV{"VEIL_KEY_PATH", filepath.ToSlash(keyPath)},
 			envKV{"VEIL_LIVE_ROOT", filepath.ToSlash(filepath.Join(paths.EtcDir, "generated"))})
 	}
+	// A custom unit directory is part of the installed layout: repair has to
+	// re-render the units there and the rotate-key preflight has to scan its
+	// drop-ins. The packaged default stays implicit so unchanged installs keep
+	// byte-identical environments (#1484).
+	if systemdDir := strings.TrimSpace(input.Paths.SystemdDir); systemdDir != "" &&
+		filepath.Clean(systemdDir) != filepath.Clean(veilenv.DefaultSystemdDir) {
+		entries = append(entries, envKV{veilenv.SystemdDirKey, filepath.ToSlash(systemdDir)})
+	}
 	if paths := input.Paths; paths.VarDir != "" {
 		statePath := filepath.Join(paths.VarDir, "state.json")
 		if input.StatePath != "" {

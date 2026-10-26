@@ -73,3 +73,28 @@ func TestRepairKeepsTheStateRootInVeilEnv(t *testing.T) {
 		t.Fatalf("regenerated veil.env points at the packaged state root:\n%s", env)
 	}
 }
+
+// TestRepairKeepsTheRecordedSystemdDir locks the persistence round-trip from
+// #1484: a repair on a custom --systemd-dir install must keep
+// VEIL_SYSTEMD_DIR in the regenerated veil.env, otherwise the next repair (and
+// the rotate-key preflight) falls back to the packaged unit directory.
+func TestRepairKeepsTheRecordedSystemdDir(t *testing.T) {
+	etcDir := t.TempDir()
+	varDir := t.TempDir()
+	systemdDir := filepath.Join(t.TempDir(), "systemd")
+	envPath := filepath.Join(etcDir, "veil.env")
+	env := "VEIL_SYSTEMD_DIR=" + systemdDir + "\nVEIL_PANEL_ACCESS=local\n"
+	if err := os.WriteFile(envPath, []byte(env), 0o640); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := buildRepairPlanFromOptions(Options{
+		Profile: "ru-recommended", EtcDir: etcDir, VarDir: varDir, SystemdDir: systemdDir,
+	})
+	if err != nil {
+		t.Fatalf("buildRepairPlanFromOptions: %v", err)
+	}
+	if got := repairPlanEnvValue(plan, "VEIL_SYSTEMD_DIR"); got != systemdDir {
+		t.Fatalf("planned VEIL_SYSTEMD_DIR = %q, want %q", got, systemdDir)
+	}
+}
