@@ -2,6 +2,7 @@ package repair
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/api"
@@ -16,11 +17,15 @@ func TestPanelStateRepairMaterialAddsGeneratedConfigsAndRuntimeUnits(t *testing.
 		VarDir:     filepath.Join(dir, "var", "lib", "veil"),
 		SystemdDir: filepath.Join(dir, "etc", "systemd", "system"),
 	}
+	customBinary := filepath.Join(dir, "opt", "veil", "bin", "veil")
 	material := newPanelStateRepairMaterial(opts, panelStateRepairSnapshot{
 		Settings: api.Settings{PanelListen: "127.0.0.1:2096", PanelAccess: "caddy", WebBasePath: "/panel/", Mode: "server", Domain: "panel.example.com", Email: "admin@example.com"},
 		Inbounds: []api.Inbound{{Name: "mieru", Protocol: "mieru", Transport: "tcp", Port: 443, Enabled: true, Password: "secret"}},
 		Warp:     api.WarpConfig{Enabled: false, Endpoint: "engage.cloudflareclient.com:2408"},
-	}, PlanDependencies{Secret: func(label string) string { return "repair-" + label }})
+	}, PlanDependencies{
+		Secret:     func(label string) string { return "repair-" + label },
+		Executable: func() (string, error) { return customBinary, nil },
+	})
 
 	plan, err := material.Apply(installer.RepairPlan{})
 	if err != nil {
@@ -37,6 +42,27 @@ func TestPanelStateRepairMaterialAddsGeneratedConfigsAndRuntimeUnits(t *testing.
 			t.Fatalf("repair material missing %s in plan: %+v", want, plan.Actions)
 		}
 	}
+	// #1437: the re-rendered units must carry the installed layout and binary.
+	mieru := repairPlanActionContent(t, plan, filepath.Join(opts.SystemdDir, renderer.UnitMieru))
+	for _, want := range []string{opts.VarDir, customBinary} {
+		if !strings.Contains(mieru, want) {
+			t.Fatalf("re-rendered mieru unit lost %q:\n%s", want, mieru)
+		}
+	}
+	if strings.Contains(mieru, " /var/lib/veil\n") {
+		t.Fatalf("re-rendered mieru unit fell back to the packaged var dir:\n%s", mieru)
+	}
+}
+
+func repairPlanActionContent(t *testing.T, plan installer.RepairPlan, path string) string {
+	t.Helper()
+	for _, action := range plan.Actions {
+		if action.Path == path {
+			return action.Content
+		}
+	}
+	t.Fatalf("repair plan has no action for %s", path)
+	return ""
 }
 
 func repairPlanHasAction(plan installer.RepairPlan, path string) bool {

@@ -66,7 +66,20 @@ func (m panelStateRepairMaterial) addRuntimeUnitActions(plan *installer.RepairPl
 		return nil
 	}
 	snapshot := m.snapshot
-	cfg := renderer.SystemdConfig{EtcDir: m.opts.EtcDir, CaddyBinary: m.deps.resolvedBinaryPath("caddy")}
+	// The runtime units must carry the installed layout, not the packaged
+	// defaults: a custom --var-dir install lost its state mask on every repair
+	// (the units flip-flopped back to /var/lib/veil), and a custom binary path
+	// was replaced by /usr/local/bin/veil (#1437).
+	veilBinary, executableErr := m.deps.executable()()
+	if executableErr != nil {
+		veilBinary = ""
+	}
+	cfg := renderer.SystemdConfig{
+		EtcDir:      m.opts.EtcDir,
+		VarDir:      m.opts.VarDir,
+		VeilBinary:  veilBinary,
+		CaddyBinary: m.deps.resolvedBinaryPath("caddy"),
+	}
 	// EtcDir/resolved binary paths feed unit directives; a control character
 	// would inject extra unit lines (issue #1001), so validate before render.
 	if err := renderer.ValidateSystemdConfig(cfg); err != nil {
