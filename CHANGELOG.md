@@ -13,7 +13,8 @@ All notable changes to Veil will be documented in this file.
   tuned 64 MiB never came back. Both the Go path and the packaged `postinstall`
   now also read the explicit `net.core.rmem_max`/`wmem_max` assignments from
   `/etc/sysctl.d`, `/run/sysctl.d`, `/usr/local/lib/sysctl.d`,
-  `/usr/lib/sysctl.d`, `/lib/sysctl.d` and `/etc/sysctl.conf`, keep the highest
+  `/usr/lib/sysctl.d` and `/lib/sysctl.d` (the set systemd-sysctl applies;
+  `/etc/sysctl.conf` belongs to procps and is not read at boot), keep the highest
   one, and persist and raise `max(floor, live, operator)` — the operator value
   wins at the next boot and immediately (#1492).
 - `veil install`, `veil repair` and `veil doctor` no longer resolve their

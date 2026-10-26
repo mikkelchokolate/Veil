@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -19,7 +18,7 @@ type quicFloorFixture struct {
 func newQUICFloorFixture(t *testing.T, caps map[string]string) *quicFloorFixture {
 	t.Helper()
 	fixture := &quicFloorFixture{}
-	original := []any{quicRuntimeGOOS, quicGeteuid, quicReadFile, quicWriteFile, quicMkdirAll, quicLookPath, quicCommand, quicGlob, quicSysctlDirs, quicSysctlConf}
+	original := []any{quicRuntimeGOOS, quicGeteuid, quicReadFile, quicWriteFile, quicMkdirAll, quicLookPath, quicCommand, quicGlob, quicSysctlDirs}
 	t.Cleanup(func() {
 		quicRuntimeGOOS = original[0].(func() string)
 		quicGeteuid = original[1].(func() int)
@@ -30,11 +29,9 @@ func newQUICFloorFixture(t *testing.T, caps map[string]string) *quicFloorFixture
 		quicCommand = original[6].(func(string, ...string) *exec.Cmd)
 		quicGlob = original[7].(func(string) ([]string, error))
 		quicSysctlDirs = original[8].([]string)
-		quicSysctlConf = original[9].(string)
 	})
 	// Hermetic by default: no sysctl.d files unless a test seeds them.
 	quicSysctlDirs = nil
-	quicSysctlConf = filepath.Join(t.TempDir(), "sysctl.conf")
 	quicRuntimeGOOS = func() string { return "linux" }
 	quicGeteuid = func() int { return 0 }
 	quicReadFile = func(path string) ([]byte, error) {

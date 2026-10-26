@@ -26,7 +26,6 @@ func TestPostinstallQuicTuningOnlyRaises(t *testing.T) {
 		"quic_floor=16777216",
 		"quic_explicit_max net.core.rmem_max",
 		"quic_explicit_max net.core.wmem_max",
-		"/etc/sysctl.conf",
 		`sysctl -w "net.core.rmem_max=${quic_rmem}"`,
 		`sysctl -w "net.core.wmem_max=${quic_wmem}"`,
 	} {

@@ -145,20 +145,36 @@ if [ "$MODE" = install ]; then
         # operator's 90-network-tuning.conf, so /proc already reads Veil's clamp
         # and the tuned value would be lost on every upgrade (issue #1492). Read
         # the explicit assignments too and keep the highest.
+        #
+        # systemd-sysctl(8) reads only the sysctl.d directories; /etc/sysctl.conf
+        # belongs to procps' sysctl and is not applied at boot here. Arguments are
+        # paths, standard globs included — a literal glob for a directory that
+        # does not exist is skipped by the [ -f ] test, and nonexistent paths in
+        # general never reach the reader. The scan keeps the highest value across
+        # every file; systemd itself applies the lexicographically last name, and
+        # a maximum can only raise what it applies, never lower it.
         quic_explicit_max() {
-            awk -v key="$1" '
-                { sub(/^[[:space:]]+/, "")
-                  if ($0 == "" || $0 ~ /^[#;]/) next
-                  sub(/^-/, "")
-                  eq = index($0, "=")
-                  if (eq == 0) next
-                  name = substr($0, 1, eq - 1)
-                  gsub(/[[:space:]]/, "", name)
-                  if (name != key) next
-                  value = substr($0, eq + 1)
-                  gsub(/[[:space:]]/, "", value)
-                  if (value ~ /^[0-9]+$/ && value + 0 > best) best = value + 0 }
-                END { print best + 0 }' "$@" 2>/dev/null || true
+            _quic_key="$1"
+            shift
+            _quic_best=0
+            for _quic_path in "$@"; do
+                [ -f "${_quic_path}" ] || continue
+                while IFS= read -r _quic_line; do
+                    case "${_quic_line}" in '' | '#'* | ';'*) continue ;; esac
+                    _quic_line="${_quic_line#-}"
+                    _quic_name="${_quic_line%%=*}"
+                    [ "${_quic_name}" != "${_quic_line}" ] || continue
+                    _quic_name="$(printf '%s' "${_quic_name}" | tr -d '[:space:]')"
+                    [ "${_quic_name}" = "${_quic_key}" ] || continue
+                    _quic_value="${_quic_line#*=}"
+                    _quic_value="$(printf '%s' "${_quic_value}" | tr -d '[:space:]')"
+                    case "${_quic_value}" in '' | *[!0-9]*) continue ;; esac
+                    if [ "${_quic_value}" -gt "${_quic_best}" ]; then
+                        _quic_best="${_quic_value}"
+                    fi
+                done < "${_quic_path}"
+            done
+            echo "${_quic_best}"
         }
         quic_floor=16777216
         quic_rmem="$(cat /proc/sys/net/core/rmem_max 2>/dev/null || true)"
@@ -169,10 +185,10 @@ if [ "$MODE" = install ]; then
         [ "${quic_wmem}" -ge "${quic_floor}" ] || quic_wmem="${quic_floor}"
         quic_tuned_rmem="$(quic_explicit_max net.core.rmem_max \
             /etc/sysctl.d/*.conf /run/sysctl.d/*.conf /usr/local/lib/sysctl.d/*.conf \
-            /usr/lib/sysctl.d/*.conf /lib/sysctl.d/*.conf /etc/sysctl.conf)"
+            /usr/lib/sysctl.d/*.conf /lib/sysctl.d/*.conf)"
         quic_tuned_wmem="$(quic_explicit_max net.core.wmem_max \
             /etc/sysctl.d/*.conf /run/sysctl.d/*.conf /usr/local/lib/sysctl.d/*.conf \
-            /usr/lib/sysctl.d/*.conf /lib/sysctl.d/*.conf /etc/sysctl.conf)"
+            /usr/lib/sysctl.d/*.conf /lib/sysctl.d/*.conf)"
         case "${quic_tuned_rmem}" in '' | *[!0-9]*) quic_tuned_rmem=0 ;; esac
         case "${quic_tuned_wmem}" in '' | *[!0-9]*) quic_tuned_wmem=0 ;; esac
         [ "${quic_rmem}" -ge "${quic_tuned_rmem}" ] || quic_rmem="${quic_tuned_rmem}"

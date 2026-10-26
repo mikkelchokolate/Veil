@@ -55,7 +55,9 @@ var (
 	// /usr/local/lib, /usr/local/lib overrides /usr/lib, /usr/lib overrides
 	// /lib. Operator tuning lives here (90-network-tuning.conf and friends), and
 	// Veil's own drop-in sorts late, so the files have to be read instead of
-	// trusting the live value (#1492).
+	// trusting the live value (#1492). systemd-sysctl(8) reads only these
+	// directories — /etc/sysctl.conf belongs to procps' sysctl and is not
+	// applied at boot on a systemd host, so it is deliberately not scanned.
 	quicSysctlDirs = []string{
 		"/etc/sysctl.d",
 		"/run/sysctl.d",
@@ -63,9 +65,6 @@ var (
 		"/usr/lib/sysctl.d",
 		"/lib/sysctl.d",
 	}
-	// quicSysctlConf is applied by systemd-sysctl after every *.conf file, so a
-	// tuning written there outranks the drop-ins; the scan reads it too.
-	quicSysctlConf = "/etc/sysctl.conf"
 )
 
 // operatorQUICBuffer returns the highest explicit cap for key across the systemd
@@ -92,9 +91,6 @@ func operatorQUICBuffer(key string) int {
 				best = value
 			}
 		}
-	}
-	if value := quicBufferFromFile(quicSysctlConf, key); value > best {
-		best = value
 	}
 	return best
 }
