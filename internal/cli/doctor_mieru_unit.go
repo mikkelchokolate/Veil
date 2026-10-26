@@ -28,7 +28,9 @@ var doctorMieruUnitFallbackProbe = probeMieruUnitFallbackState
 
 // probeMieruUnitFallbackState asks the trusted systemctl about the loaded unit.
 // The probe runs as root from `veil doctor`, so it resolves systemctl through
-// syspath rather than the caller's PATH (#1490).
+// syspath rather than the caller's PATH — and syspath.CommandContext also
+// replaces the child's PATH, so a shell script systemctl runs cannot fall back
+// to an ambient binary (#1490).
 func probeMieruUnitFallbackState() mieruUnitFallbackState {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

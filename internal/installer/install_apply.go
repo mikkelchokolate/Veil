@@ -117,7 +117,9 @@ func (a InstallApply) Apply() (ApplyResult, error) {
 	}
 	if err := applyQUICUDPBuffers(); err != nil {
 		// Live sysctl can be rejected on OpenVZ/LXC after secrets and firewall
-		// rules are already on disk. Persist-or-warn; do not fail the install.
+		// rules are already on disk. Persist-or-warn; do not fail the install —
+		// unlike `veil repair`, which treats the same error as fatal because it
+		// is the command the operator runs to fix the host (#1506 review).
 		quicBufferWarn("WARNING: could not tune QUIC UDP buffers: %v\n", err)
 	}
 

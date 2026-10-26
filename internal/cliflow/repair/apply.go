@@ -46,6 +46,10 @@ func ApplyPlan(plan installer.RepairPlan, opts Options, out io.Writer, deps Appl
 		return err
 	}
 	if err := applyQUICBuffers(); err != nil {
+		// Hard failure here, unlike `veil install`, which only warns: repair is
+		// the command the operator ran to fix this host, so reporting success
+		// without the tuning it was asked for would hide a real gap. The error
+		// names the trusted sysctl search path (#1506 review).
 		_ = writeAuditRepair(opts.AuditLog, backupID, false, err.Error(), result.WrittenFiles)
 		return fmt.Errorf("tune QUIC UDP buffers: %w", err)
 	}
