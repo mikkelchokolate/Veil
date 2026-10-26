@@ -2,9 +2,11 @@ package privileged
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestFirewallRollbackKeepsPreStagedOperatorRuleOnInactiveUFW covers the
@@ -81,4 +83,76 @@ To                         Action      From
 	if _, ok := state.Rules["22/tcp"]; !ok {
 		t.Fatalf("IPv4 key missing from rules: %v", state.Rules)
 	}
+}
+
+// TestConfiguredRuleReplayKeepsTheOriginalScope locks the #1434 review
+// blockers: replaying a configured rule must not invent a destination for a
+// source-only rule, and must keep interface/route scope instead of widening it.
+func TestConfiguredRuleReplayKeepsTheOriginalScope(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		line string
+		want []string
+	}{
+		{
+			name: "source-only allow",
+			line: "ufw allow from 1.2.3.4\n",
+			want: []string{"allow", "from", "1.2.3.4"},
+		},
+		{
+			name: "interface-scoped allow",
+			line: "ufw allow in on eth0 to any port 8443\n",
+			want: []string{"allow", "in", "on", "eth0", "to", "any", "port", "8443"},
+		},
+		{
+			name: "route rule",
+			line: "ufw route allow in on eth0 out on eth1 to 10.0.0.1 port 80\n",
+			want: []string{"route", "allow", "in", "on", "eth0", "out", "on", "eth1", "to", "10.0.0.1", "port", "80"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			state := mergeConfiguredForTest(t, tc.line)
+			if len(state.Entries) != 1 {
+				t.Fatalf("entries = %+v, want one", state.Entries)
+			}
+			args, skip, err := ufwReplayArgs(state.Entries[0])
+			if err != nil || skip {
+				t.Fatalf("replay: args=%v skip=%v err=%v", args, skip, err)
+			}
+			if !reflect.DeepEqual(args, tc.want) {
+				t.Fatalf("replay args = %v, want %v", args, tc.want)
+			}
+		})
+	}
+}
+
+// TestConfiguredSourceOnlyRuleStaysOutOfTheDestinationKeys keeps a source-only
+// rule from looking like a rule to the source address, which would make
+// pruning/rollback treat it as a Veil-managed destination.
+func TestConfiguredSourceOnlyRuleStaysOutOfTheDestinationKeys(t *testing.T) {
+	state := mergeConfiguredForTest(t, "ufw deny from 1.2.3.4\nufw allow 22/tcp\n")
+	if _, exists := state.Rules["1.2.3.4"]; exists {
+		t.Fatalf("source-only rule leaked into destination keys: %v", state.Rules)
+	}
+	if len(state.Entries) != 2 {
+		t.Fatalf("source-only rule must stay replayable: %+v", state.Entries)
+	}
+	if state.InactiveConfigured != 2 {
+		t.Fatalf("InactiveConfigured = %d, want 2", state.InactiveConfigured)
+	}
+}
+
+// mergeConfiguredForTest runs the inactive-firewall fallback against a runner
+// that answers `ufw show added` with the given lines.
+func mergeConfiguredForTest(t *testing.T, showAdded string) ufwState {
+	t.Helper()
+	state := ufwState{Rules: map[string]string{}}
+	runner := func(_ context.Context, command []string, _ time.Duration) (string, error) {
+		if len(command) >= 2 && command[len(command)-2] == "show" {
+			return showAdded, nil
+		}
+		return "", errors.New("unexpected ufw command")
+	}
+	mergeConfiguredUFWState(context.Background(), runner, &state)
+	return state
 }

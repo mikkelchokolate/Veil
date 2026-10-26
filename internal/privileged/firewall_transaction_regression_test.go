@@ -83,10 +83,14 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 			if override, ok := m.actions[target]; ok {
 				action = strings.ToLower(override)
 			}
-			if comment := m.rules[target]; comment != "" {
-				fmt.Fprintf(&output, "ufw %s %s comment %s\n", action, target, comment)
-			} else {
+			comment := m.rules[target]
+			switch {
+			case comment == "":
 				fmt.Fprintf(&output, "ufw %s %s\n", action, target)
+			case strings.ContainsAny(comment, " \t'\""):
+				fmt.Fprintf(&output, "ufw %s %s comment '%s'\n", action, target, comment)
+			default:
+				fmt.Fprintf(&output, "ufw %s %s comment %s\n", action, target, comment)
 			}
 		}
 		return output.String(), nil
@@ -108,9 +112,9 @@ func (m *transactionalUFWModel) runner(_ context.Context, command []string, _ ti
 			return "", errors.New("missing allow target")
 		}
 		comment := ""
-		for i := 3; i+1 < len(command); i++ {
-			if command[i] == "comment" {
-				comment = command[i+1]
+		for i := 3; i < len(command); i++ {
+			if command[i] == "comment" && i+1 < len(command) {
+				comment = strings.Trim(strings.Join(command[i+1:], " "), `"'`)
 			}
 		}
 		m.rules[command[2]] = comment

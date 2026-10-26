@@ -32,6 +32,11 @@ type ufwRuleState struct {
 	Enabled     bool     `json:"enabled"`
 	Comment     string   `json:"comment,omitempty"`
 	Args        []string `json:"args"`
+	// Configured marks an entry discovered through `ufw show added`: its Args
+	// are the operator's exact command and are replayed verbatim. Journal
+	// entries leave it false so their fields are rebuilt (and widened args
+	// from older journals are not replayed as-is).
+	Configured bool `json:"configured,omitempty"`
 }
 
 type ufwDesiredRule struct {
@@ -166,13 +171,20 @@ func mergeConfiguredUFWState(ctx context.Context, runner CommandRunner, state *u
 	}
 	configured := veilfirewall.ParseConfiguredRules(output)
 	for i, rule := range configured {
-		if _, exists := state.Rules[rule.Target]; !exists {
-			state.Rules[rule.Target] = rule.Comment
+		if rule.Target != "" {
+			if _, exists := state.Rules[rule.Target]; !exists {
+				state.Rules[rule.Target] = rule.Comment
+			}
 		}
 		state.Entries = append(state.Entries, ufwRuleState{
 			Family: "ipv4", Action: rule.Action, Direction: rule.Direction,
 			Source: rule.Source, Destination: rule.Target, Order: i,
 			Enabled: true, Comment: rule.Comment,
+			// Args is the rule exactly as ufw printed it, so rollback replays
+			// the original interface/route/source scope instead of re-encoding
+			// it and widening the rule (#1434 review).
+			Args:       append([]string(nil), rule.Args...),
+			Configured: true,
 		})
 	}
 	state.InactiveConfigured = len(configured)
@@ -455,6 +467,16 @@ func parseUFWFromColumn(fields []string) (source, iface string) {
 }
 
 func ufwReplayArgs(entry ufwRuleState) ([]string, bool, error) {
+	if entry.Configured && len(entry.Args) > 0 {
+		// Configured rules discovered via `ufw show added` carry their original
+		// arguments: replaying them verbatim keeps interfaces, routes and
+		// source/destination scope exactly as the operator wrote them.
+		switch strings.ToLower(strings.TrimSpace(entry.Args[0])) {
+		case "allow", "deny", "reject", "limit", "route":
+			return append([]string(nil), entry.Args...), false, nil
+		}
+		return nil, false, errors.New("configured firewall rule has an unsupported action")
+	}
 	if !isUFWAction(entry.Action) {
 		return nil, false, errors.New("firewall recovery entry is incomplete")
 	}

@@ -15,8 +15,10 @@ All notable changes to Veil will be documented in this file.
   never pruned, going live on the next enable. The configured ruleset is now
   read from `ufw show added` when the status reports the firewall inactive
   (plain ports, ranges, `port N proto P`, application profiles and
-  source-restricted rules), and both paths keep the operator rules as
-  pre-existing while still removing stale Veil ones. The situation is also
+  source-restricted and route/interface-scoped rules), and both paths keep the
+  operator rules as pre-existing while still removing stale Veil ones; a rollback
+  replays each configured rule with its original arguments, so it cannot widen an
+  `on eth0` allow or turn a route rule into a plain outbound allow. The situation is also
   reported: install/repair and the Panel apply surface a warning that the
   configured rules do not filter traffic until UFW is enabled, instead of
   silently presenting the firewall as empty (#1434).

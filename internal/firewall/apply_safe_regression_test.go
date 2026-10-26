@@ -113,6 +113,10 @@ func (m *safeUFWModel) showAddedOutput() string {
 			fmt.Fprintf(&b, "ufw %s %s\n", action, target)
 			continue
 		}
+		if strings.ContainsAny(comment, " \t'\"") {
+			fmt.Fprintf(&b, "ufw %s %s comment '%s'\n", action, target, comment)
+			continue
+		}
 		fmt.Fprintf(&b, "ufw %s %s comment %s\n", action, target, comment)
 	}
 	return b.String()

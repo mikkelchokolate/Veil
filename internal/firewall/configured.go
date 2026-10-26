@@ -34,6 +34,10 @@ type ConfiguredRule struct {
 	Direction string
 	Source    string
 	Comment   string
+	// Args is the rule exactly as `ufw show added` printed it (without the
+	// `ufw` prefix), so a rollback can replay the original scope instead of
+	// re-encoding it and widening the rule (#1434 review).
+	Args []string
 }
 
 // ParseConfiguredRules decodes `ufw show added` output. Unrecognised lines are
@@ -59,6 +63,8 @@ func parseUFWShowAdded(output string) ufwSnapshot {
 		if len(args) < 2 {
 			continue
 		}
+		originalArgs := append([]string(nil), args...)
+		isRoute := strings.EqualFold(args[0], "route")
 		action := strings.ToLower(args[0])
 		if action == "route" {
 			if len(args) < 3 {
@@ -70,22 +76,29 @@ func parseUFWShowAdded(output string) ufwSnapshot {
 		if !isUFWStatusAction(action) {
 			continue
 		}
-		target, comment, source, ok := ufwShowAddedRule(args[1:])
-		if !ok {
-			continue
+		target, comment, direction, source, hasDest := ufwShowAddedRule(args[1:])
+		rule := ConfiguredRule{
+			Target: target, Action: action, Direction: direction,
+			Source: source, Comment: comment,
+			Args: originalArgs,
 		}
-		snap.Rules[target] = comment
-		if action == "allow" && source != "out" {
-			snap.Allows[target] = comment
+		// Route rules share destination keys with plain inbound rules but cover a
+		// different flow; they stay replayable through Args and out of the
+		// destination-keyed snapshot, which drives existed/prune decisions.
+		if hasDest && !isRoute {
+			snap.Rules[target] = comment
+			if action == "allow" && direction != "out" {
+				snap.Allows[target] = comment
+			}
 		}
-		snap.configured = append(snap.configured, ConfiguredRule{Target: target, Action: action, Direction: source, Source: ufwShowAddedSource(args[1:]), Comment: comment})
+		snap.configured = append(snap.configured, rule)
 	}
 	return snap
 }
 
 // ufwShowAddedRule returns the destination key, the comment and whether the
 // rule is inbound ("in"/"") or outbound.
-func ufwShowAddedRule(rest []string) (target, comment, direction string, ok bool) {
+func ufwShowAddedRule(rest []string) (target, comment, direction, source string, hasDest bool) {
 	comment = ""
 	for i, token := range rest {
 		if strings.EqualFold(token, "comment") {
@@ -95,16 +108,22 @@ func ufwShowAddedRule(rest []string) (target, comment, direction string, ok bool
 		}
 	}
 	direction = "in"
-	for _, token := range rest {
-		if strings.EqualFold(token, "out") {
+	source = "Anywhere"
+	for i, token := range rest {
+		switch strings.ToLower(token) {
+		case "out":
 			direction = "out"
+		case "from":
+			if i+1 < len(rest) {
+				source = rest[i+1]
+			}
 		}
 	}
 	for i := 0; i < len(rest); i++ {
 		switch strings.ToLower(rest[i]) {
 		case "app":
 			if i+1 < len(rest) {
-				return rest[i+1], comment, direction, true
+				return rest[i+1], comment, direction, source, true
 			}
 		case "port":
 			if i+1 < len(rest) && isUFWPortToken(rest[i+1]) {
@@ -116,7 +135,7 @@ func ufwShowAddedRule(rest []string) (target, comment, direction string, ok bool
 					}
 					spec += "/" + proto
 				}
-				return spec, comment, direction, true
+				return spec, comment, direction, source, true
 			}
 		}
 		if isUFWPortToken(rest[i]) {
@@ -124,31 +143,29 @@ func ufwShowAddedRule(rest []string) (target, comment, direction string, ok bool
 			if !strings.Contains(spec, "/") {
 				spec += "/tcp"
 			}
-			return spec, comment, direction, true
+			return spec, comment, direction, source, true
 		}
 	}
-	// An application profile or a bare service name (`ufw allow OpenSSH`).
+	// An application profile appears as a bare name (`ufw allow OpenSSH`). Only
+	// before a `from`/`to` selector, otherwise the token is an address.
+	sawSelector := false
 	for _, token := range rest {
 		lower := strings.ToLower(token)
-		if lower == "from" || lower == "to" || lower == "in" || lower == "out" || lower == "on" || lower == "proto" {
+		switch lower {
+		case "from", "to":
+			sawSelector = true
+		case "in", "out", "on", "proto", "port", "app", "comment", "any":
 			continue
-		}
-		if token != "" {
-			return token, comment, direction, true
-		}
-	}
-	return "", "", "", false
-}
-
-// ufwShowAddedSource returns the `from` address of a configured rule, or
-// "Anywhere" when it applies to every source.
-func ufwShowAddedSource(rest []string) string {
-	for i, token := range rest {
-		if strings.EqualFold(token, "from") && i+1 < len(rest) {
-			return rest[i+1]
+		default:
+			if !sawSelector && token != "" {
+				return token, comment, direction, source, true
+			}
 		}
 	}
-	return "Anywhere"
+	// No destination selector: `ufw allow from 1.2.3.4` applies to any
+	// destination. It is kept for replay (Args) but must not enter the
+	// destination-keyed snapshot, where it would look like a rule to 1.2.3.4.
+	return "", comment, direction, source, false
 }
 
 func isUFWPortToken(token string) bool {

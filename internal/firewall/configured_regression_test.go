@@ -18,6 +18,8 @@ ufw allow 1000:2000/udp
 ufw allow OpenSSH
 ufw allow from 1.2.3.4 to any port 80 proto tcp comment 'web'
 ufw limit 25/tcp comment 'rate limited'
+ufw allow from 9.9.9.9
+ufw route allow in on eth0 out on eth1 to 10.0.0.1 port 80
 `)
 	for _, tc := range []struct{ target, comment string }{
 		{"22/tcp", ""},
@@ -37,6 +39,23 @@ ufw limit 25/tcp comment 'rate limited'
 	}
 	if _, ok := snap.Allows["22/tcp"]; !ok {
 		t.Fatalf("allow rule missing from the ALLOW subset: %v", snap.Allows)
+	}
+	// A source-only rule applies to any destination: it must not enter the
+	// destination-keyed snapshot, but it stays replayable with its exact scope.
+	if _, ok := snap.Rules["9.9.9.9"]; ok {
+		t.Fatalf("source-only rule leaked into destination keys: %v", snap.Rules)
+	}
+	decoded := ParseConfiguredRules(`ufw allow from 9.9.9.9
+ufw route allow in on eth0 out on eth1 to 10.0.0.1 port 80
+`)
+	if len(decoded) != 2 {
+		t.Fatalf("decoded = %+v, want two replayable rules", decoded)
+	}
+	if got := strings.Join(decoded[0].Args, " "); got != "allow from 9.9.9.9" {
+		t.Fatalf("source-only args = %q", got)
+	}
+	if got := strings.Join(decoded[1].Args, " "); got != "route allow in on eth0 out on eth1 to 10.0.0.1 port 80" {
+		t.Fatalf("route args = %q", got)
 	}
 }
 
