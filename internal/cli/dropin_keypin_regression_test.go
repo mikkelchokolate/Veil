@@ -103,9 +103,7 @@ func TestRotateKeyRefusesStalePre1472DropIns(t *testing.T) {
 	stubAdminSystemctl(t, envPath)
 	systemdDir := t.TempDir()
 	stale := writeStaleHelperDropIn(t, systemdDir)
-	original := rotatePreflightSystemdDir
-	rotatePreflightSystemdDir = systemdDir
-	t.Cleanup(func() { rotatePreflightSystemdDir = original })
+	pointRotatePreflightAt(t, systemdDir)
 
 	keyBefore, err := os.ReadFile(keyPath)
 	if err != nil {

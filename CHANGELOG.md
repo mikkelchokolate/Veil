@@ -17,7 +17,11 @@ All notable changes to Veil will be documented in this file.
   did nothing wrong. The preflight now parses the pinned path and refuses only
   when it differs from the rotation target, so `--new-key-path` on a stale host
   is still stopped before anything is written. Commented-out lines, which
-  systemd ignores, no longer count as a pin (#1483, #1484).
+  systemd ignores, no longer count as a pin, and runtime drop-ins under
+  `/run/systemd/system` are scanned as well, because they load after the
+  packaged ones and override them. When the preflight does refuse, the message
+  prints the `veil repair` invocation for the installed tree instead of a second
+  refusal (#1483, #1484).
 - Deleting a client or a binding no longer drops the traffic usage of the other
   clients on the same runtime. The traffic provider map is a snapshot taken
   before an apply, and deleting a client cascades its bindings away while the

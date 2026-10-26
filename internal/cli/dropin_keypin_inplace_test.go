@@ -10,13 +10,25 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 )
 
-// pointRotatePreflightAt makes rotate-key scan dir instead of the host's
-// systemd directory.
+// pointRotatePreflightAt makes rotate-key scan dir for packaged drop-ins and an
+// empty temporary runtime directory, so the host's own /run/systemd/system
+// never leaks into a test.
 func pointRotatePreflightAt(t *testing.T, dir string) {
 	t.Helper()
-	original := rotatePreflightSystemdDir
+	original, originalRuntime := rotatePreflightSystemdDir, rotatePreflightRuntimeSystemdDir
 	rotatePreflightSystemdDir = dir
-	t.Cleanup(func() { rotatePreflightSystemdDir = original })
+	rotatePreflightRuntimeSystemdDir = t.TempDir()
+	t.Cleanup(func() {
+		rotatePreflightSystemdDir, rotatePreflightRuntimeSystemdDir = original, originalRuntime
+	})
+}
+
+// pointRotatePreflightRuntimeAt points the runtime drop-in directory at dir.
+func pointRotatePreflightRuntimeAt(t *testing.T, dir string) {
+	t.Helper()
+	original := rotatePreflightRuntimeSystemdDir
+	rotatePreflightRuntimeSystemdDir = dir
+	t.Cleanup(func() { rotatePreflightRuntimeSystemdDir = original })
 }
 
 // writeHelperKeyPinDropIn writes the pre-#1472 helper override that pins the
@@ -141,6 +153,13 @@ func TestRotateKeyInPlaceStillRefusesAPinOnAnotherKey(t *testing.T) {
 			t.Fatalf("error %v does not mention %q", err, want)
 		}
 	}
+	// The refusal carries the repair command for the installed tree, so the
+	// operator does not get a second refusal from repair (#1482 review).
+	for _, want := range []string{"--etc-dir " + etcDir, "--var-dir " + filepath.Dir(statePath)} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %v does not name %q", err, want)
+		}
+	}
 	if after, err := os.ReadFile(keyPath); err != nil || !bytes.Equal(after, before) {
 		t.Fatal("the key changed although the preflight refused")
 	}
@@ -166,4 +185,49 @@ func TestRotateKeyIgnoresACommentedOutKeyPin(t *testing.T) {
 		t.Fatalf("veil.env does not name the rotated key:\n%q\n%v", body, err)
 	}
 	assertStateDecryptsWith(t, target, statePath)
+}
+
+// TestStaleKeyPinsScanTheRuntimeUnitDirectory locks the runtime half of the
+// #1484 scoping note: drop-ins under /run/systemd/system load after the packaged
+// ones and override them, so a pin there is just as live.
+func TestStaleKeyPinsScanTheRuntimeUnitDirectory(t *testing.T) {
+	packagedDir := t.TempDir()
+	runtimeDir := t.TempDir()
+	path := writeHelperKeyPinDropIn(t, runtimeDir, "[Service]\nEnvironment=VEIL_KEY_PATH=/opt/veil/etc/state.key\n")
+
+	pins := staleKeyPins(packagedDir, runtimeDir)
+	if len(pins) != 1 || pins[0].DropIn != path {
+		t.Fatalf("staleKeyPins = %+v, want the runtime drop-in %s", pins, path)
+	}
+	// The same directory passed twice must not report the pin twice.
+	if again := staleKeyPins(runtimeDir, runtimeDir); len(again) != 1 {
+		t.Fatalf("duplicate directory reported %d pins", len(again))
+	}
+}
+
+// TestRotateKeySeesATransientDropIn proves the command wires the runtime
+// directory through: a pin written there blocks a rotation that moves the key.
+func TestRotateKeySeesATransientDropIn(t *testing.T) {
+	etcDir, keyPath, statePath, envPath := seedRotationFixture(t)
+	t.Setenv("VEIL_ETC_DIR", etcDir)
+	stubAdminSystemctl(t, envPath)
+	pointRotatePreflightAt(t, t.TempDir())
+	runtimeDir := t.TempDir()
+	pointRotatePreflightRuntimeAt(t, runtimeDir)
+	dropIn := writeHelperKeyPinDropIn(t, runtimeDir, "[Service]\nEnvironment=VEIL_KEY_PATH=/opt/veil/etc/state.key\n")
+
+	before, err := os.ReadFile(keyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := runRotateKey(t, "--state", statePath, "--key-path", keyPath, "--new-key-path", filepath.Join(etcDir, "rotated-state.key"))
+	if err == nil {
+		t.Fatalf("rotate-key ignored a transient runtime drop-in:\n%s", out)
+	}
+	if !strings.Contains(err.Error(), dropIn) {
+		t.Fatalf("error %v does not name %q", err, dropIn)
+	}
+	if after, err := os.ReadFile(keyPath); err != nil || !bytes.Equal(after, before) {
+		t.Fatal("the key changed although the preflight refused")
+	}
 }

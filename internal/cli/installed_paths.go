@@ -73,34 +73,44 @@ type keyPin struct {
 // --key-path flag in the backup unit's ExecStart. Those override veil.env, so a
 // rotation that repoints the environment leaves the helper and the backup timer
 // on the old key until `veil install`/`veil repair` re-renders them (#1473).
-// Commented-out lines set nothing in systemd and are skipped (#1484).
-func staleKeyPins(systemdDir string) []keyPin {
+// Every directory is scanned: the packaged unit tree and the runtime one, whose
+// drop-ins load later and override the packaged ones (#1484). Commented-out
+// lines set nothing in systemd and are skipped (#1484).
+func staleKeyPins(systemdDirs ...string) []keyPin {
 	var pins []keyPin
-	for _, candidate := range []struct {
-		unit string
-		pin  func(body string) (string, bool)
-	}{
-		{"veil-helper.service", func(body string) (string, bool) {
-			if hasEnvironmentFileDirective(body) {
-				return "", false
-			}
-			return unitEnvironmentValue(body, "VEIL_KEY_PATH")
-		}},
-		{"veil-backup.service", func(body string) (string, bool) {
-			return execStartFlagValue(body, "--key-path")
-		}},
-	} {
-		matches, err := filepath.Glob(filepath.Join(systemdDir, candidate.unit+".d", "*.conf"))
-		if err != nil {
+	seen := make(map[string]bool, len(systemdDirs))
+	for _, systemdDir := range systemdDirs {
+		dir := filepath.Clean(strings.TrimSpace(systemdDir))
+		if dir == "." || dir == "" || seen[dir] {
 			continue
 		}
-		for _, path := range matches {
-			body, err := os.ReadFile(path)
+		seen[dir] = true
+		for _, candidate := range []struct {
+			unit string
+			pin  func(body string) (string, bool)
+		}{
+			{"veil-helper.service", func(body string) (string, bool) {
+				if hasEnvironmentFileDirective(body) {
+					return "", false
+				}
+				return unitEnvironmentValue(body, "VEIL_KEY_PATH")
+			}},
+			{"veil-backup.service", func(body string) (string, bool) {
+				return execStartFlagValue(body, "--key-path")
+			}},
+		} {
+			matches, err := filepath.Glob(filepath.Join(dir, candidate.unit+".d", "*.conf"))
 			if err != nil {
 				continue
 			}
-			if pinned, ok := candidate.pin(string(body)); ok {
-				pins = append(pins, keyPin{DropIn: path, Pinned: pinned})
+			for _, path := range matches {
+				body, err := os.ReadFile(path)
+				if err != nil {
+					continue
+				}
+				if pinned, ok := candidate.pin(string(body)); ok {
+					pins = append(pins, keyPin{DropIn: path, Pinned: pinned})
+				}
 			}
 		}
 	}
