@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"os/user"
 	"path/filepath"
 	"strconv"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/mikkelchokolate/Veil/internal/hostenv"
 	"github.com/mikkelchokolate/Veil/internal/runtimeports"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 // IssuedCert holds the on-disk paths of a successfully issued certificate.
@@ -116,19 +116,23 @@ type System interface {
 // defaultSystem implements System using the real host.
 type defaultSystem struct{}
 
+// Every helper below resolves through internal/syspath: the issuer runs as root
+// from `veil install` and `veil repair`, so an ambient PATH prepared by `sudo -E`
+// or a provisioning script must not decide which `env`/`sh`/`curl` executes, and
+// the children get the trusted PATH instead (#1429).
 func (defaultSystem) Run(cmd string, args ...string) error {
-	return exec.Command(cmd, args...).Run()
+	return syspath.Command(cmd, args...).Run()
 }
 
 func (defaultSystem) CombinedOutput(cmd string, args ...string) ([]byte, error) {
-	return exec.Command(cmd, args...).CombinedOutput()
+	return syspath.Command(cmd, args...).CombinedOutput()
 }
 
 func (defaultSystem) CombinedOutputContext(ctx context.Context, cmd string, args ...string) ([]byte, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	command := exec.Command(cmd, args...)
+	command := syspath.Command(cmd, args...)
 	configureProcessGroup(command)
 	var buf bytes.Buffer
 	command.Stdout = &buf
@@ -149,7 +153,7 @@ func (defaultSystem) CombinedOutputContext(ctx context.Context, cmd string, args
 }
 
 func (defaultSystem) LookPath(name string) (string, error) {
-	return exec.LookPath(name)
+	return syspath.LookPath(name)
 }
 
 func (defaultSystem) ReadFile(name string) ([]byte, error) {
