@@ -9,8 +9,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// rollbackDefaultSystemdDir is the unit directory install and repair back up.
-// Tests replace it, and a custom --systemd-dir install still needs an explicit
+// rollbackDefaultSystemdDir is the unit directory install and repair back up;
+// it must stay absolute. Tests replace it (an empty value disables the name
+// filter), and a custom --systemd-dir install still needs an explicit
 // --restore-root for its own tree.
 var rollbackDefaultSystemdDir = defaultSystemdDir
 

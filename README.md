@@ -187,12 +187,18 @@ veil rollback cleanup <backup-id> --backup-dir /var/lib/veil/backups --yes
 `veil rollback restore` accepts the managed `/etc/veil`, `/var/lib/veil` and
 `/etc/systemd/system` trees by default, which is exactly what install and repair
 snapshot, so the commands above restore the unit files too. Inside the systemd
-tree only Veil's own units and drop-ins (`veil*.service|socket|timer`, their
-`<unit>.d/*.conf`) are accepted, so a tampered manifest cannot drop an
-arbitrary unit there. An install with a
-custom `--systemd-dir` (or another managed root) needs that root added with
-`--restore-root`, which replaces the defaults: repeat it for every root the
-backup touches.
+tree only names starting with `veil` are accepted — `veil*.service`,
+`veil*.socket`, `veil*.timer` and their `<unit>.d/*.conf` drop-ins — so a
+manifest cannot introduce an arbitrary unit name there. That name filter applies
+to the default unit directory only: a tree added with `--restore-root` is
+bounded by the root allowlist alone, so only add roots whose contents you
+expect. An install with a custom `--systemd-dir` (or another managed root) needs
+that root added with `--restore-root`, which replaces the defaults: repeat it
+for every root the backup touches.
+
+A configuration backup is a trusted-input archive: it carries `state.key`,
+`veil.env` and the systemd units, and the restore writes them as root. Restore
+only backups from a source you trust.
 
 ## More documentation
 
