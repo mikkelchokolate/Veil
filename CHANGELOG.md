@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The HTTP request metrics now label the routes added since #980 instead of
+  collapsing them into `/{unmatched}` or attributing them to a sibling
+  template: TOTP and passkey second-factor endpoints
+  (`/api/v1/auth/totp/verify`, `/api/v1/users/me/totp*`,
+  `/api/v1/users/{username}/totp`, WebAuthn begin/finish, `/passkeys*`),
+  `/api/v1/presence`, the expensive `/api/v1/traffic/history` aggregate (was
+  counted as a per-client traffic read), the SFTP backup endpoints
+  (`/api/backups/sftp`, `/sftp/remote`, `/sftp/fetch`, previously labelled as
+  archive operations) and `/api/tls/inbounds`. A contract test now normalizes
+  every template in the authorization table (`endpoint_policies`) and fails on
+  the next drift, so a new route cannot silently stay unattributable (#1443).
 - The QUIC UDP buffer tuning no longer lowers limits a host already raised.
   `veil install`, `veil repair` and the package `postinstall` wrote
   `net.core.rmem_max`/`wmem_max = 16777216` unconditionally — live and through
