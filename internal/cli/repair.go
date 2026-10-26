@@ -160,16 +160,29 @@ func resolveRepairLayout(cmd *cobra.Command, etcFlag, varFlag string) (string, s
 	return "", "", fmt.Errorf("this host is installed with a custom layout (%s, %s); rerun with --etc-dir %s --var-dir %s so repair fixes the installed tree instead of writing the packaged defaults", installed.etcDir, installed.varDir, installed.etcDir, installed.varDir)
 }
 
+// repairBuildPlan builds the repair plan. Tests replace it to exercise the
+// warning wiring without host stubs.
+var repairBuildPlan = repairflow.BuildPlanFromOptions
+
 func runRepairWorkflow(cmd *cobra.Command, opts repairWorkflowOptions) error {
+	var planWarnings []string
 	flowOpts := repairflow.Options{Profile: opts.Profile, DryRun: opts.DryRun, Yes: opts.Yes, EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, BackupDir: opts.BackupDir, BackupDirSet: opts.BackupDirSet, AuditLog: opts.AuditLog, LEIPCert: opts.LEIPCert, LEIPCertSet: opts.LEIPCertSet, LEIPCertPort: opts.LEIPCertPort, LEIPCertPortSet: opts.LEIPCertPortSet, PublicIP: opts.PublicIP}
 	return repairflow.Run(flowOpts, cmd.OutOrStdout(), repairflow.Dependencies{
 		BuildPlan: func(flowOpts repairflow.Options) (installer.RepairPlan, error) {
-			return repairflow.BuildPlanFromOptions(flowOpts, repairflow.PlanDependencies{Secret: randomSecret, Executable: installExecutableFunc, LookPath: commandLookPath})
+			// Collect the non-fatal findings of this build and print them with
+			// the plan: a failed certificate renewal or an unreproducible Caddy
+			// configuration must not hide behind a successful exit (#1500).
+			planWarnings = nil
+			return repairBuildPlan(flowOpts, repairflow.PlanDependencies{
+				Secret: randomSecret, Executable: installExecutableFunc, LookPath: commandLookPath,
+				Notify: func(msg string) { planWarnings = append(planWarnings, msg) },
+			})
 		},
 		ApplyPlan: func(plan installer.RepairPlan, flowOpts repairflow.Options) error {
 			return repairflow.ApplyPlan(plan, flowOpts, cmd.OutOrStdout(), repairflow.ApplyDependencies{RunSystemd: installSystemdRunFunc})
 		},
 		EgressDNSWarning: repairEgressDNSWarning,
+		Warnings:         func() []string { return planWarnings },
 	})
 }
 

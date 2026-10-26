@@ -31,6 +31,19 @@ type PlanDependencies struct {
 	Secret     installer.SecretFunc
 	Executable func() (string, error)
 	LookPath   func(string) (string, error)
+	// Notify receives non-fatal problems found while building the plan, such as
+	// a failed certificate renewal that leaves the current certificate in place.
+	// The workflow prints them next to the plan, so `veil repair` never reports
+	// success while silently keeping an expired certificate (#1500).
+	Notify func(string)
+}
+
+// notify hands msg to the caller's warning channel; a direct caller without one
+// stays silent by design, exactly like the other optional dependencies.
+func (d PlanDependencies) notify(msg string) {
+	if d.Notify != nil {
+		d.Notify(msg)
+	}
 }
 
 var leIPCertIssueFunc = acmeip.IssueIPCert
@@ -58,7 +71,7 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
-	preserveExistingPanelRepairMaterial(&built, opts)
+	preserveExistingPanelRepairMaterial(&built, opts, deps)
 
 	// Direct mode uses the public IP as the panel endpoint. Resolve it once so
 	// both veil.env and the encrypted panel state get a usable Domain.
@@ -82,10 +95,16 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 	// already resolved that precedence into built.PanelLEIPCertEnv (#1187).
 	if opts.LEIPCert && built.PanelAccess == "direct" && built.PanelLEIPCertEnv != "0" && opts.mutates() {
 		if err := maybeIssueLEIPCert(context.Background(), &built, opts); err != nil {
-			// Repair should not fail because a certificate could not be renewed;
-			// the existing self-signed cert from the profile is still usable.
-			// The error is intentionally swallowed here; callers may log it later.
-			_ = err
+			// The certificate already on the host stays in place and the plan is
+			// still valid, so the default path keeps going — but it must say so:
+			// repair used to return success with no warning at all while the
+			// Panel kept an expired certificate (#1500). When the operator asked
+			// for the certificate on this invocation, success is not an option.
+			certPath := filepath.Join(opts.EtcDir, "panel", "tls.crt")
+			if opts.LEIPCertRequested() {
+				return installer.RepairPlan{}, fmt.Errorf("renew the Let's Encrypt IP certificate: %w; the certificate currently at %s is kept unchanged. Re-run without --le-ip-cert/--le-ip-cert-port to repair everything else and keep that certificate", err, certPath)
+			}
+			deps.notify(fmt.Sprintf("could not renew the Let's Encrypt IP certificate: %v; the certificate currently at %s is kept unchanged", err, certPath))
 		}
 	}
 	if built.PanelAccess == "direct" && built.PanelPublicIP == "" && resolvedIP != "" {
@@ -277,7 +296,7 @@ func repairLifecycleEnv(opts Options) (publicIP, leIPCert, http01Port string, in
 	return
 }
 
-func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile, opts Options) {
+func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile, opts Options, deps PlanDependencies) {
 	if profile == nil || opts.EtcDir == "" {
 		return
 	}
@@ -324,15 +343,16 @@ func preserveExistingPanelRepairMaterial(profile *installer.RURecommendedProfile
 			PanelPublicPort:   443,
 			AcmeChallengeMode: "tls-alpn-01",
 		}
-		plan, _, _, err := caddyassembly.BuildFinalRenderPlanForEtcDir(settings, nil, etcDir)
-		if err == nil {
-			caps, capErr := caddycapabilities.Probe("")
-			if capErr == nil {
-				body, renderErr := renderer.RenderCaddyJSON(plan, caps)
-				if renderErr == nil {
-					profile.CaddyJSON = string(body)
-				}
-			}
+		// The state-derived Caddy JSON is authoritative; the profile already
+		// holds a fallback built from domain/email/env. Re-rendering can fail
+		// (an unreadable state tree, no caddy binary to probe, a render error),
+		// and falling back silently would restart Caddy with a configuration the
+		// operator never sees (#1500). Repair itself must stay usable on a broken
+		// host, so the fallback is kept but every failure is reported.
+		if body, renderErr := renderRepairCaddyJSON(settings, etcDir); renderErr != nil {
+			deps.notify(fmt.Sprintf("could not re-render the Caddy configuration from the panel settings: %v; repair keeps the profile-default configuration, which may differ from the one Caddy is running", renderErr))
+		} else {
+			profile.CaddyJSON = body
 		}
 		return
 	}
@@ -384,6 +404,28 @@ func repairACMEEnv(etcDir string) (caURL, caRoot string) {
 		caRoot = values["VEIL_ACME_CA_ROOT"]
 	}
 	return caURL, caRoot
+}
+
+// repairCaddyCapabilitiesProbe resolves the caddy capabilities the JSON renderer
+// needs. Tests replace it.
+var repairCaddyCapabilitiesProbe = caddycapabilities.Probe
+
+// renderRepairCaddyJSON renders the Caddy JSON for the given panel settings,
+// reporting the first failing step instead of handing back a silent fallback.
+func renderRepairCaddyJSON(settings model.Settings, etcDir string) (string, error) {
+	plan, _, _, err := caddyassembly.BuildFinalRenderPlanForEtcDir(settings, nil, etcDir)
+	if err != nil {
+		return "", fmt.Errorf("build render plan: %w", err)
+	}
+	caps, err := repairCaddyCapabilitiesProbe("")
+	if err != nil {
+		return "", fmt.Errorf("probe caddy capabilities: %w", err)
+	}
+	body, err := renderer.RenderCaddyJSON(plan, caps)
+	if err != nil {
+		return "", fmt.Errorf("render caddy json: %w", err)
+	}
+	return string(body), nil
 }
 
 // readRepairEnv is a test-seamable alias for the shared veil.env parser.

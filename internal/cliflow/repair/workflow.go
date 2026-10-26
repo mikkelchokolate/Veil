@@ -35,6 +35,14 @@ type Options struct {
 // (issue #1128). --dry-run stays read-only even combined with --yes.
 func (o Options) mutates() bool { return o.Yes && !o.DryRun }
 
+// LEIPCertRequested reports whether this invocation asked for the Let's Encrypt
+// IP certificate itself (--le-ip-cert=true or --le-ip-cert-port), as opposed to
+// only keeping the persisted preference. A failure then means the operator did
+// not get what they asked for, so repair must not report success (#1500).
+func (o Options) LEIPCertRequested() bool {
+	return (o.LEIPCertSet && o.LEIPCert) || o.LEIPCertPortSet
+}
+
 type Dependencies struct {
 	BuildPlan func(Options) (installer.RepairPlan, error)
 	ApplyPlan func(installer.RepairPlan, Options) error
@@ -43,6 +51,11 @@ type Dependencies struct {
 	// resolver choice follows this probe, so the operator sees it next to the
 	// plan, including on --dry-run.
 	EgressDNSWarning func() string
+	// Warnings, when set, returns non-fatal problems noticed while building the
+	// plan — a certificate renewal that failed while the old certificate stays
+	// in place, a Caddy configuration that could not be re-rendered. They are
+	// printed next to the plan so a successful exit never hides them (#1500).
+	Warnings func() []string
 }
 
 func Run(opts Options, out io.Writer, deps Dependencies) error {
@@ -55,6 +68,13 @@ func Run(opts Options, out io.Writer, deps Dependencies) error {
 	}
 	fmt.Fprintln(out, "Veil repair plan")
 	fmt.Fprintln(out, plan.Summary())
+	if deps.Warnings != nil {
+		for _, warning := range deps.Warnings() {
+			if warning != "" {
+				fmt.Fprintln(out, "warning: "+warning)
+			}
+		}
+	}
 	if deps.EgressDNSWarning != nil {
 		if warning := deps.EgressDNSWarning(); warning != "" {
 			fmt.Fprintln(out, "warning: "+warning)
