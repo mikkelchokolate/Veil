@@ -2,6 +2,7 @@ package backup
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -53,7 +54,8 @@ func sweepBackupWorkspaceResidue(dirPath string) {
 // removed, and a fresh workspace (younger than restoreResidueMinAge) may belong
 // to a live operation and is kept.
 func sweepInspectWorkspaceResidue() {
-	root, err := safefs.OpenDir(inspectWorkspaceParent())
+	rootPath := inspectWorkspaceParent()
+	root, err := safefs.OpenDir(rootPath)
 	if err != nil {
 		return
 	}
@@ -68,7 +70,11 @@ func sweepInspectWorkspaceResidue() {
 		if !strings.HasPrefix(name, ".veil-backup-inspect-") {
 			continue
 		}
-		info, err := root.StatAt(name)
+		// Age and owner come from a path lstat: the price/owner view of a
+		// safefs handle is an unix.Stat_t, which fileOwnerIDs does not decode.
+		// The decision is only "is this ours and stale"; the removal below is
+		// descriptor-relative, so a swapped leaf is unlinked as itself.
+		info, err := os.Lstat(filepath.Join(rootPath, name))
 		if err != nil || info.ModTime().After(cutoff) {
 			continue
 		}
