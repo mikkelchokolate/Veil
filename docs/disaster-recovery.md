@@ -42,7 +42,18 @@ Environment=TMPDIR=/var/lib/veil/backup-workspace
 
 ```bash
 sudo install -d -m 0700 -o root -g root /var/lib/veil/backup-workspace
+sudo systemctl daemon-reload
+# Restart the helper only while no backup or restore is running: the running
+# ones fail when the service goes away.
+sudo systemctl restart veil-helper.service
 ```
+
+The drop-in takes effect only after that restart; until then the helper keeps
+its bundled `/tmp`. The trade-off is explicit: a disk-backed `TMPDIR` removes
+the RAM ceiling but leaves the decrypted tarball and the extracted members
+briefly on disk (0700, `root:root`, under the state root, where the
+stale-workspace sweep collects a crashed run) — the packaged units use
+`PrivateTmp` precisely to keep that material in RAM and out of the filesystem.
 
 Legacy encryption versions remain readable. `VEIL_BACKUP_MAX_BYTES` is an
 explicit positive byte-count policy applied to both encrypted archive size and
@@ -59,6 +70,12 @@ workspace before it writes anything, so a full temp root refuses the backup up
 front instead of losing the pending archive after it was written. The temporary
 workspace is created with mode 0700 in a root-owned directory: a `TMPDIR`
 someone else can write without the sticky bit is refused rather than used.
+The charge is twice the archive's real size, not its unpacked size: an archive
+that compresses very well can extract to more than that, and verification or
+restore then stops on `insufficient free space` or ENOSPC partway through. That
+failure is safe — the temporary workspace is removed and nothing is journaled —
+but the space has to be there before the run, so size `TMPDIR` for the unpacked
+data or rely on `VEIL_BACKUP_MAX_BYTES` to bound it.
 Restore-job history is persisted; a queued or running job found after process
 restart is marked failed rather than disappearing. Before a new restore, only
 the newest two prior safety copies per state/key/database target are retained so
