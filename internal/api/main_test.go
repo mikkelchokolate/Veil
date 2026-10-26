@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/mikkelchokolate/Veil/internal/testguard"
+	"github.com/mikkelchokolate/Veil/internal/testutil/fakecaddy"
 )
 
 // TestMain makes the systemd status reader hermetic by default: tests must not
@@ -25,6 +26,13 @@ func TestMain(m *testing.M) {
 	// Admin API behavior explicitly override this seam and restore it to this
 	// hermetic baseline.
 	caddyAdminLoader = func([]byte) error { return nil }
+
+	// The Caddy capability probe resolves `caddy` through the trusted system
+	// directories since #1458, so a unit test must not depend on the host (or
+	// CI's PATH) carrying a real binary. Register a hermetic stub ahead of the
+	// system dirs; tests that need a missing or specific probe override the
+	// probeCaddyCapabilities seam themselves.
+	caddyCleanup := fakecaddy.MustInstall()
 
 	// Establish a package-wide filesystem boundary before any test runs. Tests
 	// may override individual variables with t.Setenv, which restores them to
@@ -58,6 +66,7 @@ func TestMain(m *testing.M) {
 		panic("unit test attempted to use production path: " + path)
 	})
 	code := m.Run()
+	caddyCleanup()
 	testguard.SetHookForTests(nil)
 	if err := os.RemoveAll(testRoot); err != nil && code == 0 {
 		panic("remove API test root: " + err.Error())

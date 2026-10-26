@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 	"time"
 )
 
@@ -26,6 +28,11 @@ func TestIsMissingBinary(t *testing.T) {
 	wrapped := fmt.Errorf("caddy list-modules failed: %w", exec.ErrNotFound)
 	if !IsMissingBinary(wrapped) {
 		t.Fatal("wrapped ErrNotFound should be missing binary")
+	}
+	// The syspath resolver reports its own sentinel: a bare name that is not in
+	// the trusted directories must still read as "missing binary" (#1458).
+	if !IsMissingBinary(fmt.Errorf("caddy list-modules failed: %w", &exec.Error{Name: "caddy", Err: syspath.ErrNotFound})) {
+		t.Fatal("syspath.ErrNotFound should be missing binary")
 	}
 	if IsMissingBinary(errors.New("caddy crashed")) {
 		t.Fatal("unrelated error should not be missing binary")

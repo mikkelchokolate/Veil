@@ -9,6 +9,8 @@ import (
 	"io/fs"
 	"os/exec"
 	"time"
+
+	"github.com/mikkelchokolate/Veil/internal/syspath"
 )
 
 type CaddyCapabilities struct {
@@ -58,7 +60,7 @@ func (w *cappedWriter) Write(p []byte) (int, error) {
 // was on PATH (or the given path does not exist). Panel-only install renders
 // Caddy JSON before veil runtime install has placed the binary.
 func IsMissingBinary(err error) bool {
-	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist)
+	return errors.Is(err, exec.ErrNotFound) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, syspath.ErrNotFound)
 }
 
 // Probe runs `caddy list-modules --json` with a bounded timeout and capped
@@ -68,7 +70,9 @@ func Probe(binaryPath string) (CaddyCapabilities, error) {
 }
 
 // ProbeContext is Probe bound to a caller context; the internal timeout still
-// applies so an unresponsive caddy can never outlive it.
+// applies so an unresponsive caddy can never outlive it. An empty binary path
+// resolves `caddy` only through internal/syspath's trusted system directories;
+// a binary installed anywhere else must be passed explicitly.
 func ProbeContext(ctx context.Context, binaryPath string) (CaddyCapabilities, error) {
 	if binaryPath == "" {
 		binaryPath = "caddy"
@@ -78,7 +82,10 @@ func ProbeContext(ctx context.Context, binaryPath string) (CaddyCapabilities, er
 	}
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, binaryPath, "list-modules", "--json")
+	// Resolve through internal/syspath: root `veil install`/`repair` call this
+	// probe with an empty path, and exec.CommandContext would have resolved the
+	// bare name through the ambient PATH (#1262 residual, #1458).
+	cmd := syspath.CommandContext(ctx, binaryPath, "list-modules", "--json")
 	stdout := &cappedWriter{limit: probeMaxOutput}
 	stderr := &cappedWriter{limit: 64 << 10}
 	cmd.Stdout = stdout

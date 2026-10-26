@@ -12,6 +12,8 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/installer"
 	"github.com/mikkelchokolate/Veil/internal/managementstate"
 	"github.com/mikkelchokolate/Veil/internal/secrets"
+	"github.com/mikkelchokolate/Veil/internal/syspath"
+	"github.com/mikkelchokolate/Veil/internal/testutil/fakecaddy"
 )
 
 func TestBuildRepairPlanFromOptionsLoadsEncryptedPanelState(t *testing.T) {
@@ -100,6 +102,12 @@ func TestBuildRepairPlanFromOptionsUsesResolvedCaddyBinaryForNaiveRuntime(t *tes
 	}
 	t.Cleanup(func() { testLookPath = oldLookPath })
 
+	// The capability probe resolves caddy through the trusted system
+	// directories since #1458, so the planned binary path above is not enough:
+	// register a hermetic fake caddy for the probe itself.
+	caddyCleanup := fakecaddy.MustInstall()
+	t.Cleanup(caddyCleanup)
+
 	dir := t.TempDir()
 	varDir := filepath.Join(dir, "var", "lib", "veil")
 	statePath := filepath.Join(varDir, "state.json")
@@ -182,6 +190,11 @@ func TestBuildRepairPlanFromOptionsKeepsNaiveRouteInCaddyJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// The capability probe resolves caddy through the trusted system
+	// directories since #1458; register the hermetic fake there too.
+	originalTrustedDirs := syspath.TrustedDirs
+	syspath.TrustedDirs = append([]string{binDir}, originalTrustedDirs...)
+	t.Cleanup(func() { syspath.TrustedDirs = originalTrustedDirs })
 
 	varDir := filepath.Join(dir, "var", "lib", "veil")
 	statePath := filepath.Join(varDir, "state.json")
