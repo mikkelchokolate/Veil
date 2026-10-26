@@ -78,7 +78,7 @@ func sweepInspectWorkspaceResidue() {
 		if err != nil || info.ModTime().After(cutoff) {
 			continue
 		}
-		if uid, _ := fileOwnerIDs(info); uid != os.Geteuid() {
+		if uid, _, ok := fileOwnerIDs(info); !ok || uid != os.Geteuid() {
 			continue
 		}
 		_ = root.RemoveTreeAt(name)

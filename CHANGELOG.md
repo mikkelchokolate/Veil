@@ -6,6 +6,16 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil rollback` and `veil backup restore` now preserve the owner of the file
+  they replace. The owner was read from metadata captured on a pinned directory
+  handle, whose shape the decoder did not recognise, so it fell back to `0:0` and
+  every restored `state.json`, `state.key` and `veil.db` came back root-owned —
+  locking the unprivileged panel out of its own state. The same decoder gap made
+  the hard-link guard on restore-journal and safety files answer "safe" for
+  pinned entries, so a multi-linked file could alias another one. Both now decode
+  pinned metadata, and an unrecognised shape fails closed: staging refuses to
+  guess an owner, and a member without a readable link count is treated as unsafe
+  (#1254 review).
 - `veil backup verify` and `veil backup restore` no longer stage the decrypted
   archive inside the backup directory. The inspection workspace — the decrypted
   tarball plus the extracted `state.json`, `state.key` and `veil.db` — was

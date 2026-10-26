@@ -534,7 +534,10 @@ var inspectWorkspaceParent = func() string {
 // workspaceRootOwner and workspaceCurrentUID are seams for the ownership check:
 // a test cannot chown a directory without root, and CI rejects skipped tests.
 var workspaceRootOwner = func(info os.FileInfo) int {
-	uid, _ := fileOwnerIDs(info)
+	uid, _, ok := fileOwnerIDs(info)
+	if !ok {
+		return -1
+	}
 	return uid
 }
 
