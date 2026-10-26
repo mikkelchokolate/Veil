@@ -24,6 +24,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/mikkelchokolate/Veil/internal/syspath"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 )
 
 type PlanDependencies struct {
@@ -99,7 +100,12 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 	if executableErr != nil {
 		veilBinary = ""
 	}
-	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir, VeilBinary: veilBinary, CaddyBinary: deps.resolvedBinaryPath("caddy")})
+	statePath, keyPath := installedStatePaths(opts)
+	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{
+		EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir,
+		VeilBinary: veilBinary, CaddyBinary: deps.resolvedBinaryPath("caddy"),
+		KeyPath: keyPath, StatePath: statePath,
+	})
 	if err != nil {
 		return installer.RepairPlan{}, err
 	}
@@ -130,14 +136,14 @@ func (d PlanDependencies) lookPath() func(string) (string, error) {
 }
 
 func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps PlanDependencies, resolvedIP string) (installer.RepairPlan, error) {
-	statePath := filepath.Join(opts.VarDir, "state.json")
+	statePath, keyPath := installedStatePaths(opts)
 	if _, err := os.Stat(statePath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return plan, nil
 		}
 		return installer.RepairPlan{}, err
 	}
-	store := managementstate.NewStore(statePath, repairStateCipher(filepath.Join(opts.EtcDir, "state.key")))
+	store := managementstate.NewStore(statePath, repairStateCipher(keyPath))
 	snapshot, ok, err := store.Load()
 	if err != nil {
 		return installer.RepairPlan{}, err
@@ -149,7 +155,6 @@ func addPanelStateRepairActions(plan installer.RepairPlan, opts Options, deps Pl
 	// acquiring the cross-process barrier so repair cannot overwrite a newer
 	// Panel mutation observed after the read-only plan snapshot above.
 	if resolvedIP != "" && snapshot.Settings.Domain == "" && opts.mutates() {
-		keyPath := filepath.Join(opts.EtcDir, "state.key")
 		if _, err := statecommit.Update(statecommit.UpdateOptions{
 			StatePath: statePath, KeyPath: keyPath,
 		}, func(current *model.ManagementSnapshot) error {
@@ -194,8 +199,11 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 	if err != nil {
 		return err
 	}
+	statePath, keyPath := installedStatePaths(opts)
 	material := panelmaterial.NewManagedMaterial(panelmaterial.Input{
 		Paths:           panelmaterial.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir},
+		KeyPath:         keyPath,
+		StatePath:       statePath,
 		PanelAuthToken:  token,
 		PanelListen:     listen,
 		PanelAccess:     settings.PanelAccess,
@@ -381,6 +389,41 @@ func repairACMEEnv(etcDir string) (caURL, caRoot string) {
 // readRepairEnv is a test-seamable alias for the shared veil.env parser.
 var readRepairEnv = hostenv.ReadEnvFile
 
+// installedStatePaths returns the state file and state key repair works on: the
+// ones the installed veil.env records, then the process environment, then the
+// packaged <VarDir>/state.json and <EtcDir>/state.key. A path-moving
+// `veil admin rotate-key --new-key-path` leaves the key outside the packaged
+// name, so deriving it from EtcDir alone made repair decrypt with the previous
+// key (a bare GCM error) or, once that key was removed, plan an environment
+// naming a file that does not exist (#1485).
+func installedStatePaths(opts Options) (statePath, keyPath string) {
+	// opts.EtcDir is already the discovered installed tree (resolveRepairLayout),
+	// so the environment file is read straight from it instead of re-resolving.
+	// Read with the parser that pairs with the writer in internal/veilenv:
+	// `rotate-key --new-key-path` quotes a path holding a space, '#' or a quote,
+	// and reading the line raw would keep the quotes and point repair at a file
+	// that does not exist (#1485 review).
+	var envBody []byte
+	if raw, err := os.ReadFile(filepath.Join(opts.EtcDir, "veil.env")); err == nil {
+		envBody = raw
+	}
+	statePath = strings.TrimSpace(veilenv.Value(envBody, "VEIL_STATE_PATH"))
+	if statePath == "" {
+		statePath = strings.TrimSpace(os.Getenv("VEIL_STATE_PATH"))
+	}
+	if statePath == "" {
+		statePath = filepath.Join(opts.VarDir, "state.json")
+	}
+	keyPath = strings.TrimSpace(veilenv.Value(envBody, veilenv.KeyPathKey))
+	if keyPath == "" {
+		keyPath = strings.TrimSpace(os.Getenv("VEIL_KEY_PATH"))
+	}
+	if keyPath == "" {
+		keyPath = filepath.Join(opts.EtcDir, "state.key")
+	}
+	return statePath, keyPath
+}
+
 func (d PlanDependencies) resolvedBinaryPath(name string) string {
 	path, err := d.lookPath()(name)
 	if err != nil {
@@ -553,7 +596,8 @@ func maybeIssueLEIPCert(ctx context.Context, profile *installer.RURecommendedPro
 	// standalone listener on the internal port when the persisted plan keeps
 	// a Caddy-fronted challenge route, mirroring `cert renew` (#1181).
 	viaCaddy := false
-	store := managementstate.NewStore(filepath.Join(opts.VarDir, "state.json"), repairStateCipher(filepath.Join(opts.EtcDir, "state.key")))
+	statePath, stateKeyPath := installedStatePaths(opts)
+	store := managementstate.NewStore(statePath, repairStateCipher(stateKeyPath))
 	if snapshot, ok, err := store.Load(); err == nil && ok {
 		viaCaddy = caddyassembly.PanelIPCertCaddyFronted(snapshot.Settings, snapshot.Inbounds)
 	}

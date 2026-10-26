@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil repair` now resolves the state key and state file the way the rest of
+  the root CLI does: the installed `veil.env`, then the process environment,
+  then the packaged `<etc>/state.key` and `<var>/state.json`. It used to assume
+  `<etc>/state.key` always, so after the documented path-moving
+  `veil admin rotate-key --new-key-path` it decrypted the state with the
+  pre-rotation key and aborted with a bare `secrets: GCM decrypt` error before
+  printing a plan; once that key was deleted it instead planned a `veil.env`
+  rewrite whose `VEIL_KEY_PATH` named a file that does not exist, leaving the
+  Panel unable to load its state after the next restart. The regenerated
+  environment now keeps the rotated key and state paths, and the repair command
+  the rotate-key preflight points operators at works again (#1485).
 - `veil admin rotate-key` no longer refuses an in-place rotation because a
   pre-#1472 drop-in still pins the key path. The preflight added for #1473
   refused whenever a `veil-helper.service` drop-in carried a literal
