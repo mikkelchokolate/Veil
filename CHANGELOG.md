@@ -6,6 +6,21 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil repair` now works on the tree the host is actually installed with. On a
+  custom `--etc-dir`/`--var-dir` install the packaged defaults made it write
+  `veil.env`, panel TLS material and backups into `/etc/veil` and
+  `/var/lib/veil` while the custom units, drop-ins and state stayed untouched —
+  the opposite of the "run `veil repair`" remediation operators are given. It
+  now discovers the installed layout from the `veil.service` drop-in and
+  `veil.env` (the same order `veil status` and `veil admin rotate-key` use) and
+  refuses with the exact `--etc-dir`/`--var-dir` to pass when that layout
+  differs from the packaged defaults; explicit flags and an explicit
+  `VEIL_ETC_DIR`/`VEIL_VAR_DIR` still win, and hosts without an installed
+  environment file keep the previous behaviour. A repair also records the
+  state root in the regenerated `veil.env` again (`VEIL_VAR_DIR`,
+  `VEIL_STATE_PATH`, `VEIL_APPLY_ROOT`, `VEIL_AUTO_TLS_DIR`), so the next bare
+  repair discovers the whole custom layout instead of only its `etc` half
+  (#1473).
 - `veil backup create` and `veil admin show/set/reset` now resolve the state and
   encryption key from the installed `veil.env` (explicit `--state`/`--key-path`
   still win) instead of the process environment and the packaged default. After

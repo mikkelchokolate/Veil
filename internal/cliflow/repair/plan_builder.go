@@ -195,7 +195,7 @@ func applyPanelSettingsRepairActions(plan *installer.RepairPlan, opts Options, s
 		return err
 	}
 	material := panelmaterial.NewManagedMaterial(panelmaterial.Input{
-		Paths:           panelmaterial.Paths{EtcDir: opts.EtcDir},
+		Paths:           panelmaterial.Paths{EtcDir: opts.EtcDir, VarDir: opts.VarDir},
 		PanelAuthToken:  token,
 		PanelListen:     listen,
 		PanelAccess:     settings.PanelAccess,
