@@ -15,10 +15,11 @@ import (
 // reports "unsupported" and there is nothing to inject. Keeping them in a
 // _linux_test file lets the package's test binary compile for darwin/freebsd.
 
-// TestPreflightChargesDecryptedInspectionWorkspace covers #1119: an encrypted
-// archive's inspect workspace holds the decrypted tarball (≤maxBytes) AND the
-// extracted members (≤maxBytes aggregate) at once, so the archive directory
-// must be charged archiveSize + 2*maxBytes — not archiveSize + maxBytes.
+// TestPreflightChargesDecryptedInspectionWorkspace covers #1119 and #1254 F2:
+// an encrypted archive's inspect workspace holds the decrypted tarball AND the
+// extracted members at once, so the filesystem hosting it is charged twice the
+// archive's real size. The archive directory is no longer charged — reading an
+// archive needs no room there.
 func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 	root := t.TempDir()
 	archive := filepath.Join(root, "backup.tar.gz.enc")
@@ -27,13 +28,13 @@ func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 	}
 	const maxBytes = int64(10)
 	const reserve = int64(64 * 1024 * 1024)
-	archiveRequirement := int64(4) + 2*maxBytes + reserve
+	workspaceRequirement := 2*4 + reserve
 
 	old := backupStatfs
 	t.Cleanup(func() { backupStatfs = old })
 	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
 		stats.Bsize = 1
-		stats.Bavail = uint64(archiveRequirement - 1)
+		stats.Bavail = uint64(workspaceRequirement - 1)
 		return nil
 	}
 	if err := PreflightVerifySpace(archive, maxBytes); err == nil || !strings.Contains(err.Error(), "insufficient free space") {
@@ -41,15 +42,15 @@ func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 	}
 	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
 		stats.Bsize = 1
-		stats.Bavail = uint64(archiveRequirement)
+		stats.Bavail = uint64(workspaceRequirement)
 		return nil
 	}
 	if err := PreflightVerifySpace(archive, maxBytes); err != nil {
 		t.Fatalf("verify preflight rejected exactly-sufficient space: %v", err)
 	}
 
-	// Same accounting on the restore preflight: state dir on the same
-	// filesystem adds its own maxBytes + member sizes.
+	// The restore preflight adds the state directory on the same filesystem:
+	// its own maxBytes plus the staged member sizes.
 	statePath := filepath.Join(root, "state.json")
 	keyPath := filepath.Join(root, "state.key")
 	databasePath := filepath.Join(root, "veil.db")
@@ -58,7 +59,7 @@ func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	restoreRequirement := archiveRequirement + maxBytes + 3 + 2 + 5
+	restoreRequirement := workspaceRequirement + maxBytes + 3 + 2 + 5
 	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
 		stats.Bsize = 1
 		stats.Bavail = uint64(restoreRequirement - 1)
@@ -74,5 +75,28 @@ func TestPreflightChargesDecryptedInspectionWorkspace(t *testing.T) {
 	}
 	if err := PreflightRestoreSpace(archive, statePath, keyPath, databasePath, maxBytes); err != nil {
 		t.Fatalf("restore preflight rejected exactly-sufficient space: %v", err)
+	}
+}
+
+// TestPreflightVerifySpaceChargesTheArchiveSizeNotThePolicy keeps a real verify
+// possible on the privileged helper's PrivateTmp tmpfs: the inspection
+// workspace is charged by the archive's size, not by the 16 GiB default policy,
+// which demanded tens of gigabytes of RAM per verify (#1254 review).
+func TestPreflightVerifySpaceChargesTheArchiveSizeNotThePolicy(t *testing.T) {
+	root := t.TempDir()
+	archive := filepath.Join(root, "backup.tar.gz.enc")
+	if err := os.WriteFile(archive, []byte("1234"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	const reserve = int64(64 * 1024 * 1024)
+	old := backupStatfs
+	t.Cleanup(func() { backupStatfs = old })
+	backupStatfs = func(_ string, stats *syscall.Statfs_t) error {
+		stats.Bsize = 1
+		stats.Bavail = uint64(2*4 + reserve)
+		return nil
+	}
+	if err := PreflightVerifySpace(archive, DefaultMaxBackupBytes); err != nil {
+		t.Fatalf("verify preflight demanded more than the archive needs: %v", err)
 	}
 }

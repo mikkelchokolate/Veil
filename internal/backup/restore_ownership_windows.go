@@ -7,8 +7,9 @@ import "os"
 // restoreChownToMatch is a no-op on Windows (no POSIX ownership).
 func restoreChownToMatch(*os.File, int, int) error { return nil }
 
-// fileOwnerIDs: POSIX uid/gid do not exist on Windows.
-func fileOwnerIDs(os.FileInfo) (int, int) { return 0, 0 }
+// fileOwnerIDs: POSIX uid/gid do not exist on Windows; owner preservation is a
+// no-op there, so this reports success rather than an undecodable metadata.
+func fileOwnerIDs(os.FileInfo) (int, int, bool) { return 0, 0, true }
 
 // unsafeJournalHardLink: link counts are not expressible through
 // os.FileInfo.Sys() on Windows; the pinned-directory checks still apply.

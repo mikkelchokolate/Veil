@@ -72,7 +72,10 @@ func (FileCopier) Copy(src, dst string, mode os.FileMode) error {
 		if !existing.Mode().IsRegular() || existing.Mode()&os.ModeSymlink != 0 {
 			return fmt.Errorf("restore destination is not a regular file: %s", dst)
 		}
-		uid, gid := fileOwnerIDs(existing)
+		uid, gid, ok := fileOwnerIDs(existing)
+		if !ok {
+			return fmt.Errorf("cannot determine the owner of %s", dst)
+		}
 		if err := restoreChownToMatch(tmp, uid, gid); err != nil {
 			return err
 		}

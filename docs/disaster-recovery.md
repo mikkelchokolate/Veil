@@ -24,21 +24,67 @@ non-zero desired revision. The manifest is inside the same encrypted envelope
 when archive encryption is enabled.
 
 New encrypted backups stream tar/gzip data through independently authenticated
-1 MiB encryption frames. Creation, verification, download, and restore do not
-load `veil.db` or the complete archive into RAM. Legacy encryption versions
-remain readable. `VEIL_BACKUP_MAX_BYTES` is an explicit positive byte-count
-policy applied to both encrypted archive size and expanded member total; its
-production default is 17179869184 bytes (16 GiB). Native services read it from
-`/etc/veil/veil.env`; standalone CLI invocations may export it directly.
+1 MiB encryption frames. Creation, verification, download, and restore stream
+the archive and never load `veil.db` or the complete archive into process
+memory. Verification and restore do stage the decrypted tarball and the
+extracted members in the temp root (`TMPDIR`, `/tmp` by default), and the
+packaged `veil-helper.service` runs with `PrivateTmp=true`, so there that root
+is a RAM-backed tmpfs sized by systemd at about half of RAM: a verify or restore
+needs roughly twice the archive's size of free space in it. Point `TMPDIR` at a
+root-owned 0700 directory on disk to avoid that ceiling. Keep it outside the
+trees the panel service owns (`/var/lib/veil` is owned by that user), because a
+workspace directory below a service-writable parent can be renamed away and
+replaced:
 
-Before privileged verify or restore starts, Veil checks free space for the
-worst-case configured expansion, staging copies, current-file safety copies,
-and a reserve. Requirements on the same filesystem are summed. Restore-job
-history is persisted; a queued or running job found after process restart is
-marked failed rather than disappearing. Before a new restore, only the newest
-two prior safety copies per state/key/database target are retained so the new
-copy becomes the third; older regular files are overwritten, synced, removed,
-and their parent directory synced. Symlinks and multi-link files are rejected.
+```ini
+# /etc/systemd/system/veil-helper.service.d/tmpdir.conf
+[Service]
+Environment=TMPDIR=/var/cache/veil/workspace
+ReadWritePaths=/var/cache/veil/workspace
+```
+
+```bash
+sudo install -d -m 0700 -o root -g root /var/cache/veil/workspace
+sudo systemctl daemon-reload
+# Restart the helper only while no backup or restore is running: the running
+# ones fail when the service goes away.
+sudo systemctl restart veil-helper.service
+```
+
+The drop-in takes effect only after that restart; until then the helper keeps
+its bundled `/tmp`. The trade-off is explicit: a disk-backed `TMPDIR` removes
+the RAM ceiling but leaves the decrypted tarball and the extracted members
+briefly on disk (0700, `root:root`, under the state root, where the
+stale-workspace sweep collects a crashed run) — the packaged units use
+`PrivateTmp` precisely to keep that material in RAM and out of the filesystem.
+
+Legacy encryption versions remain readable. `VEIL_BACKUP_MAX_BYTES` is an
+explicit positive byte-count policy applied to both encrypted archive size and
+expanded member total; its production default is 17179869184 bytes (16 GiB).
+Native services read it from `/etc/veil/veil.env`; standalone CLI invocations
+may export it directly. The policy is a ceiling on the expanded members, not the
+space charge below.
+
+Before privileged verify or restore starts, Veil checks the filesystem that
+hosts the temp workspace for twice the archive's real size, plus the state
+directory's staging copies, current-file safety copies, and a reserve.
+Requirements on the same filesystem are summed. Create preflights the same
+workspace before it writes anything, so a full temp root refuses the backup up
+front instead of losing the pending archive after it was written. The temporary
+workspace is created with mode 0700 in a root-owned directory: a `TMPDIR`
+someone else can write without the sticky bit is refused rather than used.
+The charge is twice the archive's real size, not its unpacked size: an archive
+that compresses very well can extract to more than that, and verification or
+restore then stops on `insufficient free space` or ENOSPC partway through. That
+failure is safe — the temporary workspace is removed and nothing is journaled —
+but the space has to be there before the run, so size `TMPDIR` for the unpacked
+data or rely on `VEIL_BACKUP_MAX_BYTES` to bound it.
+Restore-job history is persisted; a queued or running job found after process
+restart is marked failed rather than disappearing. Before a new restore, only
+the newest two prior safety copies per state/key/database target are retained so
+the new copy becomes the third; older regular files are overwritten, synced,
+removed, and their parent directory synced. Symlinks and multi-link files are
+rejected.
 
 Losing `state.key` makes `state.json` unrecoverable. Store encrypted archives
 off-host and keep the archive passphrase outside the backup destination.

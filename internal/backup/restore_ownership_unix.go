@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"syscall"
+
+	"github.com/mikkelchokolate/Veil/internal/safefs"
 )
 
 // restoreChownToMatch aligns the staged replacement's owner/group with the
@@ -30,29 +32,48 @@ func restoreChownToMatch(staged *os.File, uid, gid int) error {
 
 // fileOwnerIDs extracts uid/gid from lstat-style metadata captured on a
 // pinned descriptor or via lstat — the only provenance a journal/restore is
-// allowed to trust for ownership (#1219).
-func fileOwnerIDs(info os.FileInfo) (int, int) {
+// allowed to trust for ownership (#1219). ok is false when the metadata shape
+// carries no ownership: a pinned safefs handle adapts *unix.Stat_t, os.Lstat
+// adapts *syscall.Stat_t, and the caller must fail closed on anything else
+// instead of turning it into a root-owned chown.
+func fileOwnerIDs(info os.FileInfo) (int, int, bool) {
+	if uid, gid, ok := safefs.OwnerIDs(info); ok {
+		return uid, gid, true
+	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
 	if !ok {
-		return 0, 0
+		return 0, 0, false
 	}
-	return int(stat.Uid), int(stat.Gid)
+	return int(stat.Uid), int(stat.Gid), true
 }
 
 // unsafeJournalHardLink reports whether the entry has extra hard links; a
 // multi-linked journal member could alias another file, letting a rename
-// leak managed content onto it or a rollback write through it.
+// leak managed content onto it or a rollback write through it. A metadata
+// shape without a link count is treated as unsafe (#1254 review).
 func unsafeJournalHardLink(info os.FileInfo) bool {
-	stat, ok := info.Sys().(*syscall.Stat_t)
-	return ok && stat.Nlink != 1
+	count, ok := fileLinkCount(info)
+	return !ok || count != 1
 }
 
 // unsafeSafetyLinkCount is the stricter counterpart used before overwriting
 // a retained safety file: when the link count cannot be determined at all,
 // the file is treated as unsafe rather than assumed single-linked.
 func unsafeSafetyLinkCount(info os.FileInfo) bool {
+	count, ok := fileLinkCount(info)
+	return !ok || count != 1
+}
+
+// fileLinkCount resolves the hard-link count from either metadata shape.
+func fileLinkCount(info os.FileInfo) (uint64, bool) {
+	if count, ok := safefs.LinkCount(info); ok {
+		return count, true
+	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	return !ok || stat.Nlink != 1
+	if !ok {
+		return 0, false
+	}
+	return uint64(stat.Nlink), true
 }
 
 // untrustedRestoreJournalSeal reports whether the journal seal key could have

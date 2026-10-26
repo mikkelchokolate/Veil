@@ -456,7 +456,10 @@ func stageManifestEntry(backupDir *safefs.Dir, entry resolvedRestoreEntry, paren
 		if !existing.Mode().IsRegular() || existing.Mode()&os.ModeSymlink != 0 {
 			return fail(fmt.Errorf("restore destination is not a regular file: %s", filepath.Join(parent.Path(), destLeaf)))
 		}
-		uid, gid := fileOwnerIDs(existing)
+		uid, gid, ok := fileOwnerIDs(existing)
+		if !ok {
+			return fail(fmt.Errorf("cannot determine the owner of %s", filepath.Join(parent.Path(), destLeaf)))
+		}
 		if err := restoreChownToMatch(tmp, uid, gid); err != nil {
 			return fail(err)
 		}

@@ -708,7 +708,11 @@ func observeRestoreTarget(target string) (*restoreTargetObservation, error) {
 		mode:   info.Mode().Perm(),
 		digest: hex.EncodeToString(hash.Sum(nil)),
 	}
-	observation.uid, observation.gid = fileOwnerIDs(info)
+	uid, gid, ok := fileOwnerIDs(info)
+	if !ok {
+		return nil, fmt.Errorf("restore target %s: cannot determine the current owner", target)
+	}
+	observation.uid, observation.gid = uid, gid
 	return observation, nil
 }
 

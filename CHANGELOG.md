@@ -6,6 +6,32 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- `veil rollback --yes` no longer rewrites the owner of the files it replaces.
+  The manifest-restore path read the destination owner from metadata captured
+  on a pinned directory handle, a shape the decoder did not recognise, so it
+  fell back to `0:0` and the restored `state.json`, `state.key` and `veil.db`
+  came back root-owned, locking the unprivileged panel out of its own state.
+  `veil backup restore` was not affected: it reads the owner through the
+  descriptor. The same decoder gap made the hard-link guard on restore-journal
+  and safety files answer "safe" for pinned entries, so a multi-linked file
+  could alias another one. Both now decode pinned metadata, and an unrecognised
+  shape fails closed: staging refuses to guess an owner, and a member without a
+  readable link count counts as unsafe (#1254 review).
+- `veil backup verify` and `veil backup restore` no longer stage the decrypted
+  archive inside the backup directory. The inspection workspace — the decrypted
+  tarball plus the extracted `state.json`, `state.key` and `veil.db` — was
+  created as `.veil-backup-inspect-*` next to the archive, i.e. under
+  `/var/lib/veil/backups`, a directory the panel service owns and can write. A
+  local writer could rename that workspace away and substitute its members
+  between extraction and the reads, so the verification report and the journaled
+  commit could describe bytes the operator never backed up. The workspace now
+  lives in the temp root (`TMPDIR`, the helper's `PrivateTmp` tmpfs by default),
+  where only its owner can rename the 0700 directory, a shared non-sticky
+  `TMPDIR` is refused, the space preflight charges that filesystem for twice the
+  archive's real size instead of the archive directory, and a stale workspace
+  left by a crash is swept from there (#1254). Create now preflights the
+  verification workspace too, so a backup cannot lose its pending archive to a
+  full tmpfs halfway through verification.
 - Veil no longer treats an inactive UFW as an empty ruleset. `ufw status`
   prints only `Status: inactive` while the firewall is not loaded, so the
   firewall reconcile, the rollback, the stale-rule pass, the local prune and
