@@ -6,6 +6,17 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- A corrupt, legacy-shaped or otherwise unreadable promotion journal no longer
+  makes every artifact promote fail forever. Recovery refused to continue while
+  such a file was present and nothing else removes it, so one leftover blocked
+  the only path that publishes generated artifacts. Recovery now moves an
+  unusable journal aside as `.promotion-transaction.json.corrupt-<timestamp>`
+  (evidence kept), reports the failure once, and lets the retry proceed with a
+  clean root; a journal that is a directory or a symlink counts as unusable too.
+  Journals that fail on I/O or during rollback still stop the operation —
+  continuing on a partially restored tree is worse than refusing — and a caller
+  without a destination policy leaves the journal untouched, because that is a
+  caller error, not a bad journal (#1267).
 - `veil rollback --yes` no longer rewrites the owner of the files it replaces.
   The manifest-restore path read the destination owner from metadata captured
   on a pinned directory handle, a shape the decoder did not recognise, so it

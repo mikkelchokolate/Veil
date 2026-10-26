@@ -195,6 +195,12 @@ func removePromotionBackupMember(rootDir *safefs.Dir, root, path string) (result
 // readPromotionJournalAt reads the transaction journal from the pinned root.
 // It reports (nil, nil) when no journal exists.
 func readPromotionJournalAt(rootDir *safefs.Dir) (body []byte, resultErr error) {
+	// A journal that is a directory or a symlink can never be replayed, and
+	// leaving it in place would wedge every promote; recovery quarantines it
+	// like an undecodable file (#1267 review).
+	if info, err := rootDir.StatAt(promotionTransactionJournalName); err == nil && !info.Mode().IsRegular() {
+		return nil, unusablePromotionJournal(fmt.Errorf("promotion transaction journal is not a regular file (%s)", info.Mode().Type()))
+	}
 	file, err := rootDir.OpenFileAt(promotionTransactionJournalName)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil

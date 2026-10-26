@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -17,6 +18,30 @@ import (
 )
 
 const promotionTransactionJournalName = ".promotion-transaction.json"
+
+// promotionJournalUnusable marks a journal recovery can never apply: it does
+// not decode, is not a regular file, does not describe a transaction this
+// helper may replay, or names destinations the live policy rejects. The
+// promotion backup root is helper-owned (root:root 0700, enforced by
+// openPromotionBackupRoot), so the panel cannot write such a journal; a crash,
+// a legacy shape or a root-level mistake can, and while it sat there every
+// later promote failed — the only path that publishes artifacts (#1267).
+// withPromotionLock quarantines this class and reports the failure once; I/O
+// failures and rollback errors stay hard errors, because continuing on a
+// half-restored tree is worse than refusing. A caller that simply forgot its
+// destination policy is not part of this class: that journal is valid and is
+// left untouched for the correct call.
+type promotionJournalUnusable struct{ err error }
+
+func (e *promotionJournalUnusable) Error() string { return e.err.Error() }
+func (e *promotionJournalUnusable) Unwrap() error { return e.err }
+
+func unusablePromotionJournal(err error) error { return &promotionJournalUnusable{err: err} }
+
+func isUnusablePromotionJournal(err error) bool {
+	var target *promotionJournalUnusable
+	return errors.As(err, &target)
+}
 
 // promotionJournalRemove unlinks the journal leaf inside the pinned backup
 // root; it is a hook so tests can inject a committed-marker unlink failure.
@@ -103,7 +128,18 @@ func withPromotionLock(backupRoot string, validateDestination func(string, strin
 		return fmt.Errorf("lock promotion root: %w", err)
 	}
 	if err := recoverPromotionTransactionAt(backupDir, backupRoot, validateDestination, fenceGeneration); err != nil {
-		return fmt.Errorf("recover interrupted promotion: %w", err)
+		if !isUnusablePromotionJournal(err) {
+			return fmt.Errorf("recover interrupted promotion: %w", err)
+		}
+		quarantined, quarantineErr := quarantinePromotionJournal(backupDir)
+		if quarantineErr != nil {
+			return fmt.Errorf("recover interrupted promotion: %w (quarantine the journal: %v)", err, quarantineErr)
+		}
+		// The evidence is kept next to the lock and the caller still sees the
+		// failure once, so a torn transaction is never silently replaced; the
+		// retry finds a clean root instead of the same permanent wedge.
+		log.Printf("quarantined unusable promotion journal as %s: %v", quarantined, err)
+		return fmt.Errorf("recover interrupted promotion: %w (unusable journal quarantined as %s; retry the operation)", err, quarantined)
 	}
 	if fn == nil {
 		return nil
@@ -336,16 +372,24 @@ func recoverPromotionTransactionAt(rootDir *safefs.Dir, root string, validateDes
 	}
 	var journal promotionTransactionJournal
 	if err := json.Unmarshal(body, &journal); err != nil {
-		return fmt.Errorf("decode promotion transaction journal: %w", err)
+		return unusablePromotionJournal(fmt.Errorf("decode promotion transaction journal: %w", err))
 	}
 	if journal.Version != 1 || journal.TransactionID == "" {
-		return errors.New("invalid promotion transaction journal")
+		return unusablePromotionJournal(errors.New("invalid promotion transaction journal"))
 	}
 	if journal.FenceGeneration > 0 && acceptedGeneration > 0 && acceptedGeneration < journal.FenceGeneration {
-		return errors.New("promotion recovery fencing generation regressed")
+		// A planted journal can claim any generation, and refusing here would
+		// wedge every promote forever; the journal is discarded, not applied.
+		return unusablePromotionJournal(errors.New("promotion recovery fencing generation regressed"))
+	}
+	if validateDestination == nil {
+		// A caller error, not a property of the journal: quarantining a valid
+		// journal would destroy the recovery a correct caller needs (#1267
+		// review). Refuse and leave it in place.
+		return errors.New("promotion journal recovery requires a destination policy")
 	}
 	if err := validatePromotionDestinations(journal, validateDestination); err != nil {
-		return err
+		return unusablePromotionJournal(err)
 	}
 	if journal.Phase == "manifest-committed" && journal.Manifest.Phase == "committed" {
 		if err := verifyCommittedPromotion(rootDir, root, journal); err != nil {
@@ -354,6 +398,21 @@ func recoverPromotionTransactionAt(rootDir *safefs.Dir, root string, validateDes
 		return removePromotionJournal(rootDir)
 	}
 	return restorePromotionPreTransaction(rootDir, root, &journal)
+}
+
+// quarantinePromotionJournal renames an unusable journal aside instead of
+// deleting it, so the operator keeps the evidence while promotions resume. The
+// rename goes through the pinned backup root (#1229-F5) and is synced before
+// the caller continues.
+func quarantinePromotionJournal(rootDir *safefs.Dir) (string, error) {
+	name := promotionTransactionJournalName + ".corrupt-" + time.Now().UTC().Format("20060102T150405.000000000")
+	if err := rootDir.RenameAt(promotionTransactionJournalName, name); err != nil {
+		return "", err
+	}
+	if err := rootDir.File().Sync(); err != nil {
+		return "", err
+	}
+	return filepath.Join(rootDir.Path(), name), nil
 }
 
 func validatePromotionDestinations(journal promotionTransactionJournal, validate func(string, string) bool) error {
