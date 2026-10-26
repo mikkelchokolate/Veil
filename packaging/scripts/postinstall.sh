@@ -136,14 +136,46 @@ if [ "$MODE" = install ]; then
     ensure_group_member veil veil-mita
 
     if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then
-        # Live sysctl can be rejected on OpenVZ/LXC-style kernels where /proc/sys
-        # is read-only. Persist-or-warn like `veil install` does: the drop-in stays
-        # on disk for the next boot, but the failure is recorded loudly instead of
-        # being silently discarded (issue #477).
-        if ! sysctl -p /etc/sysctl.d/99-veil-quic.conf >/dev/null 2>&1; then
-            echo "warning: sysctl -p /etc/sysctl.d/99-veil-quic.conf failed; QUIC UDP buffer limits were not applied to the running kernel" >&2
+        # Only raise: a host already tuned above Veil's 16 MiB floor keeps its
+        # limits, and the drop-in is rewritten to that observed value so the
+        # next boot does not lower them either (issue #1456).
+        quic_floor=16777216
+        quic_rmem="$(cat /proc/sys/net/core/rmem_max 2>/dev/null || true)"
+        quic_wmem="$(cat /proc/sys/net/core/wmem_max 2>/dev/null || true)"
+        case "${quic_rmem}" in '' | *[!0-9]*) quic_rmem="${quic_floor}" ;; esac
+        case "${quic_wmem}" in '' | *[!0-9]*) quic_wmem="${quic_floor}" ;; esac
+        [ "${quic_rmem}" -ge "${quic_floor}" ] || quic_rmem="${quic_floor}"
+        [ "${quic_wmem}" -ge "${quic_floor}" ] || quic_wmem="${quic_floor}"
+        cat > /etc/sysctl.d/99-veil-quic.conf <<SYSCTL
+# Hysteria2/QUIC needs large UDP socket buffers. Linux defaults (~208 KiB)
+# drop inbound datagrams and cap client upload around 5-10 Mbit/s while
+# download (server send path) can still look fine.
+# Values are floored at 16 MiB and never lower an existing higher limit
+# (issue #1456).
+net.core.rmem_max = ${quic_rmem}
+net.core.wmem_max = ${quic_wmem}
+SYSCTL
+        # Live sysctl can be rejected on OpenVZ/LXC-style kernels where
+        # /proc/sys is read-only. Persist-or-warn like `veil install` does: the
+        # drop-in stays on disk for the next boot, but the failure is recorded
+        # loudly instead of being silently discarded (issue #477).
+        if [ "${quic_rmem}" -lt "${quic_floor}" ]; then quic_rmem="${quic_floor}"; fi
+        if [ "${quic_wmem}" -lt "${quic_floor}" ]; then quic_wmem="${quic_floor}"; fi
+        quic_live_rmem="$(cat /proc/sys/net/core/rmem_max 2>/dev/null || true)"
+        quic_live_wmem="$(cat /proc/sys/net/core/wmem_max 2>/dev/null || true)"
+        case "${quic_live_rmem}" in '' | *[!0-9]*) quic_live_rmem=0 ;; esac
+        case "${quic_live_wmem}" in '' | *[!0-9]*) quic_live_wmem=0 ;; esac
+        if [ "${quic_live_rmem}" -lt "${quic_floor}" ]; then
+            if ! sysctl -w "net.core.rmem_max=${quic_floor}" >/dev/null 2>&1; then
+                echo "warning: sysctl -w net.core.rmem_max=${quic_floor} failed; the QUIC UDP receive limit was not raised on the running kernel" >&2
+            fi
         fi
-fi
+        if [ "${quic_live_wmem}" -lt "${quic_floor}" ]; then
+            if ! sysctl -w "net.core.wmem_max=${quic_floor}" >/dev/null 2>&1; then
+                echo "warning: sysctl -w net.core.wmem_max=${quic_floor} failed; the QUIC UDP send limit was not raised on the running kernel" >&2
+            fi
+        fi
+    fi
 
 if [ -d /lib/systemd/system ] && [ -d /etc/systemd/system ]; then
     for unit in /lib/systemd/system/veil*.service /lib/systemd/system/veil*.socket /lib/systemd/system/veil*.timer; do

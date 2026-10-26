@@ -79,6 +79,10 @@ func stubQUICApply(t *testing.T, path string) func() {
 	origWrite := quicWriteFile
 	origLook := quicLookPath
 	origCmd := quicCommand
+	origRead := quicReadFile
+	// Default hosts start below the floor; tests that care about an already
+	// tuned host stub this themselves (#1456).
+	quicReadFile = func(string) ([]byte, error) { return []byte("212992\n"), nil }
 	quicGeteuid = func() int { return 0 }
 	quicRuntimeGOOS = func() string { return "linux" }
 	quicMkdirAll = func(string, os.FileMode) error { return nil }
@@ -89,6 +93,7 @@ func stubQUICApply(t *testing.T, path string) func() {
 		return os.WriteFile(path, data, perm)
 	}
 	return func() {
+		quicReadFile = origRead
 		quicGeteuid = origEUID
 		quicRuntimeGOOS = origGOOS
 		quicMkdirAll = origMkdir
