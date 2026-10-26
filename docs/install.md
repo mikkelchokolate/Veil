@@ -311,7 +311,8 @@ configuration that `veil install` rendered is **not** package-owned and stays:
 `/etc/systemd/system` — those units point at the missing binary until the
 install renders them again. If you place the binary by hand instead of using the
 quick start, apply that step yourself with `sudo veil install --yes` (or
-`sudo veil repair --yes` to only re-render the units).
+`sudo veil repair --yes` to re-render the install-managed files, including the
+units, without a full install).
 
 For `.deb`, `.rpm` or `.apk` installations, install the matching v0.7.3 package
 with the package manager instead of overwriting its binary with `veil update`.
