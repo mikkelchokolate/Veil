@@ -24,6 +24,7 @@ import (
 	"github.com/mikkelchokolate/Veil/internal/service"
 	"github.com/mikkelchokolate/Veil/internal/statecommit"
 	"github.com/mikkelchokolate/Veil/internal/syspath"
+	"github.com/mikkelchokolate/Veil/internal/veilenv"
 )
 
 type PlanDependencies struct {
@@ -396,15 +397,24 @@ var readRepairEnv = hostenv.ReadEnvFile
 // key (a bare GCM error) or, once that key was removed, plan an environment
 // naming a file that does not exist (#1485).
 func installedStatePaths(opts Options) (statePath, keyPath string) {
-	values := readRepairEnv(filepath.Join(opts.EtcDir, "veil.env"))
-	statePath = strings.TrimSpace(values["VEIL_STATE_PATH"])
+	// opts.EtcDir is already the discovered installed tree (resolveRepairLayout),
+	// so the environment file is read straight from it instead of re-resolving.
+	// Read with the parser that pairs with the writer in internal/veilenv:
+	// `rotate-key --new-key-path` quotes a path holding a space, '#' or a quote,
+	// and reading the line raw would keep the quotes and point repair at a file
+	// that does not exist (#1485 review).
+	var envBody []byte
+	if raw, err := os.ReadFile(filepath.Join(opts.EtcDir, "veil.env")); err == nil {
+		envBody = raw
+	}
+	statePath = strings.TrimSpace(veilenv.Value(envBody, "VEIL_STATE_PATH"))
 	if statePath == "" {
 		statePath = strings.TrimSpace(os.Getenv("VEIL_STATE_PATH"))
 	}
 	if statePath == "" {
 		statePath = filepath.Join(opts.VarDir, "state.json")
 	}
-	keyPath = strings.TrimSpace(values["VEIL_KEY_PATH"])
+	keyPath = strings.TrimSpace(veilenv.Value(envBody, veilenv.KeyPathKey))
 	if keyPath == "" {
 		keyPath = strings.TrimSpace(os.Getenv("VEIL_KEY_PATH"))
 	}
