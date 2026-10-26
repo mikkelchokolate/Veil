@@ -6,6 +6,16 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The Caddy capability probe used by `veil install` and `veil repair` to render
+  the Caddy JSON now resolves `caddy` through the trusted system directories and
+  runs it with a scrubbed `PATH` (`internal/syspath`) instead of the caller's
+  ambient `PATH`. Both commands reach the probe with an empty binary path from
+  root, so a `sudo -E` or provisioning script that exported a writable directory
+  first could have a planted `caddy` shim executed as root — and that shim fully
+  controlled the reported capabilities (for example claiming `forward_proxy` the
+  packaged binary lacks, which then shaped the generated config). Explicit
+  absolute binary paths keep working; a missing `caddy` is still reported as a
+  missing binary so panel-only installs can continue (#1458).
 - `veil rollback restore` now accepts the systemd unit directory by default.
   `veil install` and `veil repair` snapshot every unit and drop-in they overwrite
   under `/etc/systemd/system`, but the default restore allowlist only covered
