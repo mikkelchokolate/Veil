@@ -182,7 +182,10 @@ func ApplyQUICUDPBuffers() error {
 		return nil
 	}
 	if _, err := quicLookPath("sysctl"); err != nil {
-		return fmt.Errorf("sysctl not found for live QUIC buffer tuning: %w", err)
+		// Name the search path: privileged helpers only come from the trusted
+		// directories, and an operator with a custom sysctl location needs to
+		// know why it was not used (#1506 review).
+		return fmt.Errorf("sysctl not found for live QUIC buffer tuning in %s: %w", syspath.TrustedPATH(), err)
 	}
 	var errs []error
 	for _, spec := range raise {

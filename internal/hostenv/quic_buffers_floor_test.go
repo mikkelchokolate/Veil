@@ -9,7 +9,8 @@ import (
 )
 
 // quicFloorFixture stubs the QUIC tuning seams and records what the command
-// asked the host to do.
+// asked the host to do. The seams are package globals restored by t.Cleanup;
+// these tests must stay non-parallel (no t.Parallel) because they mutate them.
 type quicFloorFixture struct {
 	commands [][]string
 	written  string
