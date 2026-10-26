@@ -193,10 +193,11 @@ manifest cannot introduce an arbitrary unit name there. The name filter follows
 the resolved default unit root — the directory `veil.env` records, or
 `/etc/systemd/system` when it records none — and is not applied to a tree added
 with `--restore-root` (that one is bounded by the root allowlist alone, so only
-add roots whose contents you expect). The default unit root follows the directory the installed `veil.env`
-records (`VEIL_SYSTEMD_DIR`), so a custom `--systemd-dir` install restores its
-units without extra flags while that file is intact. If it no longer records the
-directory — an interrupted install that overwrote `veil.env` is the usual case —
+add roots whose contents you expect). That default root is the directory the
+installed `veil.env` records (`VEIL_SYSTEMD_DIR`), so a custom `--systemd-dir`
+install restores its units without extra flags while that file is intact. If it
+no longer records the directory — an interrupted install that overwrote
+`veil.env` is the usual case —
 the paths in the backup fall outside the defaults and the restore refuses
 (`outside the allowed roots`): add the tree that holds them with `--restore-root`,
 which replaces the defaults, and repeat it for every root the backup touches.

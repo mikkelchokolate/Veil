@@ -82,9 +82,14 @@ exit 0
 		"/etc/systemd/system", filepath.Join(dir, "etc-systemd"),
 		"/etc/sysctl.d/99-veil-quic.conf", filepath.Join(dir, "etc-sysctl", "99-veil-quic.conf"),
 		// #1424: the package-managed marker must never touch the real /etc in a
-		// test, even on an install-mode run.
+		// test, even on an install-mode run — rewrite both the marker and the
+		// directory its `[ -d /etc/veil ]` guard checks.
 		"/etc/veil/.package-managed", filepath.Join(dir, "etc-veil", ".package-managed"),
+		"/etc/veil", filepath.Join(dir, "etc-veil"),
 	)
+	if err := os.MkdirAll(filepath.Join(dir, "etc-veil"), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	for _, name := range []string{"preremove", "postinstall"} {
 		body, err := os.ReadFile(filepath.Join("..", "..", "packaging", "scripts", name+".sh"))
 		if err != nil {

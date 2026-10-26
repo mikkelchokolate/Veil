@@ -70,9 +70,12 @@ func (m panelStateRepairMaterial) addRuntimeUnitActions(plan *installer.RepairPl
 	// defaults: a custom --var-dir install lost its state mask on every repair
 	// (the units flip-flopped back to /var/lib/veil), and a custom binary path
 	// was replaced by /usr/local/bin/veil (#1437).
-	veilBinary, executableErr := m.deps.executable()()
-	if executableErr != nil {
-		veilBinary = ""
+	veilBinary := m.deps.veilBinary
+	if veilBinary == "" {
+		resolved, err := m.deps.executable()()
+		if err == nil {
+			veilBinary = resolved
+		}
 	}
 	cfg := renderer.SystemdConfig{
 		EtcDir:      m.opts.EtcDir,

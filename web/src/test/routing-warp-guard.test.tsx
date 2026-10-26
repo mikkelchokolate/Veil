@@ -18,7 +18,7 @@ function renderRouting() {
 	);
 }
 
-describe("RoutingPage WARP-disabled outbound guard", () => {
+describe("RoutingPage while WARP is disabled", () => {
 	// #1416: disabling WARP keeps the rules and the planner treats them as
 	// inert, so the SPA must let the operator save (and edit) them.
 	it("allows saving an enabled warp outbound while WARP is disabled", async () => {

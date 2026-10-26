@@ -36,6 +36,10 @@ type PlanDependencies struct {
 	// The workflow prints them next to the plan, so `veil repair` never reports
 	// success while silently keeping an expired certificate (#1500).
 	Notify func(string)
+	// veilBinary is the executable resolved once by BuildPlanFromOptions and
+	// reused for the rendered units, so a plan cannot describe two different
+	// binaries if the resolver is ever non-deterministic (#1437 review).
+	veilBinary string
 }
 
 // notify hands msg to the caller's warning channel; a direct caller without one
@@ -119,6 +123,7 @@ func BuildPlanFromOptions(opts Options, deps PlanDependencies) (installer.Repair
 	if executableErr != nil {
 		veilBinary = ""
 	}
+	deps.veilBinary = veilBinary
 	statePath, keyPath := installedStatePaths(opts)
 	plan, err := installer.BuildRepairPlan(built, installer.ApplyPaths{
 		EtcDir: opts.EtcDir, VarDir: opts.VarDir, SystemdDir: opts.SystemdDir,
