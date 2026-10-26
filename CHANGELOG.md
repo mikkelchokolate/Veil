@@ -6,6 +6,19 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Deleting a client or a binding no longer drops the traffic usage of the other
+  clients on the same runtime. The traffic provider map is a snapshot taken
+  before an apply, and deleting a client cascades its bindings away while the
+  runtime keeps reporting them for one more collection; recording that batch
+  failed as a whole (`traffic resolve binding ownership: sql: no rows in result
+  set`), so every co-tenant's usage since the last poll was lost — on
+  Hysteria2 for that inbound and on Mieru for every inbound, since one provider
+  serves the shared daemon. That included the apply's pre-restart counter flush
+  (#1102), which is exactly the usage a restart cannot recover, so quotas
+  under-counted after single and bulk deletions. A reading whose binding or
+  client row no longer exists is now skipped and logged
+  (`event=traffic_skipped_deleted_subject`) and the rest of the batch is
+  recorded; the explicit single-sample API still returns the error (#1445).
 - A failed first-run setup no longer locks the instance out. `POST
   /api/setup/complete` latched the provisioning state (the in-memory
   "users ever existed" flag and the durable `users-provisioned.marker` next to

@@ -2,7 +2,9 @@ package client
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"log"
 	"math"
 	"regexp"
 	"strings"
@@ -86,6 +88,15 @@ func (s *TrafficStore) RecordSample(sm Sample) error {
 	return nil
 }
 
+// ErrTrafficSubjectGone reports a sample whose binding or client row no longer
+// exists. The traffic provider map is a snapshot taken before an apply, and a
+// client deletion cascades its bindings away while the runtime still reports
+// them for one more collection; batch recording skips such readings so the
+// co-tenant usage in the same batch is not dropped (#1445). The explicit
+// single-sample API still returns the error: there the caller picked that
+// binding.
+var ErrTrafficSubjectGone = errors.New("client: traffic subject no longer exists")
+
 func (s *TrafficStore) RecordSamples(samples []Sample) error {
 	seenProviderKeys := make(map[string]struct{}, len(samples))
 	for _, sample := range samples {
@@ -106,10 +117,20 @@ func (s *TrafficStore) RecordSamples(samples []Sample) error {
 		return err
 	}
 	defer tx.Rollback()
+	skipped := 0
 	for _, sample := range samples {
 		if err := s.recordSampleTx(tx, sample); err != nil {
+			if errors.Is(err, ErrTrafficSubjectGone) {
+				// The binding/client was deleted after the provider map was
+				// built; the rest of this batch still belongs to live clients.
+				skipped++
+				continue
+			}
 			return err
 		}
+	}
+	if skipped > 0 {
+		log.Printf("event=traffic_skipped_deleted_subject samples=%d", skipped)
 	}
 	return tx.Commit()
 }
@@ -119,6 +140,9 @@ func (s *TrafficStore) recordSampleTx(tx *sql.Tx, sm Sample) error {
 	if sm.BindingID != "" {
 		var owner string
 		if err := tx.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, sm.BindingID).Scan(&owner); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: binding %s", ErrTrafficSubjectGone, sm.BindingID)
+			}
 			return fmt.Errorf("client: traffic resolve binding ownership: %w", err)
 		}
 		if clientID != "" && clientID != owner {
@@ -128,12 +152,18 @@ func (s *TrafficStore) recordSampleTx(tx *sql.Tx, sm Sample) error {
 	} else if clientID != "" {
 		var exists int
 		if err := tx.QueryRow(`SELECT 1 FROM clients WHERE id=?`, clientID).Scan(&exists); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: client %s", ErrTrafficSubjectGone, clientID)
+			}
 			return fmt.Errorf("client: traffic resolve client ownership: %w", err)
 		}
 	}
 	if clientID == "" {
 		var cid string
 		if err := tx.QueryRow(`SELECT client_id FROM client_bindings WHERE id=?`, sm.BindingID).Scan(&cid); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("%w: binding %s", ErrTrafficSubjectGone, sm.BindingID)
+			}
 			return fmt.Errorf("client: traffic resolve binding: %w", err)
 		}
 		clientID = cid
