@@ -30,6 +30,10 @@ type WorkflowDependencies struct {
 	Executable               func() (string, error)
 	ReplaceBinaryFromArchive func(currentPath string, archive []byte, yes bool) (string, error)
 	RestartUpdated           func(currentPath string, backupPath string, opts WorkflowOptions) error
+	// PackageManaged reports the owning OS package when the binary must be
+	// upgraded by the package manager instead; nil uses the production probe
+	// (#1424).
+	PackageManaged func(binaryPath string) (string, bool)
 	// DefaultExecutablePath is the fallback install path used when Executable
 	// fails. Empty means the production default (/usr/local/bin/veil). Tests
 	// must inject an isolated path — a unit test must never write to
@@ -52,6 +56,23 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 	}
 	if deps.ReplaceBinaryFromArchive == nil {
 		deps.ReplaceBinaryFromArchive = ReplaceBinaryFromArchive
+	}
+	if deps.PackageManaged == nil {
+		deps.PackageManaged = DetectPackageManagedBinary
+	}
+	currentPath := ""
+	if path, err := deps.Executable(); err == nil && path != "" {
+		currentPath = path
+	} else if deps.DefaultExecutablePath != "" {
+		currentPath = deps.DefaultExecutablePath
+	} else {
+		currentPath = "/usr/local/bin/veil"
+	}
+	// A package-managed binary must be replaced by the package manager: the
+	// updater would refresh the executable alone and leave the old package's
+	// units and postinstall migrations in place (#1424).
+	if owner, managed := deps.PackageManaged(currentPath); managed {
+		return fmt.Errorf("this Veil binary belongs to %s; upgrade it with the package manager (apt/dnf/apk) instead of `veil update` so the packaged units and install hooks are refreshed", owner)
 	}
 
 	// 1. Fetch latest release metadata
@@ -120,13 +141,6 @@ func RunWorkflow(opts WorkflowOptions, out io.Writer, deps WorkflowDependencies)
 		return nil
 	}
 
-	currentPath, err := deps.Executable()
-	if err != nil {
-		currentPath = deps.DefaultExecutablePath
-		if currentPath == "" {
-			currentPath = "/usr/local/bin/veil"
-		}
-	}
 	backupPath := currentPath + ".backup"
 	fmt.Fprintln(out, "Extracting binary...")
 	fmt.Fprintf(out, "Current binary: %s\n", currentPath)

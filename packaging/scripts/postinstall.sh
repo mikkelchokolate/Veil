@@ -366,6 +366,17 @@ if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
 fi
 
 if [ "$MODE" = install ]; then
+    # Mark the installation as package-managed: the binary, units and install
+    # hooks must be upgraded together by the package manager, so `veil update`
+    # and the Panel's updater refuse to replace the executable in place
+    # (#1424). Only a real install/upgrade writes it — abort-remove merely
+    # restarts units and must not need write access to /etc.
+    if [ -d /etc/veil ]; then
+        printf 'the Veil OS package\n' > /etc/veil/.package-managed
+        chmod 0644 /etc/veil/.package-managed
+    else
+        echo "warning: /etc/veil is missing; the package-managed marker was not written" >&2
+    fi
     echo "Veil installed. Run 'veil install' to configure Panel access, or"
     echo "'veil doctor' to check host readiness."
 fi

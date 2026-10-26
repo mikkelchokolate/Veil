@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -45,6 +46,9 @@ type panelUpdateStager struct {
 	verify             func(releaseverify.Evidence) error
 	resolveCommit      func(context.Context, string) (string, error)
 	sourceUpdateCommit func(context.Context, string, string) (string, error)
+	// packageManaged reports the owning OS package when the running binary is
+	// package-managed; nil skips the check (tests that do not exercise it).
+	packageManaged func(string) (string, bool)
 }
 
 func newPanelUpdateStager(root string, version string) panelUpdateStager {
@@ -64,12 +68,23 @@ func newPanelUpdateStager(root string, version string) panelUpdateStager {
 		verify:             releaseverify.Verify,
 		resolveCommit:      catalog.ResolveTagCommit,
 		sourceUpdateCommit: catalog.SourceUpdateCommit,
+		packageManaged:     updateflow.DetectPackageManagedBinary,
 	}
 }
 
 func (s panelUpdateStager) Stage(ctx context.Context, force bool) (string, error) {
 	if s.root == "" || s.latest == nil || s.download == nil || s.assetName == "" || s.verify == nil || s.resolveCommit == nil {
 		return "", errors.New("panel update stager is not configured")
+	}
+	// A package-managed panel must be upgraded by its package manager: the
+	// updater replaces only the executable and leaves the old package's units
+	// and install hooks behind (#1424).
+	if s.packageManaged != nil {
+		if exe, err := os.Executable(); err == nil {
+			if owner, managed := s.packageManaged(exe); managed {
+				return "", &updateRefusedError{reason: fmt.Sprintf("this Veil binary belongs to %s; update it with the package manager (apt/dnf/apk) instead of the panel updater so the packaged units and install hooks are refreshed", owner)}
+			}
+		}
 	}
 	release, err := s.latest(ctx)
 	if err != nil {

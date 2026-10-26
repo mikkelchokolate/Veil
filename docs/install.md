@@ -286,6 +286,12 @@ source build or use a matching pre-migration backup and binary for recovery.
 
 ### Native packages and containers
 
+`veil update` and the Panel's **Update panel** button refuse to run on a binary
+that belongs to an installed package (`dpkg`/`rpm`/`apk`): they replace only the
+executable, which would leave the previous package's systemd units and install
+hooks in place. Upgrade such hosts with the package manager, which refreshes the
+units and runs the hooks.
+
 For `.deb`, `.rpm` or `.apk` installations, install the matching v0.7.3 package
 with the package manager instead of overwriting its binary with `veil update`.
 Package hooks reload systemd and restart the units the package owns; they do
