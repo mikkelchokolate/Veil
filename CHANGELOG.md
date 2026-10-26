@@ -15,7 +15,7 @@ All notable changes to Veil will be documented in this file.
   /etc/systemd/system/veil.service is outside the allowed roots" and restored
   nothing. The defaults now include the configured unit directory, so the
   product's own backups restore. The allowlist stays narrow: inside the unit
-  directory a manifest may only name Veil's own units and drop-ins
+  directory a manifest may only name units starting with `veil`
   (`veil*.service|socket|timer` and `<unit>.d/*.conf`), so it cannot introduce
   an arbitrary unit name. That is not a trust boundary for the archive itself:
   a configuration backup contains `state.key`, `veil.env` and the units, it is
