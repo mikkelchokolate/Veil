@@ -6,6 +6,14 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Install now refuses to adopt an unsafe pre-existing `veil`/`veil-proxy`/
+  `veil-mita` account. A uid of 0 would run the panel as root, a uid above the
+  system range from `/etc/login.defs` is not an account `useradd --system`
+  creates, and a real login shell breaks the nologin contract — all three are
+  what a prior root compromise leaves behind, and install used to adopt them
+  silently. Both `veil install` and the package postinstall stop with a message
+  naming the account; a clean pre-existing account (system uid, nologin shell)
+  is still adopted without changes (#1278).
 - The package postinstall now warns about foreign systemd drop-ins in a Veil
   unit's `.d` directory. Those files are the operator channel and are kept
   across upgrades, but the upgrade's `systemctl try-restart` applies them, and

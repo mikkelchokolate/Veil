@@ -1401,3 +1401,50 @@ func TestEnsureAccountRemovesPlantedGroupsWithoutUsermod(t *testing.T) {
 		t.Fatalf("commands:\n%s\nwant:\n%s", got, strings.Join(want, "\n"))
 	}
 }
+
+// TestEnsureAccountRejectsAnUnsafeAdoptedAccount locks #1278 item 1: a
+// pre-existing account is what a prior root compromise leaves, so install must
+// refuse a root uid, a login-range uid or a real login shell instead of handing
+// the panel that identity.
+func TestEnsureAccountRejectsAnUnsafeAdoptedAccount(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		uid     string
+		shell   string
+		wantErr string
+	}{
+		{"root uid", "0", "/usr/sbin/nologin", "uid 0"},
+		{"login-range uid", "4500", "/usr/sbin/nologin", "outside the system account range"},
+		{"login shell", "442", "/bin/bash", "login shell"},
+		{"clean account", "442", "/usr/sbin/nologin", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := AccountDependencies{
+				LookupGroup: func(name string) (*user.Group, error) {
+					gid := map[string]string{"veil": tc.uid, "veil-proxy": "443", "veil-mita": "444"}[name]
+					return &user.Group{Name: name, Gid: gid}, nil
+				},
+				LookupUser: func(name string) (*user.User, error) {
+					uid := tc.uid
+					if name != "veil" {
+						uid = map[string]string{"veil-proxy": "443", "veil-mita": "444"}[name]
+					}
+					return &user.User{Username: name, Uid: uid, Gid: uid}, nil
+				},
+				LookupShell:  func(string) (string, error) { return tc.shell, nil },
+				SystemUIDMax: func() int { return 999 },
+				Run:          func(string, ...string) error { return nil },
+			}
+			_, err := EnsureAccount(deps)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("clean adopted account rejected: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}

@@ -169,6 +169,12 @@ type AccountDependencies struct {
 	LookupUser  func(string) (*user.User, error)
 	LookupGroup func(string) (*user.Group, error)
 	Run         func(string, ...string) error
+	// LookupShell resolves the account's login shell. nil skips the adopt-time
+	// shell check (tests); production parses /etc/passwd.
+	LookupShell func(string) (string, error)
+	// SystemUIDMax reports the highest uid useradd --system may pick
+	// (/etc/login.defs SYS_UID_MAX). nil means 999.
+	SystemUIDMax func() int
 	// ListGroups reports the account's current group names, including its
 	// primary group. It is what lets install set an exact supplementary set
 	// instead of appending to whatever a compromised host left behind (#1278);
@@ -184,6 +190,20 @@ func DefaultAccountDependencies() AccountDependencies {
 		Run: func(name string, args ...string) error {
 			return syspath.Command(name, args...).Run()
 		},
+		LookupShell: func(name string) (string, error) {
+			body, err := os.ReadFile("/etc/passwd")
+			if err != nil {
+				return "", err
+			}
+			for _, line := range strings.Split(string(body), "\n") {
+				fields := strings.Split(line, ":")
+				if len(fields) >= 7 && fields[0] == name {
+					return fields[6], nil
+				}
+			}
+			return "", fmt.Errorf("no passwd entry for %s", name)
+		},
+		SystemUIDMax: systemUIDMaxFromLoginDefs,
 		ListGroups: func(name string) ([]string, error) {
 			out, err := syspath.Command("id", "-nG", name).Output()
 			if err != nil {
@@ -245,6 +265,52 @@ func EnsureAccount(deps AccountDependencies) (Identity, error) {
 	return panel, nil
 }
 
+// validateAdoptedAccount rejects an existing account the panel must not run as.
+// The supplementary-group half of the same boundary is enforced by
+// setSupplementaryGroups; this covers the uid and the nologin contract.
+func validateAdoptedAccount(deps AccountDependencies, name string, uid int) error {
+	if uid == 0 {
+		return fmt.Errorf("refusing to adopt %s: it has uid 0, so the panel would run as root", name)
+	}
+	max := 999
+	if deps.SystemUIDMax != nil {
+		max = deps.SystemUIDMax()
+	}
+	if uid > max {
+		return fmt.Errorf("refusing to adopt %s: uid %d is outside the system account range (max %d); recreate it with useradd --system or fix the uid", name, uid, max)
+	}
+	if deps.LookupShell != nil {
+		shell, err := deps.LookupShell(name)
+		if err != nil {
+			return fmt.Errorf("read %s login shell: %w", name, err)
+		}
+		base := filepath.Base(strings.TrimSpace(shell))
+		if base != "nologin" && base != "false" {
+			return fmt.Errorf("refusing to adopt %s: its login shell is %q, want nologin", name, shell)
+		}
+	}
+	return nil
+}
+
+// systemUIDMaxFromLoginDefs reads SYS_UID_MAX (Debian/RHEL login.defs), falling
+// back to the conventional 999 when the file or the key is absent.
+func systemUIDMaxFromLoginDefs() int {
+	body, err := os.ReadFile("/etc/login.defs")
+	if err != nil {
+		return 999
+	}
+	for _, line := range strings.Split(string(body), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || fields[0] != "SYS_UID_MAX" {
+			continue
+		}
+		if value, err := strconv.Atoi(fields[1]); err == nil && value > 0 {
+			return value
+		}
+	}
+	return 999
+}
+
 func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error) {
 	group, err := deps.LookupGroup(name)
 	if err != nil {
@@ -259,6 +325,7 @@ func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error)
 		}
 	}
 	account, err := deps.LookupUser(name)
+	adopted := err == nil
 	if err != nil {
 		if err := deps.Run(
 			"useradd", "--system", "--gid", name, "--no-create-home",
@@ -278,6 +345,14 @@ func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error)
 	uid, err := strconv.Atoi(account.Uid)
 	if err != nil {
 		return Identity{}, fmt.Errorf("parse %s uid: %w", name, err)
+	}
+	if adopted {
+		// A pre-existing account is exactly what a prior root compromise leaves
+		// behind. Refuse to hand the panel a root uid, a login-range uid or a
+		// real login shell instead of adopting them silently (#1278).
+		if err := validateAdoptedAccount(deps, name, uid); err != nil {
+			return Identity{}, err
+		}
 	}
 	gid, err := strconv.Atoi(group.Gid)
 	if err != nil {

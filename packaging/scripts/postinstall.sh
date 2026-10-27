@@ -73,6 +73,58 @@ group_exists() {
     fi
 }
 
+# passwd_shell prints the login shell recorded for an account.
+passwd_shell() {
+    account="$1"
+    if command -v getent >/dev/null 2>&1; then
+        getent passwd "$account" 2>/dev/null | cut -d: -f7
+    else
+        grep "^${account}:" /etc/passwd 2>/dev/null | cut -d: -f7
+    fi
+}
+
+# system_uid_max is the highest uid useradd --system may pick (login.defs).
+system_uid_max() {
+    max=999
+    if [ -r /etc/login.defs ]; then
+        value="$(awk '$1 == "SYS_UID_MAX" { print $2; exit }' /etc/login.defs 2>/dev/null || true)"
+        case "${value}" in
+            '' | *[!0-9]*) ;;
+            *) max="${value}" ;;
+        esac
+    fi
+    echo "${max}"
+}
+
+# validate_adopted_account refuses a uid outside the system range or a real login
+# shell: both are exactly what a planted account looks like. Arguments are passed
+# in so the rule is testable without editing /etc/passwd.
+validate_adopted_account() {
+    account="$1"
+    account_uid="$2"
+    account_shell="$3"
+    account_max="$4"
+    case "${account_uid}" in
+        '' | *[!0-9]*) echo "Cannot validate existing user ${account}: uid ${account_uid} is not a number" >&2; exit 1 ;;
+    esac
+    if [ "${account_uid}" -eq 0 ]; then
+        echo "Refusing to adopt user ${account}: it has uid 0, so the Panel would run as root" >&2
+        exit 1
+    fi
+    if [ "${account_uid}" -gt "${account_max}" ]; then
+        echo "Refusing to adopt user ${account}: uid ${account_uid} is outside the system account range (max ${account_max}); recreate it with 'useradd --system' or fix its uid" >&2
+        exit 1
+    fi
+    case "${account_shell##*/}" in
+        nologin | false) ;;
+        *)
+            echo "Refusing to adopt user ${account}: its login shell is ${account_shell}, want nologin" >&2
+            exit 1
+            ;;
+    esac
+}
+    # end: validate_adopted_account
+
 ensure_system_account() {
     name="$1"
     if ! group_exists "$name"; then
@@ -85,7 +137,12 @@ ensure_system_account() {
             exit 1
         fi
     fi
-    if ! id -u "$name" >/dev/null 2>&1; then
+    if id -u "$name" >/dev/null 2>&1; then
+        # Adopt only a hygienic pre-existing account: a previous root compromise
+        # leaves exactly such a user behind, and installing a panel that runs as
+        # it would hand the attacker the boundary back (#1278).
+        validate_adopted_account "$name" "$(id -u "$name")" "$(passwd_shell "$name")" "$(system_uid_max)"
+    else
         nologin=/usr/sbin/nologin
         [ -x "$nologin" ] || nologin=/sbin/nologin
         [ -x "$nologin" ] || nologin=/bin/false

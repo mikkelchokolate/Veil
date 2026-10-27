@@ -211,6 +211,12 @@ runbook.
   the account's supplementary list (`usermod -G`). A `veil` account planted with
   `docker`/`disk`/`shadow` therefore loses those memberships on the next
   install instead of handing them to the unit.
+- **Adopted accounts are validated.** A pre-existing `veil`/`veil-proxy`/
+  `veil-mita` account is adopted only when it looks like a system account:
+  uid in the `/etc/login.defs` system range, `nologin` (or `false`) shell, and
+  the exact supplementary set from the previous section. A uid of 0, a
+  login-range uid or a real shell stops the install with a message naming the
+  account — plant-grade state is refused instead of inherited (#1278).
 - **Foreign unit drop-ins are surfaced, not trusted.** `veil*.service.d`
   directories under `/etc/systemd/system` are the operator channel and survive
   upgrades, but the upgrade's `systemctl try-restart` applies them: the package
