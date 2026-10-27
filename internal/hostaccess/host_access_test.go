@@ -63,8 +63,7 @@ func TestEnsureAccountCreatesSystemGroupAndUser(t *testing.T) {
 		"useradd --system --gid veil-proxy --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-proxy",
 		"groupadd --system veil-mita",
 		"useradd --system --gid veil-mita --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-mita",
-		"usermod -aG veil-proxy veil",
-		"usermod -aG veil-mita veil",
+		"usermod -G veil-proxy,veil-mita veil",
 	}
 	if strings.Join(commands, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("commands=%v", commands)
@@ -540,7 +539,7 @@ func TestEnsureAccount(t *testing.T) {
 		if id.UID != 100 || id.GID != 100 || id.ProxyUID != 101 || id.ProxyGID != 101 || id.MitaUID != 102 || id.MitaGID != 102 {
 			t.Fatalf("identity=%+v", id)
 		}
-		if strings.Join(commands, "\n") != "usermod -aG veil-proxy veil\nusermod -aG veil-mita veil" {
+		if strings.Join(commands, "\n") != "usermod -G veil-proxy,veil-mita veil" {
 			t.Fatalf("commands=%v", commands)
 		}
 	})
@@ -623,9 +622,8 @@ func TestEnsureAccount(t *testing.T) {
 			"addgroup -S veil-mita",
 			"useradd --system --gid veil-mita --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin veil-mita",
 			"adduser -S -D -H -h /nonexistent -s /sbin/nologin -G veil-mita veil-mita",
-			"usermod -aG veil-proxy veil",
+			"usermod -G veil-proxy,veil-mita veil",
 			"addgroup veil veil-proxy",
-			"usermod -aG veil-mita veil",
 			"addgroup veil veil-mita",
 		}
 		if strings.Join(commands, "\n") != strings.Join(want, "\n") {
@@ -1325,4 +1323,81 @@ func TestSetOptionalFile(t *testing.T) {
 		}
 	})
 
+}
+
+// TestEnsureAccountReplacesPlantedSupplementaryGroups locks the #1278 boundary:
+// systemd's SupplementaryGroups= only extends the groups in the user database, so
+// a `veil` account planted with docker/disk/shadow kept those memberships through
+// every reinstall. Install must set the list exactly, not append to it.
+func TestEnsureAccountReplacesPlantedSupplementaryGroups(t *testing.T) {
+	var commands []string
+	deps := AccountDependencies{
+		LookupGroup: func(name string) (*user.Group, error) {
+			gid := map[string]string{"veil": "100", "veil-proxy": "101", "veil-mita": "102"}[name]
+			return &user.Group{Name: name, Gid: gid}, nil
+		},
+		LookupUser: func(name string) (*user.User, error) {
+			uid := map[string]string{"veil": "100", "veil-proxy": "101", "veil-mita": "102"}[name]
+			return &user.User{Username: name, Uid: uid, Gid: uid}, nil
+		},
+		ListGroups: func(name string) ([]string, error) {
+			if name == "veil" {
+				return []string{"veil", "docker", "disk", "shadow", "veil-proxy"}, nil
+			}
+			return []string{name}, nil
+		},
+		Run: func(name string, args ...string) error {
+			commands = append(commands, name+" "+strings.Join(args, " "))
+			return nil
+		},
+	}
+	if _, err := EnsureAccount(deps); err != nil {
+		t.Fatalf("ensure account: %v", err)
+	}
+	if got := strings.Join(commands, "\n"); got != "usermod -G veil-proxy,veil-mita veil" {
+		t.Fatalf("commands=%s", got)
+	}
+}
+
+// TestEnsureAccountRemovesPlantedGroupsWithoutUsermod covers BusyBox hosts: no
+// usermod, so the planted memberships are removed explicitly before the wanted
+// ones are added.
+func TestEnsureAccountRemovesPlantedGroupsWithoutUsermod(t *testing.T) {
+	var commands []string
+	deps := AccountDependencies{
+		LookupGroup: func(name string) (*user.Group, error) {
+			gid := map[string]string{"veil": "100", "veil-proxy": "101", "veil-mita": "102"}[name]
+			return &user.Group{Name: name, Gid: gid}, nil
+		},
+		LookupUser: func(name string) (*user.User, error) {
+			uid := map[string]string{"veil": "100", "veil-proxy": "101", "veil-mita": "102"}[name]
+			return &user.User{Username: name, Uid: uid, Gid: uid}, nil
+		},
+		ListGroups: func(name string) ([]string, error) {
+			if name == "veil" {
+				return []string{"veil", "docker", "disk"}, nil
+			}
+			return []string{name}, nil
+		},
+		Run: func(name string, args ...string) error {
+			commands = append(commands, name+" "+strings.Join(args, " "))
+			if name == "usermod" {
+				return errors.New("usermod is not available")
+			}
+			return nil
+		},
+	}
+	if _, err := EnsureAccount(deps); err != nil {
+		t.Fatalf("ensure account: %v", err)
+	}
+	want := []string{
+		"usermod -G veil-proxy,veil-mita veil",
+		"delgroup veil docker",
+		"delgroup veil disk",
+		"addgroup veil veil-proxy",
+		"addgroup veil veil-mita",
+	}
+	if got := strings.Join(commands, "\n"); got != strings.Join(want, "\n") {
+		t.Fatalf("commands:\n%s\nwant:\n%s", got, strings.Join(want, "\n"))
+	}
 }

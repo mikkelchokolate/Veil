@@ -10,6 +10,7 @@ Type=simple
 # reach the root helper or the panel-owned state (audit #506).
 User=veil-proxy
 Group=veil-proxy
+SupplementaryGroups=
 # Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640
 # root:veil-proxy config under /etc/veil/generated and /etc/veil/tls. ACME
 # material stays in StateDirectory=caddy (/var/lib/caddy); /etc/veil stays

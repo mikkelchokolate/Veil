@@ -293,6 +293,12 @@ assert_unit_hardening() {
   # broadest-reach unit is a privilege-boundary regression (issue #754).
   grep -qxF 'User=veil' "$unitdir/veil.service" || fail "veil.service User"
   grep -qxF 'Group=veil' "$unitdir/veil.service" || fail "veil.service Group"
+  # initgroups() hands a unit every membership of its account, so the exact
+  # supplementary set is part of the privilege boundary (#1278).
+  grep -qxF 'SupplementaryGroups=veil-proxy veil-mita' "$unitdir/veil.service"     || fail "veil.service SupplementaryGroups"
+  for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service; do
+    grep -qxF 'SupplementaryGroups=' "$unitdir/$unit"       || fail "$unit SupplementaryGroups must be empty"
+  done
   grep -qxF 'CapabilityBoundingSet=' "$unitdir/veil.service" \
     || fail "veil.service CapabilityBoundingSet must be empty"
   grep -qxF 'AmbientCapabilities=' "$unitdir/veil.service" \

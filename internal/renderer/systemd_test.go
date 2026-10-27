@@ -581,3 +581,25 @@ func TestProxySiblingUnitsMaskCaddyAdminSocket(t *testing.T) {
 		t.Fatalf("%s drop-in must not mask its own StateDirectory:\n%s", UnitCaddy, dropIn)
 	}
 }
+
+// TestPanelUnitPinsSupplementaryGroups locks the #1278 declaration: the units
+// state the intended supplementary sets (systemd extends them with the account's
+// database groups, so the enforcement lives in the install-time account update),
+// and the edge identity declares an empty set.
+func TestPanelUnitPinsSupplementaryGroups(t *testing.T) {
+	for _, config := range []SystemdConfig{{}, {EtcDir: "/opt/veil/etc", VarDir: "/opt/veil/var"}} {
+		panel := RenderSystemdUnits(config)[UnitVeil]
+		if !strings.Contains(panel, "\nSupplementaryGroups=veil-proxy veil-mita\n") {
+			t.Fatalf("veil.service does not pin supplementary groups:\n%s", panel)
+		}
+	}
+	// The edge units share the veil-proxy identity and must not inherit anything
+	// else either.
+	for _, unit := range []string{"veil-caddy.service", "veil-hysteria2@.service", "veil-olcrtc@.service", "veil-warp.service"} {
+		if body, ok := RenderSystemdUnits(SystemdConfig{})[unit]; ok && strings.Contains(body, "User=veil-proxy") {
+			if !strings.Contains(body, "\nSupplementaryGroups=\n") {
+				t.Fatalf("%s runs as veil-proxy without an empty SupplementaryGroups=:\n%s", unit, body)
+			}
+		}
+	}
+}

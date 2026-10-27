@@ -6,6 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Install now replaces the `veil` account's supplementary groups instead of
+  appending to them. A host where an earlier root compromise planted the account
+  with `docker`, `disk` or `shadow` membership handed the panel those groups on
+  every upgrade: the unit inherited the daemon's user-database groups, and
+  `usermod -aG` only ever added. The account now gets exactly `veil-proxy`
+  (generated-config reads) and `veil-mita` (the appctl socket) through
+  `usermod -G veil-proxy,veil-mita veil`, with a BusyBox fallback that removes
+  the planted memberships explicitly; the packaged and rendered units also
+  declare the intended sets (#1278).
 - Runtime-set recovery now refuses a journal whose `target`, `staged` or
   `backup` paths fall outside the runtime bin directory. Recovery digests,
   removes and copies those paths as root, so a journal that named anything else

@@ -9,6 +9,7 @@ StartLimitBurst=5
 Type=simple
 User=veil-proxy
 Group=veil-proxy
+SupplementaryGroups=
 ExecStart=/usr/local/bin/olcrtc /etc/veil/generated/olcrtc/%i.yaml
 Restart=on-failure
 RestartSec=3

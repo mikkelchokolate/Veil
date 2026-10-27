@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 User=veil-proxy
 Group=veil-proxy
+SupplementaryGroups=
 ExecStart=/usr/local/bin/sing-box run -c /etc/veil/generated/sing-box/warp.json
 ExecReload=/usr/local/bin/sing-box check -c /etc/veil/generated/sing-box/warp.json
 Restart=on-failure
