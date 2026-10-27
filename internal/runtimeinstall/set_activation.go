@@ -188,6 +188,9 @@ func prepareRuntimeSetActivation(binDir string, results []Result) (runtimeSetJou
 }
 
 func activateRuntimeSet(binDir string, journal *runtimeSetJournal) error {
+	if err := validateRuntimeSetJournalPaths(binDir, *journal); err != nil {
+		return err
+	}
 	journalPath := filepath.Join(binDir, runtimeSetJournalName)
 	for index := range journal.Items {
 		item := &journal.Items[index]
@@ -234,6 +237,32 @@ func activateRuntimeSet(binDir string, journal *runtimeSetJournal) error {
 	return finalizeRuntimeSet(binDir, *journal)
 }
 
+// validateRuntimeSetJournalPaths binds every path a journal names to binDir.
+// Recovery digests, removes and copies these paths as root, so a journal that
+// named anything outside the runtime bin directory would turn a rollback into an
+// arbitrary remove or overwrite. The journal is written by this package today
+// (root-owned /usr/local/bin), which is why the check is defense-in-depth rather
+// than a live hole: a future wiring change must not be able to open it (#1267).
+func validateRuntimeSetJournalPaths(binDir string, journal runtimeSetJournal) error {
+	root, err := filepath.Abs(binDir)
+	if err != nil {
+		return err
+	}
+	root = filepath.Clean(root)
+	for _, item := range journal.Items {
+		for _, path := range []string{item.Target, item.Staged, item.Backup} {
+			if path == "" {
+				continue
+			}
+			clean := filepath.Clean(path)
+			if !filepath.IsAbs(clean) || filepath.Dir(clean) != root {
+				return fmt.Errorf("runtime set activation journal names %q outside the runtime bin directory", path)
+			}
+		}
+	}
+	return nil
+}
+
 func rollbackRuntimeSet(binDir string, journal *runtimeSetJournal, cause error) error {
 	var rollbackErr error
 	for index := len(journal.Items) - 1; index >= 0; index-- {
@@ -278,6 +307,9 @@ func recoverRuntimeSetActivation(binDir string) error {
 	var journal runtimeSetJournal
 	if err := json.Unmarshal(body, &journal); err != nil || journal.Version != 1 || journal.TransactionID == "" || len(journal.Items) == 0 {
 		return errors.New("invalid runtime set activation journal")
+	}
+	if err := validateRuntimeSetJournalPaths(binDir, journal); err != nil {
+		return err
 	}
 	allNew := true
 	for _, item := range journal.Items {
