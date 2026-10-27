@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/mikkelchokolate/Veil/internal/safefs"
@@ -168,6 +169,12 @@ type AccountDependencies struct {
 	LookupUser  func(string) (*user.User, error)
 	LookupGroup func(string) (*user.Group, error)
 	Run         func(string, ...string) error
+	// ListGroups reports the account's current group names, including its
+	// primary group. It is what lets install set an exact supplementary set
+	// instead of appending to whatever a compromised host left behind (#1278);
+	// nil keeps the historical append-only behaviour for callers that cannot
+	// enumerate groups.
+	ListGroups func(string) ([]string, error)
 }
 
 func DefaultAccountDependencies() AccountDependencies {
@@ -176,6 +183,13 @@ func DefaultAccountDependencies() AccountDependencies {
 		LookupGroup: user.LookupGroup,
 		Run: func(name string, args ...string) error {
 			return syspath.Command(name, args...).Run()
+		},
+		ListGroups: func(name string) ([]string, error) {
+			out, err := syspath.Command("id", "-nG", name).Output()
+			if err != nil {
+				return nil, err
+			}
+			return strings.Fields(string(out)), nil
 		},
 	}
 }
@@ -215,12 +229,13 @@ func EnsureAccount(deps AccountDependencies) (Identity, error) {
 	if err != nil {
 		return Identity{}, err
 	}
-	if err := addSupplementaryGroup(deps, "veil", "veil-proxy"); err != nil {
-		return Identity{}, err
-	}
-	// The panel connects to the appctl socket through the veil-mita group;
-	// veil-proxy units are deliberately NOT members.
-	if err := addSupplementaryGroup(deps, "veil", "veil-mita"); err != nil {
+	// The panel connects to the appctl socket through the veil-mita group and
+	// reads generated config through veil-proxy; veil-proxy units are
+	// deliberately NOT members. Set that list exactly: systemd's
+	// SupplementaryGroups= only EXTENDS the database groups, so appending here
+	// would let a planted docker/disk/shadow membership ride every upgrade
+	// (#1278).
+	if err := setSupplementaryGroups(deps, "veil", "veil", []string{"veil-proxy", "veil-mita"}); err != nil {
 		return Identity{}, err
 	}
 	panel.ProxyUID = proxy.UID
@@ -274,10 +289,44 @@ func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error)
 	return Identity{UID: uid, GID: gid}, nil
 }
 
-func addSupplementaryGroup(deps AccountDependencies, userName, groupName string) error {
-	if err := deps.Run("usermod", "-aG", groupName, userName); err != nil {
-		if fallbackErr := deps.Run("addgroup", userName, groupName); fallbackErr != nil {
-			return fmt.Errorf("add %s to %s: %v; fallback: %w", userName, groupName, err, fallbackErr)
+// setSupplementaryGroups makes the account's supplementary groups exactly want.
+// systemd's SupplementaryGroups= only extends the groups in the user database, so
+// the boundary has to be enforced here: `usermod -G` replaces the list and thus
+// drops a membership planted by a previous root compromise (#1278). Without
+// usermod (BusyBox) the planted memberships are removed with delgroup and the
+// wanted ones added; without ListGroups the caller cannot enumerate, so only the
+// additive part is possible.
+func setSupplementaryGroups(deps AccountDependencies, userName, primaryGroup string, want []string) error {
+	if err := deps.Run("usermod", "-G", strings.Join(want, ","), userName); err == nil {
+		return nil
+	}
+	var extras []string
+	if deps.ListGroups != nil {
+		current, err := deps.ListGroups(userName)
+		if err != nil {
+			return fmt.Errorf("list %s groups: %w", userName, err)
+		}
+		wanted := make(map[string]bool, len(want))
+		for _, group := range want {
+			wanted[group] = true
+		}
+		for _, group := range current {
+			if group == primaryGroup || wanted[group] {
+				continue
+			}
+			extras = append(extras, group)
+		}
+	}
+	for _, group := range extras {
+		if err := deps.Run("delgroup", userName, group); err != nil {
+			if fallbackErr := deps.Run("gpasswd", "-d", userName, group); fallbackErr != nil {
+				return fmt.Errorf("remove %s from %s: %v; fallback: %w", userName, group, err, fallbackErr)
+			}
+		}
+	}
+	for _, group := range want {
+		if err := deps.Run("addgroup", userName, group); err != nil {
+			return fmt.Errorf("add %s to %s: %w", userName, group, err)
 		}
 	}
 	return nil

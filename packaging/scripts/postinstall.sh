@@ -108,32 +108,51 @@ if [ "$MODE" = install ]; then
     # uid/group that every other internet-facing unit uses.
     ensure_system_account veil-mita
 
-    # A silent membership failure would leave the managed directories unreadable
-    # (veil-proxy) or the mita appctl socket unreachable (veil-mita) after the
-    # ownership pass below, so stop loudly.
-    ensure_group_member() {
-        member_user="$1"
-        member_group="$2"
-        if ! id -nG "$member_user" 2>/dev/null | tr ' ' '\n' | grep -qx "$member_group"; then
-            if command -v usermod >/dev/null 2>&1; then
-                usermod -aG "$member_group" "$member_user"
-            elif command -v addgroup >/dev/null 2>&1; then
-                addgroup "$member_user" "$member_group"
+    # The panel's supplementary groups are page of the privilege boundary, and
+    # systemd's SupplementaryGroups= only EXTENDS whatever /etc/group says, so a
+    # planted docker/disk/shadow membership would ride every upgrade. Set the
+    # list exactly instead of appending to it (#1278).
+    #
+    # veil-proxy: the panel previews /etc/veil/generated, tls, panel, certs.
+    # veil-mita: the panel is the only appctl client (mita get metrics over
+    # /run/veil-mieru/mita.sock); veil-proxy units are deliberately NOT members.
+    ensure_supplementary_groups() {
+        account="$1"
+        shift
+        wanted="$(printf '%s' "$*" | tr ' ' ',')"
+        primary="$(id -gn "$account" 2>/dev/null || true)"
+        if command -v usermod >/dev/null 2>&1 && usermod -G "$wanted" "$account" 2>/dev/null; then
+            return 0
+        fi
+        # BusyBox has no usermod -G: drop every membership the account did not
+        # need, then add the wanted ones. No silent continuation: a host that
+        # cannot prune would keep the planted groups.
+        for group in $(id -nG "$account" 2>/dev/null || true); do
+            [ "$group" = "$primary" ] && continue
+            case " $* " in
+                *" $group "*) continue ;;
+            esac
+            if command -v delgroup >/dev/null 2>&1; then
+                delgroup "$account" "$group" || true
+            elif command -v gpasswd >/dev/null 2>&1; then
+                gpasswd -d "$account" "$group" >/dev/null 2>&1 || true
             else
-                echo "Cannot add user $member_user to group $member_group: neither usermod nor addgroup is installed" >&2
+                echo "Cannot remove user $account from group $group: neither delgroup nor gpasswd is installed" >&2
                 exit 1
             fi
-        fi
+        done
+        for group in "$@"; do
+            if command -v usermod >/dev/null 2>&1; then
+                usermod -aG "$group" "$account"
+            elif command -v addgroup >/dev/null 2>&1; then
+                addgroup "$account" "$group"
+            else
+                echo "Cannot add user $account to group $group: neither usermod nor addgroup is installed" >&2
+                exit 1
+            fi
+        done
     }
-    # The protocol units and veil-caddy.service run as veil-proxy and read
-    # /etc/veil/generated, /etc/veil/tls, /etc/veil/panel, and /etc/veil/certs
-    # directly. The panel account is a supplementary veil-proxy member so it can
-    # keep previewing that material.
-    ensure_group_member veil veil-proxy
-    # The panel is also the ONLY appctl client: it joins veil-mita so
-    # `mita get metrics` can connect to /run/veil-mieru/mita.sock (0770
-    # veil-mita). veil-proxy units are deliberately NOT members.
-    ensure_group_member veil veil-mita
+    ensure_supplementary_groups veil veil-proxy veil-mita
 
     if [ -f /etc/sysctl.d/99-veil-quic.conf ]; then
         # Only raise: a host already tuned above Veil's 16 MiB floor keeps its

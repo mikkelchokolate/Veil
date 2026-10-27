@@ -234,10 +234,10 @@ Requires=veil-helper.socket
 Type=simple
 User=veil
 Group=veil
-# systemd calls initgroups() when a unit has no SupplementaryGroups=, so a
-# pre-existing veil account planted with extra memberships (docker, disk,
-# shadow) would hand the panel all of them on every upgrade. The panel needs
-# exactly these two: veil-proxy for generated config, veil-mita for appctl.
+# Declares the intended set only: systemd EXTENDS it with the account's groups
+# from the user database, so the boundary is enforced on the account at install
+# time (usermod -G) — a planted docker/disk/shadow membership (#1278) must be
+# dropped there. veil-proxy: generated config; veil-mita: appctl socket.
 SupplementaryGroups=veil-proxy veil-mita
 # The panel must not own /run/veil: veil-helper.socket owns it root:root 0711
 # so no veil-uid process can replace or shadow the helper socket. The panel

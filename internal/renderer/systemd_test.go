@@ -582,11 +582,10 @@ func TestProxySiblingUnitsMaskCaddyAdminSocket(t *testing.T) {
 	}
 }
 
-// TestPanelUnitPinsSupplementaryGroups locks the #1278 hardening: systemd calls
-// initgroups for a unit without SupplementaryGroups=, so a pre-existing `veil`
-// account planted with extra memberships (docker, disk, shadow) handed the panel
-// all of them on every upgrade. The panel needs exactly veil-proxy (generated
-// config) and veil-mita (appctl socket).
+// TestPanelUnitPinsSupplementaryGroups locks the #1278 declaration: the units
+// state the intended supplementary sets (systemd extends them with the account's
+// database groups, so the enforcement lives in the install-time account update),
+// and the edge identity declares an empty set.
 func TestPanelUnitPinsSupplementaryGroups(t *testing.T) {
 	for _, config := range []SystemdConfig{{}, {EtcDir: "/opt/veil/etc", VarDir: "/opt/veil/var"}} {
 		panel := RenderSystemdUnits(config)[UnitVeil]

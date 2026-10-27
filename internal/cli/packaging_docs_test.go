@@ -385,6 +385,15 @@ func TestPackageScriptsExist(t *testing.T) {
 		strings.Contains(postinstallScript, "addgroup veil veil-proxy || true") {
 		t.Fatal("postinstall.sh must not swallow veil-proxy group membership failures")
 	}
+	// #1278: the account's supplementary list must be replaced, not extended, or
+	// a planted docker/disk/shadow membership rides every upgrade (systemd's
+	// SupplementaryGroups= only extends the user-database groups).
+	if !strings.Contains(postinstallScript, `usermod -G "$wanted" "$account"`) {
+		t.Fatal("postinstall.sh must set the veil account's supplementary groups exactly")
+	}
+	if !strings.Contains(postinstallScript, "ensure_supplementary_groups veil veil-proxy veil-mita") {
+		t.Fatal("postinstall.sh must call the exact supplementary-group helper for the veil account")
+	}
 }
 
 func TestDockerEntrypointKeepsApplyRootOffLiveGeneratedTree(t *testing.T) {
