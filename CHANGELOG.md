@@ -6,6 +6,14 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The panel and the edge units now pin their supplementary groups instead of
+  letting systemd call `initgroups()`. A host where a previous root compromise
+  planted the `veil`/`veil-proxy` account with extra memberships (`docker`,
+  `disk`, `shadow`) handed the panel those groups on every upgrade, so the
+  daemon kept the attacker's access across reinstalls. `veil.service` carries
+  exactly `SupplementaryGroups=veil-proxy veil-mita` (the two memberships
+  install adds), and caddy/hysteria2/olcrtc/warp carry an empty set — their
+  identity needs no supplementary group at all (#1278).
 - Runtime-set recovery now refuses a journal whose `target`, `staged` or
   `backup` paths fall outside the runtime bin directory. Recovery digests,
   removes and copies those paths as root, so a journal that named anything else

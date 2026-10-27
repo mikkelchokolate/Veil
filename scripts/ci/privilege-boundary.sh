@@ -185,9 +185,14 @@ assert_unit veil.service 'User=veil'
 assert_unit veil.service 'Group=veil'
 assert_unit veil.service 'CapabilityBoundingSet='
 assert_unit veil.service 'AmbientCapabilities='
+# A unit without SupplementaryGroups= gets initgroups(), i.e. every membership
+# its account was planted with (docker/disk/shadow on a pre-existing account),
+# so both the panel and the edge units must pin the exact set (#1278).
+assert_unit veil.service 'SupplementaryGroups=veil-proxy veil-mita'
 for unit in veil-caddy.service veil-hysteria2@.service veil-olcrtc@.service veil-warp.service; do
   assert_unit "$unit" 'User=veil-proxy'
   assert_unit "$unit" 'Group=veil-proxy'
+  assert_unit "$unit" 'SupplementaryGroups='
   assert_unit "$unit" 'InaccessiblePaths=/run/veil/helper.sock /var/lib/veil'
   assert_unit "$unit" 'CapabilityBoundingSet=CAP_NET_BIND_SERVICE'
   assert_unit "$unit" 'AmbientCapabilities=CAP_NET_BIND_SERVICE'

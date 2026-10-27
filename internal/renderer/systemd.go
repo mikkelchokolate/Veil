@@ -234,6 +234,11 @@ Requires=veil-helper.socket
 Type=simple
 User=veil
 Group=veil
+# systemd calls initgroups() when a unit has no SupplementaryGroups=, so a
+# pre-existing veil account planted with extra memberships (docker, disk,
+# shadow) would hand the panel all of them on every upgrade. The panel needs
+# exactly these two: veil-proxy for generated config, veil-mita for appctl.
+SupplementaryGroups=veil-proxy veil-mita
 # The panel must not own /run/veil: veil-helper.socket owns it root:root 0711
 # so no veil-uid process can replace or shadow the helper socket. The panel
 # only needs to connect to the socket, which the group-owned node allows.
@@ -345,6 +350,7 @@ Type=simple
 # reach the root helper or the panel-owned state (audit #506).
 User=veil-proxy
 Group=veil-proxy
+SupplementaryGroups=
 # Caddy binds :80/:443 with CAP_NET_BIND_SERVICE and reads 0640
 # root:veil-proxy config under /etc/veil/generated and /etc/veil/tls. ACME
 # material stays in StateDirectory=caddy (/var/lib/caddy); /etc/veil stays
@@ -375,6 +381,7 @@ Wants=network-online.target
 Type=simple
 User=veil-proxy
 Group=veil-proxy
+SupplementaryGroups=
 ExecStart=` + hysteriaBin + ` server --config ` + hysteriaConfig + `
 Restart=on-failure
 RestartSec=3
@@ -406,6 +413,7 @@ StartLimitBurst=5
 Type=simple
 User=veil-proxy
 Group=veil-proxy
+SupplementaryGroups=
 ExecStart=` + olcrtcBin + ` ` + olcrtcConfig + `
 Restart=on-failure
 RestartSec=3
@@ -433,6 +441,7 @@ Wants=network-online.target
 Type=simple
 User=veil-proxy
 Group=veil-proxy
+SupplementaryGroups=
 ExecStart=` + singBoxBin + ` run -c ` + warpConfig + `
 ExecReload=` + singBoxBin + ` check -c ` + warpConfig + `
 Restart=on-failure

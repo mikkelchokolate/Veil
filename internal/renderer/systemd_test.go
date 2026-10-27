@@ -581,3 +581,26 @@ func TestProxySiblingUnitsMaskCaddyAdminSocket(t *testing.T) {
 		t.Fatalf("%s drop-in must not mask its own StateDirectory:\n%s", UnitCaddy, dropIn)
 	}
 }
+
+// TestPanelUnitPinsSupplementaryGroups locks the #1278 hardening: systemd calls
+// initgroups for a unit without SupplementaryGroups=, so a pre-existing `veil`
+// account planted with extra memberships (docker, disk, shadow) handed the panel
+// all of them on every upgrade. The panel needs exactly veil-proxy (generated
+// config) and veil-mita (appctl socket).
+func TestPanelUnitPinsSupplementaryGroups(t *testing.T) {
+	for _, config := range []SystemdConfig{{}, {EtcDir: "/opt/veil/etc", VarDir: "/opt/veil/var"}} {
+		panel := RenderSystemdUnits(config)[UnitVeil]
+		if !strings.Contains(panel, "\nSupplementaryGroups=veil-proxy veil-mita\n") {
+			t.Fatalf("veil.service does not pin supplementary groups:\n%s", panel)
+		}
+	}
+	// The edge units share the veil-proxy identity and must not inherit anything
+	// else either.
+	for _, unit := range []string{"veil-caddy.service", "veil-hysteria2@.service", "veil-olcrtc@.service", "veil-warp.service"} {
+		if body, ok := RenderSystemdUnits(SystemdConfig{})[unit]; ok && strings.Contains(body, "User=veil-proxy") {
+			if !strings.Contains(body, "\nSupplementaryGroups=\n") {
+				t.Fatalf("%s runs as veil-proxy without an empty SupplementaryGroups=:\n%s", unit, body)
+			}
+		}
+	}
+}

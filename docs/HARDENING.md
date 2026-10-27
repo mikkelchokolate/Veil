@@ -204,7 +204,10 @@ runbook.
   files `0640`) and carry `InaccessiblePaths=/run/veil/helper.sock
   /var/lib/veil`, so they can neither reach the privileged helper socket nor
   touch Panel state. The `veil` account is a supplementary `veil-proxy` group
-  member so the Panel can read the same generated material.
+  member so the Panel can read the same generated material. The units pin that
+  set explicitly (`SupplementaryGroups=veil-proxy veil-mita` for the Panel,
+  empty for the edge units), because systemd would otherwise call `initgroups()`
+  and hand the daemon every group a pre-existing account was planted with.
 - **Mieru runs on its own `veil-mita` identity.** `veil-mieru.service` uses
   `User=veil-mita`/`Group=veil-mita` (with `veil-proxy` only as a
   supplementary group for generated-config reads) because its appctl UDS at
