@@ -52,6 +52,11 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 	if len(runtimes) == 0 {
 		return results
 	}
+	binDir, err := absoluteRuntimeBinDir(opts.BinDir)
+	if err != nil {
+		return runtimeSetFailure(results, runtimes, err)
+	}
+	opts.BinDir = binDir
 	if err := os.MkdirAll(opts.BinDir, 0o755); err != nil {
 		return runtimeSetFailure(results, runtimes, fmt.Errorf("create runtime bin directory: %w", err))
 	}
@@ -138,6 +143,10 @@ func newRuntimeTransactionID() (string, error) {
 }
 
 func prepareRuntimeSetActivation(binDir string, results []Result) (runtimeSetJournal, error) {
+	binDir, err := absoluteRuntimeBinDir(binDir)
+	if err != nil {
+		return runtimeSetJournal{}, err
+	}
 	transactionID, err := newRuntimeTransactionID()
 	if err != nil {
 		return runtimeSetJournal{}, err
@@ -188,6 +197,13 @@ func prepareRuntimeSetActivation(binDir string, results []Result) (runtimeSetJou
 }
 
 func activateRuntimeSet(binDir string, journal *runtimeSetJournal) error {
+	binDir, err := absoluteRuntimeBinDir(binDir)
+	if err != nil {
+		return err
+	}
+	if err := validateRuntimeSetJournalPaths(binDir, *journal); err != nil {
+		return err
+	}
 	journalPath := filepath.Join(binDir, runtimeSetJournalName)
 	for index := range journal.Items {
 		item := &journal.Items[index]
@@ -234,6 +250,43 @@ func activateRuntimeSet(binDir string, journal *runtimeSetJournal) error {
 	return finalizeRuntimeSet(binDir, *journal)
 }
 
+// absoluteRuntimeBinDir normalises the runtime directory once, before it is
+// written into a journal or compared against journal paths: recovery must not
+// depend on the caller's working directory, and the journal the package writes
+// has to pass the same check that reads it (#1267 review).
+func absoluteRuntimeBinDir(binDir string) (string, error) {
+	if strings.TrimSpace(binDir) == "" {
+		return "", errors.New("runtime bin directory is required")
+	}
+	return filepath.Abs(binDir)
+}
+
+// validateRuntimeSetJournalPaths binds every path a journal names to binDir.
+// Recovery digests, removes and copies these paths as root, so a journal that
+// named anything outside the runtime bin directory would turn a rollback into an
+// arbitrary remove or overwrite. The journal is written by this package today
+// (root-owned /usr/local/bin), which is why the check is defense-in-depth rather
+// than a live hole: a future wiring change must not be able to open it (#1267).
+func validateRuntimeSetJournalPaths(binDir string, journal runtimeSetJournal) error {
+	root, err := filepath.Abs(binDir)
+	if err != nil {
+		return err
+	}
+	root = filepath.Clean(root)
+	for _, item := range journal.Items {
+		for _, path := range []string{item.Target, item.Staged, item.Backup} {
+			if path == "" {
+				continue
+			}
+			clean := filepath.Clean(path)
+			if !filepath.IsAbs(clean) || filepath.Dir(clean) != root {
+				return fmt.Errorf("runtime set activation journal names %q outside the runtime bin directory", path)
+			}
+		}
+	}
+	return nil
+}
+
 func rollbackRuntimeSet(binDir string, journal *runtimeSetJournal, cause error) error {
 	var rollbackErr error
 	for index := len(journal.Items) - 1; index >= 0; index-- {
@@ -267,17 +320,24 @@ func rollbackRuntimeSet(binDir string, journal *runtimeSetJournal, cause error) 
 }
 
 func recoverRuntimeSetActivation(binDir string) error {
-	journalPath := filepath.Join(binDir, runtimeSetJournalName)
-	body, err := os.ReadFile(journalPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	binDir, err := absoluteRuntimeBinDir(binDir)
 	if err != nil {
 		return err
+	}
+	journalPath := filepath.Join(binDir, runtimeSetJournalName)
+	body, readErr := os.ReadFile(journalPath)
+	if errors.Is(readErr, os.ErrNotExist) {
+		return nil
+	}
+	if readErr != nil {
+		return readErr
 	}
 	var journal runtimeSetJournal
 	if err := json.Unmarshal(body, &journal); err != nil || journal.Version != 1 || journal.TransactionID == "" || len(journal.Items) == 0 {
 		return errors.New("invalid runtime set activation journal")
+	}
+	if err := validateRuntimeSetJournalPaths(binDir, journal); err != nil {
+		return fmt.Errorf("%w (journal %s; remove it to recover)", err, journalPath)
 	}
 	allNew := true
 	for _, item := range journal.Items {

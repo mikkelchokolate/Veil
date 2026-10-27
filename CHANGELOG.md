@@ -6,6 +6,15 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- Runtime-set recovery now refuses a journal whose `target`, `staged` or
+  `backup` paths fall outside the runtime bin directory. Recovery digests,
+  removes and copies those paths as root, so a journal that named anything else
+  would turn a rollback into an arbitrary remove or overwrite. The journal is
+  written by Veil itself under the root-owned `/usr/local/bin` today, which is
+  why this is defense-in-depth against a future wiring change rather than a live
+  hole. Valid journals behave exactly as before, and `--bin-dir` is normalised
+  once, so a relative value such as `./bin` keeps working and the journal no
+  longer depends on the working directory (#1267).
 - A corrupt, legacy-shaped or otherwise unreadable promotion journal no longer
   makes every artifact promote fail forever. Recovery refused to continue while
   such a file was present and nothing else removes it, so one leftover blocked
