@@ -6,6 +6,13 @@ All notable changes to Veil will be documented in this file.
 
 ### Fixed
 
+- The package postinstall now warns about foreign systemd drop-ins in a Veil
+  unit's `.d` directory. Those files are the operator channel and are kept
+  across upgrades, but the upgrade's `systemctl try-restart` applies them, and
+  one planted `override.conf` can set `User=root` or a different `ExecStart=` on
+  a unit the operator believes is the shipped one. Veil's own generated drop-in
+  is skipped; every other file is listed by path so the operator can review it
+  (#1278).
 - Install now replaces the `veil` account's supplementary groups instead of
   appending to them. A host where an earlier root compromise planted the account
   with `docker`, `disk` or `shadow` membership handed the panel those groups on

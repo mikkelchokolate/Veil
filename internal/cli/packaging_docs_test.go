@@ -394,6 +394,11 @@ func TestPackageScriptsExist(t *testing.T) {
 	if !strings.Contains(postinstallScript, "ensure_supplementary_groups veil veil-proxy veil-mita") {
 		t.Fatal("postinstall.sh must call the exact supplementary-group helper for the veil account")
 	}
+	// #1278 item 2: a foreign drop-in in a Veil unit's .d directory rides the
+	// upgrade's try-restart (User=/ExecStart= overrides), so install must warn.
+	if !strings.Contains(postinstallScript, "warn_foreign_dropins /etc/systemd/system") {
+		t.Fatal("postinstall.sh must warn about foreign Veil unit drop-ins")
+	}
 }
 
 func TestDockerEntrypointKeepsApplyRootOffLiveGeneratedTree(t *testing.T) {

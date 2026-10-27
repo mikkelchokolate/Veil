@@ -211,6 +211,12 @@ runbook.
   the account's supplementary list (`usermod -G`). A `veil` account planted with
   `docker`/`disk`/`shadow` therefore loses those memberships on the next
   install instead of handing them to the unit.
+- **Foreign unit drop-ins are surfaced, not trusted.** `veil*.service.d`
+  directories under `/etc/systemd/system` are the operator channel and survive
+  upgrades, but the upgrade's `systemctl try-restart` applies them: the package
+  postinstall prints a warning naming every `.conf` there that is not Veil's own
+  `10-veil-install.conf` / generated file, so a planted `User=root` or
+  `ExecStart=` override cannot quietly ride an upgrade (#1278).
 - **Mieru runs on its own `veil-mita` identity.** `veil-mieru.service` uses
   `User=veil-mita`/`Group=veil-mita` (with `veil-proxy` only as a
   supplementary group for generated-config reads) because its appctl UDS at
