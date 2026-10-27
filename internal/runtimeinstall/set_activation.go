@@ -52,6 +52,11 @@ func installRuntimeSet(ctx context.Context, opts Options, runtimes []Runtime) []
 	if len(runtimes) == 0 {
 		return results
 	}
+	binDir, err := absoluteRuntimeBinDir(opts.BinDir)
+	if err != nil {
+		return runtimeSetFailure(results, runtimes, err)
+	}
+	opts.BinDir = binDir
 	if err := os.MkdirAll(opts.BinDir, 0o755); err != nil {
 		return runtimeSetFailure(results, runtimes, fmt.Errorf("create runtime bin directory: %w", err))
 	}
@@ -138,6 +143,10 @@ func newRuntimeTransactionID() (string, error) {
 }
 
 func prepareRuntimeSetActivation(binDir string, results []Result) (runtimeSetJournal, error) {
+	binDir, err := absoluteRuntimeBinDir(binDir)
+	if err != nil {
+		return runtimeSetJournal{}, err
+	}
 	transactionID, err := newRuntimeTransactionID()
 	if err != nil {
 		return runtimeSetJournal{}, err
@@ -188,6 +197,10 @@ func prepareRuntimeSetActivation(binDir string, results []Result) (runtimeSetJou
 }
 
 func activateRuntimeSet(binDir string, journal *runtimeSetJournal) error {
+	binDir, err := absoluteRuntimeBinDir(binDir)
+	if err != nil {
+		return err
+	}
 	if err := validateRuntimeSetJournalPaths(binDir, *journal); err != nil {
 		return err
 	}
@@ -235,6 +248,17 @@ func activateRuntimeSet(binDir string, journal *runtimeSetJournal) error {
 		return err
 	}
 	return finalizeRuntimeSet(binDir, *journal)
+}
+
+// absoluteRuntimeBinDir normalises the runtime directory once, before it is
+// written into a journal or compared against journal paths: recovery must not
+// depend on the caller's working directory, and the journal the package writes
+// has to pass the same check that reads it (#1267 review).
+func absoluteRuntimeBinDir(binDir string) (string, error) {
+	if strings.TrimSpace(binDir) == "" {
+		return "", errors.New("runtime bin directory is required")
+	}
+	return filepath.Abs(binDir)
 }
 
 // validateRuntimeSetJournalPaths binds every path a journal names to binDir.
@@ -296,20 +320,24 @@ func rollbackRuntimeSet(binDir string, journal *runtimeSetJournal, cause error) 
 }
 
 func recoverRuntimeSetActivation(binDir string) error {
-	journalPath := filepath.Join(binDir, runtimeSetJournalName)
-	body, err := os.ReadFile(journalPath)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
+	binDir, err := absoluteRuntimeBinDir(binDir)
 	if err != nil {
 		return err
+	}
+	journalPath := filepath.Join(binDir, runtimeSetJournalName)
+	body, readErr := os.ReadFile(journalPath)
+	if errors.Is(readErr, os.ErrNotExist) {
+		return nil
+	}
+	if readErr != nil {
+		return readErr
 	}
 	var journal runtimeSetJournal
 	if err := json.Unmarshal(body, &journal); err != nil || journal.Version != 1 || journal.TransactionID == "" || len(journal.Items) == 0 {
 		return errors.New("invalid runtime set activation journal")
 	}
 	if err := validateRuntimeSetJournalPaths(binDir, journal); err != nil {
-		return err
+		return fmt.Errorf("%w (journal %s; remove it to recover)", err, journalPath)
 	}
 	allNew := true
 	for _, item := range journal.Items {

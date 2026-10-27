@@ -12,7 +12,9 @@ All notable changes to Veil will be documented in this file.
   would turn a rollback into an arbitrary remove or overwrite. The journal is
   written by Veil itself under the root-owned `/usr/local/bin` today, which is
   why this is defense-in-depth against a future wiring change rather than a live
-  hole; valid journals behave exactly as before (#1267).
+  hole. Valid journals behave exactly as before, and `--bin-dir` is normalised
+  once, so a relative value such as `./bin` keeps working and the journal no
+  longer depends on the working directory (#1267).
 - A corrupt, legacy-shaped or otherwise unreadable promotion journal no longer
   makes every artifact promote fail forever. Recovery refused to continue while
   such a file was present and nothing else removes it, so one leftover blocked
