@@ -123,8 +123,12 @@ warn_foreign_dropins() {
 }
     # end: warn_foreign_dropins
 
+# Warn before any branch that restarts units: install and abort-remove both pick
+# up whatever drop-ins a previous administrator (or a prior root compromise) left
+# in a Veil unit's .d directory (#1278).
+warn_foreign_dropins /etc/systemd/system
+
 if [ "$MODE" = install ]; then
-    warn_foreign_dropins /etc/systemd/system
     ensure_system_account veil
     ensure_system_account veil-proxy
     # veil-mita is the dedicated veil-mieru.service identity (issue #624): its
