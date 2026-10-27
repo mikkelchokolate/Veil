@@ -57,3 +57,50 @@ func TestPostinstallRejectsUnsafeAdoptedAccount(t *testing.T) {
 		})
 	}
 }
+
+// TestPostinstallRejectsUnsafeAdoptedGroup covers the group half of the same
+// boundary: a pre-existing group with gid 0 makes the panel run and write state
+// as root, and a gid above the system range is not what `groupadd --system`
+// creates.
+func TestPostinstallRejectsUnsafeAdoptedGroup(t *testing.T) {
+	body, err := os.ReadFile("../../packaging/scripts/postinstall.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code := strings.ReplaceAll(string(body), "\r\n", "\n")
+	start := strings.Index(code, "validate_adopted_group() {")
+	if start < 0 {
+		t.Fatal("postinstall has no validate_adopted_group helper")
+	}
+	end := strings.Index(code[start:], "\n    # end: validate_adopted_group")
+	if end < 0 {
+		t.Fatal("could not find the end of validate_adopted_group")
+	}
+	helper := code[start : start+end]
+
+	for _, tc := range []struct {
+		name    string
+		gid     string
+		wantErr string
+	}{
+		{"root gid", "0", "gid 0"},
+		{"login-range gid", "4500", "outside the system group range"},
+		{"clean group", "442", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			script := helper + "\nvalidate_adopted_group veil \"$1\" 999\n"
+			command := exec.Command("sh", "-c", script, "sh", tc.gid)
+			output, err := command.CombinedOutput()
+			text := string(output)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("clean group rejected: %v\n%s", err, text)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(text, tc.wantErr) {
+				t.Fatalf("gid %s: err=%v output=%s", tc.gid, err, text)
+			}
+		})
+	}
+}

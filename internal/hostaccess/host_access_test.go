@@ -1448,3 +1448,60 @@ func TestEnsureAccountRejectsAnUnsafeAdoptedAccount(t *testing.T) {
 		})
 	}
 }
+
+// TestEnsureAccountRejectsAnUnsafeAdoptedGroup locks the group half of #1278:
+// gid 0 makes every 0640 root:<gid> state file root-readable and every unit run
+// with gid 0, and a login-range gid is not something `groupadd --system`
+// creates. The group is checked even when the user itself is fresh — only the
+// group was planted then.
+func TestEnsureAccountRejectsAnUnsafeAdoptedGroup(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		gid     string
+		preUser bool
+		wantErr string
+	}{
+		{name: "root gid with existing user", gid: "0", preUser: true, wantErr: "gid 0"},
+		{name: "login-range gid with existing user", gid: "4500", preUser: true, wantErr: "outside the system group range"},
+		{name: "root gid with fresh user", gid: "0", preUser: false, wantErr: "gid 0"},
+		{name: "clean group", gid: "442", preUser: true, wantErr: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deps := AccountDependencies{
+				LookupGroup: func(name string) (*user.Group, error) {
+					gid := map[string]string{"veil": tc.gid, "veil-proxy": "443", "veil-mita": "444"}[name]
+					return &user.Group{Name: name, Gid: gid}, nil
+				},
+				LookupUser: func(name string) (*user.User, error) {
+					if !tc.preUser && name == "veil" {
+						return nil, errors.New("missing user")
+					}
+					// uid stays clean; only the group is on trial here.
+					uid := map[string]string{"veil": "442", "veil-proxy": "443", "veil-mita": "444"}[name]
+					gid := map[string]string{"veil": tc.gid, "veil-proxy": "443", "veil-mita": "444"}[name]
+					return &user.User{Username: name, Uid: uid, Gid: gid}, nil
+				},
+				LookupShell:  func(string) (string, error) { return "/usr/sbin/nologin", nil },
+				SystemUIDMax: func() int { return 999 },
+				SystemGIDMax: func() int { return 999 },
+				Run: func(name string, args ...string) error {
+					if name == "useradd" {
+						// The fake useradd "creates" veil: reset the lookup.
+						tc.preUser = true
+					}
+					return nil
+				},
+			}
+			_, err := EnsureAccount(deps)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("clean group rejected: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error = %v, want %q", err, tc.wantErr)
+			}
+		})
+	}
+}

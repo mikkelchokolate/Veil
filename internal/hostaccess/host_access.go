@@ -175,6 +175,8 @@ type AccountDependencies struct {
 	// SystemUIDMax reports the highest uid useradd --system may pick
 	// (/etc/login.defs SYS_UID_MAX). nil means 999.
 	SystemUIDMax func() int
+	// SystemGIDMax is the same ceiling for groupadd --system (SYS_GID_MAX).
+	SystemGIDMax func() int
 	// ListGroups reports the account's current group names, including its
 	// primary group. It is what lets install set an exact supplementary set
 	// instead of appending to whatever a compromised host left behind (#1278);
@@ -203,7 +205,8 @@ func DefaultAccountDependencies() AccountDependencies {
 			}
 			return "", fmt.Errorf("no passwd entry for %s", name)
 		},
-		SystemUIDMax: systemUIDMaxFromLoginDefs,
+		SystemUIDMax: func() int { return systemIDMaxFromLoginDefs("SYS_UID_MAX") },
+		SystemGIDMax: func() int { return systemIDMaxFromLoginDefs("SYS_GID_MAX") },
 		ListGroups: func(name string) ([]string, error) {
 			out, err := syspath.Command("id", "-nG", name).Output()
 			if err != nil {
@@ -284,24 +287,45 @@ func validateAdoptedAccount(deps AccountDependencies, name string, uid int) erro
 		if err != nil {
 			return fmt.Errorf("read %s login shell: %w", name, err)
 		}
-		base := filepath.Base(strings.TrimSpace(shell))
-		if base != "nologin" && base != "false" {
+		// Explicit trusted paths, not a basename match: /tmp/nologin is not a
+		// nologin binary.
+		switch strings.TrimSpace(shell) {
+		case "/usr/sbin/nologin", "/sbin/nologin", "/bin/nologin", "/usr/bin/nologin",
+			"/bin/false", "/usr/bin/false", "/sbin/false", "/usr/sbin/false":
+		default:
 			return fmt.Errorf("refusing to adopt %s: its login shell is %q, want nologin", name, shell)
 		}
 	}
 	return nil
 }
 
-// systemUIDMaxFromLoginDefs reads SYS_UID_MAX (Debian/RHEL login.defs), falling
-// back to the conventional 999 when the file or the key is absent.
-func systemUIDMaxFromLoginDefs() int {
+// validateAdoptedGroup rejects an existing group the panel must not run or own
+// files with: gid 0 is root, and a gid above the system range is not something
+// groupadd --system creates.
+func validateAdoptedGroup(deps AccountDependencies, name string, gid int) error {
+	if gid == 0 {
+		return fmt.Errorf("refusing to adopt %s group: it has gid 0, so the panel would run and write state as root", name)
+	}
+	max := 999
+	if deps.SystemGIDMax != nil {
+		max = deps.SystemGIDMax()
+	}
+	if gid > max {
+		return fmt.Errorf("refusing to adopt %s group: gid %d is outside the system group range (max %d); recreate it with groupadd --system or fix the gid", name, gid, max)
+	}
+	return nil
+}
+
+// systemIDMaxFromLoginDefs reads SYS_UID_MAX/SYS_GID_MAX (Debian/RHEL
+// login.defs), falling back to the conventional 999 when absent.
+func systemIDMaxFromLoginDefs(key string) int {
 	body, err := os.ReadFile("/etc/login.defs")
 	if err != nil {
 		return 999
 	}
 	for _, line := range strings.Split(string(body), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 2 || fields[0] != "SYS_UID_MAX" {
+		if len(fields) < 2 || fields[0] != key {
 			continue
 		}
 		if value, err := strconv.Atoi(fields[1]); err == nil && value > 0 {
@@ -313,6 +337,7 @@ func systemUIDMaxFromLoginDefs() int {
 
 func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error) {
 	group, err := deps.LookupGroup(name)
+	groupAdopted := err == nil
 	if err != nil {
 		if err := deps.Run("groupadd", "--system", name); err != nil {
 			if fallbackErr := deps.Run("addgroup", "-S", name); fallbackErr != nil {
@@ -357,6 +382,15 @@ func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error)
 	gid, err := strconv.Atoi(group.Gid)
 	if err != nil {
 		return Identity{}, fmt.Errorf("parse %s gid: %w", name, err)
+	}
+	if groupAdopted {
+		// The group half of the same boundary: a pre-existing group with gid 0
+		// makes every 0640 root:<gid> state file world-of-root readable and every
+		// unit run with gid 0 (#1278). Checked even when the user is fresh —
+		// only the group was planted then.
+		if err := validateAdoptedGroup(deps, name, gid); err != nil {
+			return Identity{}, err
+		}
 	}
 	if account.Gid != group.Gid {
 		return Identity{}, fmt.Errorf("%s user primary gid %s does not match %s group gid %s", name, account.Gid, name, group.Gid)
