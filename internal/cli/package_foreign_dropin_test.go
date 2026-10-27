@@ -31,7 +31,7 @@ func TestPostinstallWarnsAboutForeignUnitDropIns(t *testing.T) {
 
 	root := t.TempDir()
 	dirs := map[string][]string{
-		"veil.service.d":       {"10-veil-install.conf", "override.conf"},
+		"veil.service.d":       {"10-veil-install.conf", "override.conf", "20-copied.conf"},
 		"veil-caddy.service.d": {"20-operator.conf"},
 		"other-app.service.d":  {"foreign.conf"},
 	}
