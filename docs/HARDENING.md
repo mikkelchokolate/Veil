@@ -213,11 +213,13 @@ runbook.
   install instead of handing them to the unit.
 - **Adopted accounts are validated.** A pre-existing `veil`/`veil-proxy`/
   `veil-mita` account or group is adopted only when it looks like a system one:
-  uid and gid in the `/etc/login.defs` system range, an explicit `nologin` (or
-  `false`) shell path, and the exact supplementary set from the previous
-  section. A uid or gid of 0, a login-range id or a real shell stops the install
-  with a message naming the account — plant-grade state is refused instead of
-  inherited (#1278).
+  uid and gid inside the `/etc/login.defs` system range (the floor rejects a
+  planted `disk`/`kmem` gid, and a gid already mapped to another group name is
+  refused), an explicit `nologin` (or `false`) shell path, and the exact
+  supplementary set from the previous section. An id outside the range, a gid
+  owned by another group, or a real shell stops the install with a message
+  naming the account — plant-grade state is refused instead of inherited
+  (#1278).
 - **Foreign unit drop-ins are surfaced, not trusted.** `veil*.service.d`
   directories under `/etc/systemd/system` are the operator channel and survive
   upgrades, but the upgrade's `systemctl try-restart` applies them: the package

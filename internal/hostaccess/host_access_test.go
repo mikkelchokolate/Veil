@@ -1414,6 +1414,7 @@ func TestEnsureAccountRejectsAnUnsafeAdoptedAccount(t *testing.T) {
 		wantErr string
 	}{
 		{"root uid", "0", "/usr/sbin/nologin", "uid 0"},
+		{"below system range uid", "50", "/usr/sbin/nologin", "outside the system account range"},
 		{"login-range uid", "4500", "/usr/sbin/nologin", "outside the system account range"},
 		{"login shell", "442", "/bin/bash", "login shell"},
 		{"clean account", "442", "/usr/sbin/nologin", ""},
@@ -1421,15 +1422,18 @@ func TestEnsureAccountRejectsAnUnsafeAdoptedAccount(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			deps := AccountDependencies{
 				LookupGroup: func(name string) (*user.Group, error) {
-					gid := map[string]string{"veil": tc.uid, "veil-proxy": "443", "veil-mita": "444"}[name]
+					// The group is clean here; only the uid is on trial.
+					gid := map[string]string{"veil": "442", "veil-proxy": "443", "veil-mita": "444"}[name]
 					return &user.Group{Name: name, Gid: gid}, nil
 				},
 				LookupUser: func(name string) (*user.User, error) {
 					uid := tc.uid
+					gid := "442"
 					if name != "veil" {
 						uid = map[string]string{"veil-proxy": "443", "veil-mita": "444"}[name]
+						gid = uid
 					}
-					return &user.User{Username: name, Uid: uid, Gid: uid}, nil
+					return &user.User{Username: name, Uid: uid, Gid: gid}, nil
 				},
 				LookupShell:  func(string) (string, error) { return tc.shell, nil },
 				SystemUIDMax: func() int { return 999 },
@@ -1456,15 +1460,18 @@ func TestEnsureAccountRejectsAnUnsafeAdoptedAccount(t *testing.T) {
 // group was planted then.
 func TestEnsureAccountRejectsAnUnsafeAdoptedGroup(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		gid     string
-		preUser bool
-		wantErr string
+		name     string
+		gid      string
+		mappedTo string
+		preUser  bool
+		wantErr  string
 	}{
 		{name: "root gid with existing user", gid: "0", preUser: true, wantErr: "gid 0"},
+		{name: "below system range gid", gid: "6", mappedTo: "disk", preUser: true, wantErr: "outside the system group range"},
 		{name: "login-range gid with existing user", gid: "4500", preUser: true, wantErr: "outside the system group range"},
 		{name: "root gid with fresh user", gid: "0", preUser: false, wantErr: "gid 0"},
-		{name: "clean group", gid: "442", preUser: true, wantErr: ""},
+		{name: "gid owned by another group", gid: "442", mappedTo: "disk", preUser: true, wantErr: "already belongs to group"},
+		{name: "clean group", gid: "442", mappedTo: "veil", preUser: true, wantErr: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			deps := AccountDependencies{
@@ -1484,6 +1491,17 @@ func TestEnsureAccountRejectsAnUnsafeAdoptedGroup(t *testing.T) {
 				LookupShell:  func(string) (string, error) { return "/usr/sbin/nologin", nil },
 				SystemUIDMax: func() int { return 999 },
 				SystemGIDMax: func() int { return 999 },
+				SystemUIDMin: func() int { return 100 },
+				SystemGIDMin: func() int { return 100 },
+				LookupGroupID: func(gid string) (*user.Group, error) {
+					if gid != tc.gid {
+						return &user.Group{Name: map[string]string{"443": "veil-proxy", "444": "veil-mita"}[gid], Gid: gid}, nil
+					}
+					if tc.mappedTo == "" {
+						return nil, errors.New("missing group")
+					}
+					return &user.Group{Name: tc.mappedTo, Gid: gid}, nil
+				},
 				Run: func(name string, args ...string) error {
 					if name == "useradd" {
 						// The fake useradd "creates" veil: reset the lookup.

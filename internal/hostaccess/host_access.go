@@ -177,6 +177,13 @@ type AccountDependencies struct {
 	SystemUIDMax func() int
 	// SystemGIDMax is the same ceiling for groupadd --system (SYS_GID_MAX).
 	SystemGIDMax func() int
+	// SystemUIDMin and SystemGIDMin are the floors (SYS_UID_MIN/SYS_GID_MIN).
+	// nil means 100.
+	SystemUIDMin func() int
+	SystemGIDMin func() int
+	// LookupGroupID resolves a gid to its group. nil skips the check that the
+	// gid does not already belong to a different (possibly privileged) group.
+	LookupGroupID func(string) (*user.Group, error)
 	// ListGroups reports the account's current group names, including its
 	// primary group. It is what lets install set an exact supplementary set
 	// instead of appending to whatever a compromised host left behind (#1278);
@@ -205,8 +212,11 @@ func DefaultAccountDependencies() AccountDependencies {
 			}
 			return "", fmt.Errorf("no passwd entry for %s", name)
 		},
-		SystemUIDMax: func() int { return systemIDMaxFromLoginDefs("SYS_UID_MAX") },
-		SystemGIDMax: func() int { return systemIDMaxFromLoginDefs("SYS_GID_MAX") },
+		SystemUIDMax:  func() int { return systemIDLimitFromLoginDefs("SYS_UID_MAX", 999) },
+		SystemGIDMax:  func() int { return systemIDLimitFromLoginDefs("SYS_GID_MAX", 999) },
+		SystemUIDMin:  func() int { return systemIDLimitFromLoginDefs("SYS_UID_MIN", 100) },
+		SystemGIDMin:  func() int { return systemIDLimitFromLoginDefs("SYS_GID_MIN", 100) },
+		LookupGroupID: user.LookupGroupId,
 		ListGroups: func(name string) ([]string, error) {
 			out, err := syspath.Command("id", "-nG", name).Output()
 			if err != nil {
@@ -279,8 +289,12 @@ func validateAdoptedAccount(deps AccountDependencies, name string, uid int) erro
 	if deps.SystemUIDMax != nil {
 		max = deps.SystemUIDMax()
 	}
-	if uid > max {
-		return fmt.Errorf("refusing to adopt %s: uid %d is outside the system account range (max %d); recreate it with useradd --system or fix the uid", name, uid, max)
+	min := 100
+	if deps.SystemUIDMin != nil {
+		min = deps.SystemUIDMin()
+	}
+	if uid < min || uid > max {
+		return fmt.Errorf("refusing to adopt %s: uid %d is outside the system account range (%d-%d); recreate it with useradd --system or fix the uid", name, uid, min, max)
 	}
 	if deps.LookupShell != nil {
 		shell, err := deps.LookupShell(name)
@@ -310,18 +324,31 @@ func validateAdoptedGroup(deps AccountDependencies, name string, gid int) error 
 	if deps.SystemGIDMax != nil {
 		max = deps.SystemGIDMax()
 	}
-	if gid > max {
-		return fmt.Errorf("refusing to adopt %s group: gid %d is outside the system group range (max %d); recreate it with groupadd --system or fix the gid", name, gid, max)
+	min := 100
+	if deps.SystemGIDMin != nil {
+		min = deps.SystemGIDMin()
+	}
+	if gid < min || gid > max {
+		return fmt.Errorf("refusing to adopt %s group: gid %d is outside the system group range (%d-%d); recreate it with groupadd --system or fix the gid", name, gid, min, max)
+	}
+	// A gid already mapped to another group is a privileged group the operator
+	// did not intend (disk=6, kmem=15, docker=999 in some images): reusing it
+	// would hand the panel that group's device access.
+	if deps.LookupGroupID != nil {
+		existing, err := deps.LookupGroupID(strconv.Itoa(gid))
+		if err == nil && existing != nil && existing.Name != name {
+			return fmt.Errorf("refusing to adopt %s group: gid %d already belongs to group %q; recreate %s with groupadd --system", name, gid, existing.Name, name)
+		}
 	}
 	return nil
 }
 
 // systemIDMaxFromLoginDefs reads SYS_UID_MAX/SYS_GID_MAX (Debian/RHEL
 // login.defs), falling back to the conventional 999 when absent.
-func systemIDMaxFromLoginDefs(key string) int {
+func systemIDLimitFromLoginDefs(key string, fallback int) int {
 	body, err := os.ReadFile("/etc/login.defs")
 	if err != nil {
-		return 999
+		return fallback
 	}
 	for _, line := range strings.Split(string(body), "\n") {
 		fields := strings.Fields(line)
@@ -332,7 +359,7 @@ func systemIDMaxFromLoginDefs(key string) int {
 			return value
 		}
 	}
-	return 999
+	return fallback
 }
 
 func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error) {
@@ -347,6 +374,20 @@ func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error)
 		group, err = deps.LookupGroup(name)
 		if err != nil {
 			return Identity{}, fmt.Errorf("resolve created %s group: %w", name, err)
+		}
+	}
+	gid, err := strconv.Atoi(group.Gid)
+	if err != nil {
+		return Identity{}, fmt.Errorf("parse %s gid: %w", name, err)
+	}
+	if groupAdopted {
+		// The group half of the same boundary: a pre-existing group with gid 0
+		// makes every 0640 root:<gid> state file world-of-root readable and every
+		// unit run with gid 0 (#1278). Checked even when the user is fresh — only
+		// the group was planted then — and before useradd, so a refusal leaves no
+		// half-created account behind.
+		if err := validateAdoptedGroup(deps, name, gid); err != nil {
+			return Identity{}, err
 		}
 	}
 	account, err := deps.LookupUser(name)
@@ -376,19 +417,6 @@ func ensureNamedAccount(deps AccountDependencies, name string) (Identity, error)
 		// behind. Refuse to hand the panel a root uid, a login-range uid or a
 		// real login shell instead of adopting them silently (#1278).
 		if err := validateAdoptedAccount(deps, name, uid); err != nil {
-			return Identity{}, err
-		}
-	}
-	gid, err := strconv.Atoi(group.Gid)
-	if err != nil {
-		return Identity{}, fmt.Errorf("parse %s gid: %w", name, err)
-	}
-	if groupAdopted {
-		// The group half of the same boundary: a pre-existing group with gid 0
-		// makes every 0640 root:<gid> state file world-of-root readable and every
-		// unit run with gid 0 (#1278). Checked even when the user is fresh —
-		// only the group was planted then.
-		if err := validateAdoptedGroup(deps, name, gid); err != nil {
 			return Identity{}, err
 		}
 	}

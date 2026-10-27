@@ -106,6 +106,26 @@ system_gid_max() {
     system_id_max SYS_GID_MAX
 }
 
+system_uid_min() {
+    _min="$(awk -v key="SYS_UID_MIN" '$1 == key { print $2; exit }' /etc/login.defs 2>/dev/null || true)"
+    case "${_min}" in '' | *[!0-9]*) echo 100 ;; *) echo "${_min}" ;; esac
+}
+
+system_gid_min() {
+    _min="$(awk -v key="SYS_GID_MIN" '$1 == key { print $2; exit }' /etc/login.defs 2>/dev/null || true)"
+    case "${_min}" in '' | *[!0-9]*) echo 100 ;; *) echo "${_min}" ;; esac
+}
+
+# group_name_for_gid prints the name currently mapped to a gid.
+group_name_for_gid() {
+    lookup_gid="$1"
+    if command -v getent >/dev/null 2>&1; then
+        getent group "${lookup_gid}" 2>/dev/null | cut -d: -f1
+    else
+        awk -F: -v gid="${lookup_gid}" '$3 == gid { print $1; exit }' /etc/group 2>/dev/null
+    fi
+}
+
 # group_gid prints the gid recorded for a group.
 group_gid() {
     group_name="$1"
@@ -121,7 +141,8 @@ group_gid() {
 validate_adopted_group() {
     group_name="$1"
     group_gid_value="$2"
-    group_max="$3"
+    group_min="$3"
+    group_max="$4"
     case "${group_gid_value}" in
         '' | *[!0-9]*) echo "Cannot validate existing group ${group_name}: gid ${group_gid_value} is not a number" >&2; exit 1 ;;
     esac
@@ -129,8 +150,13 @@ validate_adopted_group() {
         echo "Refusing to adopt group ${group_name}: it has gid 0, so the Panel would run and write state as root" >&2
         exit 1
     fi
-    if [ "${group_gid_value}" -gt "${group_max}" ]; then
-        echo "Refusing to adopt group ${group_name}: gid ${group_gid_value} is outside the system group range (max ${group_max}); recreate it with 'groupadd --system' or fix its gid" >&2
+    if [ "${group_gid_value}" -lt "${group_min}" ] || [ "${group_gid_value}" -gt "${group_max}" ]; then
+        echo "Refusing to adopt group ${group_name}: gid ${group_gid_value} is outside the system group range (${group_min}-${group_max}); recreate it with 'groupadd --system' or fix its gid" >&2
+        exit 1
+    fi
+    mapped="$(group_name_for_gid "${group_gid_value}")"
+    if [ -n "${mapped}" ] && [ "${mapped}" != "${group_name}" ]; then
+        echo "Refusing to adopt group ${group_name}: gid ${group_gid_value} already belongs to group '${mapped}'; recreate ${group_name} with 'groupadd --system'" >&2
         exit 1
     fi
 }
@@ -143,7 +169,8 @@ validate_adopted_account() {
     account="$1"
     account_uid="$2"
     account_shell="$3"
-    account_max="$4"
+    account_min="$4"
+    account_max="$5"
     case "${account_uid}" in
         '' | *[!0-9]*) echo "Cannot validate existing user ${account}: uid ${account_uid} is not a number" >&2; exit 1 ;;
     esac
@@ -151,8 +178,8 @@ validate_adopted_account() {
         echo "Refusing to adopt user ${account}: it has uid 0, so the Panel would run as root" >&2
         exit 1
     fi
-    if [ "${account_uid}" -gt "${account_max}" ]; then
-        echo "Refusing to adopt user ${account}: uid ${account_uid} is outside the system account range (max ${account_max}); recreate it with 'useradd --system' or fix its uid" >&2
+    if [ "${account_uid}" -lt "${account_min}" ] || [ "${account_uid}" -gt "${account_max}" ]; then
+        echo "Refusing to adopt user ${account}: uid ${account_uid} is outside the system account range (${account_min}-${account_max}); recreate it with 'useradd --system' or fix its uid" >&2
         exit 1
     fi
     case "${account_shell}" in
@@ -169,7 +196,7 @@ validate_adopted_account() {
 ensure_system_account() {
     name="$1"
     if group_exists "$name"; then
-        validate_adopted_group "$name" "$(group_gid "$name")" "$(system_gid_max)"
+        validate_adopted_group "$name" "$(group_gid "$name")" "$(system_gid_min)" "$(system_gid_max)"
     elif command -v groupadd >/dev/null 2>&1; then
         groupadd --system "$name"
     elif command -v addgroup >/dev/null 2>&1; then
@@ -182,7 +209,7 @@ ensure_system_account() {
         # Adopt only a hygienic pre-existing account: a previous root compromise
         # leaves exactly such a user behind, and installing a panel that runs as
         # it would hand the attacker the boundary back (#1278).
-        validate_adopted_account "$name" "$(id -u "$name")" "$(passwd_shell "$name")" "$(system_uid_max)"
+        validate_adopted_account "$name" "$(id -u "$name")" "$(passwd_shell "$name")" "$(system_uid_min)" "$(system_uid_max)"
     else
         nologin=/usr/sbin/nologin
         [ -x "$nologin" ] || nologin=/sbin/nologin

@@ -35,13 +35,14 @@ func TestPostinstallRejectsUnsafeAdoptedAccount(t *testing.T) {
 		wantErr string
 	}{
 		{"root uid", "0", "/usr/sbin/nologin", "999", "uid 0"},
+		{"below system range uid", "50", "/usr/sbin/nologin", "999", "outside the system account range"},
 		{"login-range uid", "4500", "/usr/sbin/nologin", "999", "outside the system account range"},
 		{"login shell", "442", "/bin/bash", "999", "login shell"},
 		{"clean account", "442", "/usr/sbin/nologin", "999", ""},
 		{"false shell", "442", "/bin/false", "999", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			script := helper + "\nvalidate_adopted_account veil \"$1\" \"$2\" \"$3\"\n"
+			script := helper + "\nvalidate_adopted_account veil \"$1\" \"$2\" 100 \"$3\"\n"
 			command := exec.Command("sh", "-c", script, "sh", tc.uid, tc.shell, tc.max)
 			output, err := command.CombinedOutput()
 			text := string(output)
@@ -79,16 +80,20 @@ func TestPostinstallRejectsUnsafeAdoptedGroup(t *testing.T) {
 	helper := code[start : start+end]
 
 	for _, tc := range []struct {
-		name    string
-		gid     string
-		wantErr string
+		name     string
+		gid      string
+		mappedTo string
+		wantErr  string
 	}{
-		{"root gid", "0", "gid 0"},
-		{"login-range gid", "4500", "outside the system group range"},
-		{"clean group", "442", ""},
+		{name: "root gid", gid: "0", wantErr: "gid 0"},
+		{name: "below system range gid", gid: "6", mappedTo: "disk", wantErr: "outside the system group range"},
+		{name: "login-range gid", gid: "4500", wantErr: "outside the system group range"},
+		{name: "gid owned by another group", gid: "442", mappedTo: "disk", wantErr: "already belongs to group 'disk'"},
+		{name: "clean group", gid: "442", mappedTo: "veil", wantErr: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			script := helper + "\nvalidate_adopted_group veil \"$1\" 999\n"
+			stub := "group_name_for_gid() { echo \"" + tc.mappedTo + "\"; }\n"
+			script := stub + helper + "\nvalidate_adopted_group veil \"$1\" 100 999\n"
 			command := exec.Command("sh", "-c", script, "sh", tc.gid)
 			output, err := command.CombinedOutput()
 			text := string(output)
